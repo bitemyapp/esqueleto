@@ -1,6 +1,7 @@
 {-# LANGUAGE ConstraintKinds, MultiParamTypeClasses, FunctionalDependencies, FlexibleContexts, FlexibleInstances, UndecidableInstances, GADTs, OverloadedStrings #-}
 module Database.Esqueleto.Internal.Sql
   ( SqlQuery
+  , SqlExpr
   , select
   , toRawSelectSql
   ) where
@@ -137,7 +138,8 @@ binop op (ERaw f1) (ERaw f2) = ERaw f
                , vals1 <> vals2 )
 
 
--- | TODO
+-- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
+-- 'SqlPersist' monad.
 select :: ( SqlSelect a r
           , RawSql r
           , MonadLogger m
@@ -176,114 +178,6 @@ toRawSelectSql esc query =
   in (text, selectVars <> whereVars)
 
 
-class RawSql r => SqlSelect a r | a -> r, r -> a where
-  makeSelect :: Escape -> a -> (TLB.Builder, [PersistValue])
-
-instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
-  makeSelect _ (EEntity _) = ("??", mempty)
-instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
-  makeSelect esc (ERaw f) = first parens (f esc)
-
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         ) => SqlSelect (a, b) (ra, rb) where
-  makeSelect esc (a, b) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         ) => SqlSelect (a, b, c) (ra, rb, rc) where
-  makeSelect esc (a, b, c) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         ) => SqlSelect (a, b, c, d) (ra, rb, rc, rd) where
-  makeSelect esc (a, b, c, d) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      , makeSelect esc d
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         ) => SqlSelect (a, b, c, d, e) (ra, rb, rc, rd, re) where
-  makeSelect esc (a, b, c, d, e) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      , makeSelect esc d
-      , makeSelect esc e
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         ) => SqlSelect (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf) where
-  makeSelect esc (a, b, c, d, e, f) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      , makeSelect esc d
-      , makeSelect esc e
-      , makeSelect esc f
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         ) => SqlSelect (a, b, c, d, e, f, g) (ra, rb, rc, rd, re, rf, rg) where
-  makeSelect esc (a, b, c, d, e, f, g) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      , makeSelect esc d
-      , makeSelect esc e
-      , makeSelect esc f
-      , makeSelect esc g
-      ]
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         , SqlSelect h rh
-         ) => SqlSelect (a, b, c, d, e, f, g, h) (ra, rb, rc, rd, re, rf, rg, rh) where
-  makeSelect esc (a, b, c, d, e, f, g, h) =
-    uncommas'
-      [ makeSelect esc a
-      , makeSelect esc b
-      , makeSelect esc c
-      , makeSelect esc d
-      , makeSelect esc e
-      , makeSelect esc f
-      , makeSelect esc g
-      , makeSelect esc h
-      ]
-
-
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = mconcat . intersperse ", "
 
@@ -304,3 +198,120 @@ makeWhere esc (Where (ERaw f)) = first ("\nWHERE " <>) (f esc)
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> "(")
+
+
+-- | Class for mapping results coming from 'SqlQuery' into actual
+-- results.
+class RawSql r => SqlSelect a r | a -> r, r -> a where
+  makeSelect :: Escape -> a -> (TLB.Builder, [PersistValue])
+
+instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
+  makeSelect _ (EEntity _) = ("??", mempty)
+
+instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
+  makeSelect esc (ERaw f) = first parens (f esc)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         ) => SqlSelect (a, b) (ra, rb) where
+  makeSelect esc (a, b) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         ) => SqlSelect (a, b, c) (ra, rb, rc) where
+  makeSelect esc (a, b, c) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         ) => SqlSelect (a, b, c, d) (ra, rb, rc, rd) where
+  makeSelect esc (a, b, c, d) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         ) => SqlSelect (a, b, c, d, e) (ra, rb, rc, rd, re) where
+  makeSelect esc (a, b, c, d, e) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         ) => SqlSelect (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf) where
+  makeSelect esc (a, b, c, d, e, f) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         ) => SqlSelect (a, b, c, d, e, f, g) (ra, rb, rc, rd, re, rf, rg) where
+  makeSelect esc (a, b, c, d, e, f, g) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
+      , makeSelect esc g
+      ]
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         ) => SqlSelect (a, b, c, d, e, f, g, h) (ra, rb, rc, rd, re, rf, rg, rh) where
+  makeSelect esc (a, b, c, d, e, f, g, h) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
+      , makeSelect esc g
+      , makeSelect esc h
+      ]
