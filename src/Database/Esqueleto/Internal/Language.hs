@@ -21,7 +21,7 @@ class (Functor query, Applicative query, Monad query) =>
   where_ :: expr (Single Bool) -> query ()
 
   -- | Execute a subquery in an expression.
-  sub  :: query (expr a) -> expr a
+  sub  :: PersistField a => query (expr (Single a)) -> expr (Single a)
 
   -- | Project a field of an entity.
   (^.) :: (PersistEntity val, PersistField typ) =>

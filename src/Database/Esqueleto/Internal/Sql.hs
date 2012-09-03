@@ -19,7 +19,6 @@ import Database.Persist.Store
 import qualified Control.Monad.Supply as S
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.Writer as W
-import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
@@ -102,6 +101,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
+  sub query = ERaw $ \esc -> first parens (toRawSelectSql esc query)
+
   EEntity (I ident) ^. field = ERaw $ \esc -> (ident <> ("." <> name esc field), [])
       where name esc = esc . fieldDB . persistFieldDef
 
@@ -144,7 +145,9 @@ select :: ( SqlSelect a
        => SqlQuery a -> SqlPersist m [SqlSelectRet r]
 select query = do
   conn <- getConnection
-  uncurry rawSql $ toRawSelectSql (fromDBName conn) query
+  uncurry rawSql $
+    first (TL.toStrict . TLB.toLazyText) $
+    toRawSelectSql (fromDBName conn) query
 
 
 -- | Get current database 'Connection'.
@@ -153,7 +156,7 @@ getConnection = SqlPersist R.ask
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
-toRawSelectSql :: SqlSelect a => Escape -> SqlQuery a -> (T.Text, [PersistValue])
+toRawSelectSql :: SqlSelect a => Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSelectSql esc query =
   let (ret, SideData fromClauses whereClauses) =
         flip S.evalSupply (idents ()) $
@@ -163,9 +166,7 @@ toRawSelectSql esc query =
       (selectText, selectVars) = makeSelect esc ret
       (whereText,  whereVars)  = makeWhere  esc whereClauses
 
-      text = TL.toStrict $
-             TLB.toLazyText $
-             mconcat
+      text = mconcat
              [ "SELECT "
              , selectText
              , makeFrom esc fromClauses
