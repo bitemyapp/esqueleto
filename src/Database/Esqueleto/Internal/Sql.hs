@@ -1,4 +1,4 @@
-{-# LANGUAGE ConstraintKinds, MultiParamTypeClasses, TypeFamilies, FlexibleContexts, GADTs, OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds, MultiParamTypeClasses, FunctionalDependencies, FlexibleContexts, FlexibleInstances, UndecidableInstances, GADTs, OverloadedStrings #-}
 module Database.Esqueleto.Internal.Sql
   ( SqlQuery
   , select
@@ -138,11 +138,11 @@ binop op (ERaw f1) (ERaw f2) = ERaw f
 
 
 -- | TODO
-select :: ( SqlSelect a
-          , RawSql (SqlSelectRet r)
+select :: ( SqlSelect a r
+          , RawSql r
           , MonadLogger m
           , MonadResourceBase m)
-       => SqlQuery a -> SqlPersist m [SqlSelectRet r]
+       => SqlQuery a -> SqlPersist m [r]
 select query = do
   conn <- getConnection
   uncurry rawSql $
@@ -156,7 +156,7 @@ getConnection = SqlPersist R.ask
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
-toRawSelectSql :: SqlSelect a => Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
+toRawSelectSql :: SqlSelect a r => Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSelectSql esc query =
   let (ret, SideData fromClauses whereClauses) =
         flip S.evalSupply (idents ()) $
@@ -176,41 +176,37 @@ toRawSelectSql esc query =
   in (text, selectVars <> whereVars)
 
 
-class RawSql (SqlSelectRet a) => SqlSelect a where
-  type SqlSelectRet a :: *
+class RawSql r => SqlSelect a r | a -> r, r -> a where
   makeSelect :: Escape -> a -> (TLB.Builder, [PersistValue])
 
-instance RawSql a => SqlSelect (SqlExpr a) where
-  type SqlSelectRet (SqlExpr a) = a
-  makeSelect _   (EEntity _) = ("??", mempty)
-  makeSelect esc (ERaw f)    = first parens (f esc)
+instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
+  makeSelect _ (EEntity _) = ("??", mempty)
+instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
+  makeSelect esc (ERaw f) = first parens (f esc)
 
-instance (SqlSelect a, SqlSelect b) => SqlSelect (a, b) where
-  type SqlSelectRet (a, b) = (SqlSelectRet a, SqlSelectRet b)
-  makeSelect esc (a, b) = uncommas' [makeSelect esc a, makeSelect esc b]
-instance (SqlSelect a, SqlSelect b, SqlSelect c) => SqlSelect (a, b, c) where
-  type SqlSelectRet (a, b, c) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         ) => SqlSelect (a, b) (ra, rb) where
+  makeSelect esc (a, b) =
+    uncommas'
+      [ makeSelect esc a
+      , makeSelect esc b
+      ]
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         ) => SqlSelect (a, b, c) (ra, rb, rc) where
   makeSelect esc (a, b, c) =
     uncommas'
       [ makeSelect esc a
       , makeSelect esc b
       , makeSelect esc c
       ]
-instance ( SqlSelect a
-         , SqlSelect b
-         , SqlSelect c
-         , SqlSelect d
-         ) => SqlSelect (a, b, c, d) where
-  type SqlSelectRet (a, b, c, d) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    , SqlSelectRet d
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         ) => SqlSelect (a, b, c, d) (ra, rb, rc, rd) where
   makeSelect esc (a, b, c, d) =
     uncommas'
       [ makeSelect esc a
@@ -218,19 +214,12 @@ instance ( SqlSelect a
       , makeSelect esc c
       , makeSelect esc d
       ]
-instance ( SqlSelect a
-         , SqlSelect b
-         , SqlSelect c
-         , SqlSelect d
-         , SqlSelect e
-         ) => SqlSelect (a, b, c, d, e) where
-  type SqlSelectRet (a, b, c, d, e) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    , SqlSelectRet d
-    , SqlSelectRet e
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         ) => SqlSelect (a, b, c, d, e) (ra, rb, rc, rd, re) where
   makeSelect esc (a, b, c, d, e) =
     uncommas'
       [ makeSelect esc a
@@ -239,21 +228,13 @@ instance ( SqlSelect a
       , makeSelect esc d
       , makeSelect esc e
       ]
-instance ( SqlSelect a
-         , SqlSelect b
-         , SqlSelect c
-         , SqlSelect d
-         , SqlSelect e
-         , SqlSelect f
-         ) => SqlSelect (a, b, c, d, e, f) where
-  type SqlSelectRet (a, b, c, d, e, f) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    , SqlSelectRet d
-    , SqlSelectRet e
-    , SqlSelectRet f
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         ) => SqlSelect (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf) where
   makeSelect esc (a, b, c, d, e, f) =
     uncommas'
       [ makeSelect esc a
@@ -263,23 +244,14 @@ instance ( SqlSelect a
       , makeSelect esc e
       , makeSelect esc f
       ]
-instance ( SqlSelect a
-         , SqlSelect b
-         , SqlSelect c
-         , SqlSelect d
-         , SqlSelect e
-         , SqlSelect f
-         , SqlSelect g
-         ) => SqlSelect (a, b, c, d, e, f, g) where
-  type SqlSelectRet (a, b, c, d, e, f, g) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    , SqlSelectRet d
-    , SqlSelectRet e
-    , SqlSelectRet f
-    , SqlSelectRet g
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         ) => SqlSelect (a, b, c, d, e, f, g) (ra, rb, rc, rd, re, rf, rg) where
   makeSelect esc (a, b, c, d, e, f, g) =
     uncommas'
       [ makeSelect esc a
@@ -290,25 +262,15 @@ instance ( SqlSelect a
       , makeSelect esc f
       , makeSelect esc g
       ]
-instance ( SqlSelect a
-         , SqlSelect b
-         , SqlSelect c
-         , SqlSelect d
-         , SqlSelect e
-         , SqlSelect f
-         , SqlSelect g
-         , SqlSelect h
-         ) => SqlSelect (a, b, c, d, e, f, g, h) where
-  type SqlSelectRet (a, b, c, d, e, f, g, h) =
-    ( SqlSelectRet a
-    , SqlSelectRet b
-    , SqlSelectRet c
-    , SqlSelectRet d
-    , SqlSelectRet e
-    , SqlSelectRet f
-    , SqlSelectRet g
-    , SqlSelectRet h
-    )
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         ) => SqlSelect (a, b, c, d, e, f, g, h) (ra, rb, rc, rd, re, rf, rg, rh) where
   makeSelect esc (a, b, c, d, e, f, g, h) =
     uncommas'
       [ makeSelect esc a
