@@ -86,7 +86,9 @@ idents _ =
 -- | An expression on the SQL backend.
 data SqlExpr a where
   EEntity :: Ident -> SqlExpr (Entity val)
-  ERaw    :: (Connection -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
+  ERaw    :: (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
+
+type Escape = DBName -> TLB.Builder
 
 instance Esqueleto SqlQuery SqlExpr SqlPersist where
   fromSingle = Q $ do
@@ -100,13 +102,13 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
-  EEntity (I ident) ^. field = ERaw $ \conn -> (ident <> ("." <> name conn field), [])
-      where name conn = fromDBName conn . fieldDB . persistFieldDef
+  EEntity (I ident) ^. field = ERaw $ \esc -> (ident <> ("." <> name esc field), [])
+      where name esc = esc . fieldDB . persistFieldDef
 
   val = ERaw . const . (,) "?" . return . toPersistValue
 
-  not_ (ERaw f) = ERaw $ \conn -> let (b, vals) = f conn
-                                  in ("NOT " <> parens b, vals)
+  not_ (ERaw f) = ERaw $ \esc -> let (b, vals) = f esc
+                                 in ("NOT " <> parens b, vals)
 
   (==.) = binop " = "
   (>=.) = binop " >= "
@@ -128,10 +130,10 @@ fromDBName conn = TLB.fromText . escapeName conn
 binop :: TLB.Builder -> SqlExpr (Single a) -> SqlExpr (Single b) -> SqlExpr (Single c)
 binop op (ERaw f1) (ERaw f2) = ERaw f
   where
-    f conn = let (b1, vals1) = f1 conn
-                 (b2, vals2) = f2 conn
-             in ( parens b1 <> op <> parens b2
-                , vals1 <> vals2 )
+    f esc = let (b1, vals1) = f1 esc
+                (b2, vals2) = f2 esc
+            in ( parens b1 <> op <> parens b2
+               , vals1 <> vals2 )
 
 
 -- | TODO
@@ -142,7 +144,7 @@ select :: ( SqlSelect a
        => SqlQuery a -> SqlPersist m [SqlSelectRet r]
 select query = do
   conn <- getConnection
-  uncurry rawSql $ toRawSelectSql conn query
+  uncurry rawSql $ toRawSelectSql (fromDBName conn) query
 
 
 -- | Get current database 'Connection'.
@@ -151,22 +153,22 @@ getConnection = SqlPersist R.ask
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
-toRawSelectSql :: SqlSelect a => Connection -> SqlQuery a -> (T.Text, [PersistValue])
-toRawSelectSql conn query =
+toRawSelectSql :: SqlSelect a => Escape -> SqlQuery a -> (T.Text, [PersistValue])
+toRawSelectSql esc query =
   let (ret, SideData fromClauses whereClauses) =
         flip S.evalSupply (idents ()) $
         W.runWriterT $
         unQ query
 
-      (selectText, selectVars) = makeSelect conn ret
-      (whereText,  whereVars)  = makeWhere  conn whereClauses
+      (selectText, selectVars) = makeSelect esc ret
+      (whereText,  whereVars)  = makeWhere  esc whereClauses
 
       text = TL.toStrict $
              TLB.toLazyText $
              mconcat
              [ "SELECT "
              , selectText
-             , makeFrom conn fromClauses
+             , makeFrom esc fromClauses
              , whereText
              ]
 
@@ -175,27 +177,27 @@ toRawSelectSql conn query =
 
 class RawSql (SqlSelectRet a) => SqlSelect a where
   type SqlSelectRet a :: *
-  makeSelect :: Connection -> a -> (TLB.Builder, [PersistValue])
+  makeSelect :: Escape -> a -> (TLB.Builder, [PersistValue])
 
 instance RawSql a => SqlSelect (SqlExpr a) where
   type SqlSelectRet (SqlExpr a) = a
-  makeSelect _    (EEntity _) = ("??", mempty)
-  makeSelect conn (ERaw f)    = first parens (f conn)
+  makeSelect _   (EEntity _) = ("??", mempty)
+  makeSelect esc (ERaw f)    = first parens (f esc)
 
 instance (SqlSelect a, SqlSelect b) => SqlSelect (a, b) where
   type SqlSelectRet (a, b) = (SqlSelectRet a, SqlSelectRet b)
-  makeSelect conn (a, b) = uncommas' [makeSelect conn a, makeSelect conn b]
+  makeSelect esc (a, b) = uncommas' [makeSelect esc a, makeSelect esc b]
 instance (SqlSelect a, SqlSelect b, SqlSelect c) => SqlSelect (a, b, c) where
   type SqlSelectRet (a, b, c) =
     ( SqlSelectRet a
     , SqlSelectRet b
     , SqlSelectRet c
     )
-  makeSelect conn (a, b, c) =
+  makeSelect esc (a, b, c) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
       ]
 instance ( SqlSelect a
          , SqlSelect b
@@ -208,12 +210,12 @@ instance ( SqlSelect a
     , SqlSelectRet c
     , SqlSelectRet d
     )
-  makeSelect conn (a, b, c, d) =
+  makeSelect esc (a, b, c, d) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
-      , makeSelect conn d
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
       ]
 instance ( SqlSelect a
          , SqlSelect b
@@ -228,13 +230,13 @@ instance ( SqlSelect a
     , SqlSelectRet d
     , SqlSelectRet e
     )
-  makeSelect conn (a, b, c, d, e) =
+  makeSelect esc (a, b, c, d, e) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
-      , makeSelect conn d
-      , makeSelect conn e
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
       ]
 instance ( SqlSelect a
          , SqlSelect b
@@ -251,14 +253,14 @@ instance ( SqlSelect a
     , SqlSelectRet e
     , SqlSelectRet f
     )
-  makeSelect conn (a, b, c, d, e, f) =
+  makeSelect esc (a, b, c, d, e, f) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
-      , makeSelect conn d
-      , makeSelect conn e
-      , makeSelect conn f
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
       ]
 instance ( SqlSelect a
          , SqlSelect b
@@ -277,15 +279,15 @@ instance ( SqlSelect a
     , SqlSelectRet f
     , SqlSelectRet g
     )
-  makeSelect conn (a, b, c, d, e, f, g) =
+  makeSelect esc (a, b, c, d, e, f, g) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
-      , makeSelect conn d
-      , makeSelect conn e
-      , makeSelect conn f
-      , makeSelect conn g
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
+      , makeSelect esc g
       ]
 instance ( SqlSelect a
          , SqlSelect b
@@ -306,16 +308,16 @@ instance ( SqlSelect a
     , SqlSelectRet g
     , SqlSelectRet h
     )
-  makeSelect conn (a, b, c, d, e, f, g, h) =
+  makeSelect esc (a, b, c, d, e, f, g, h) =
     uncommas'
-      [ makeSelect conn a
-      , makeSelect conn b
-      , makeSelect conn c
-      , makeSelect conn d
-      , makeSelect conn e
-      , makeSelect conn f
-      , makeSelect conn g
-      , makeSelect conn h
+      [ makeSelect esc a
+      , makeSelect esc b
+      , makeSelect esc c
+      , makeSelect esc d
+      , makeSelect esc e
+      , makeSelect esc f
+      , makeSelect esc g
+      , makeSelect esc h
       ]
 
 
@@ -326,15 +328,15 @@ uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = uncommas . map fst &&& mconcat . map snd
 
 
-makeFrom :: Connection -> [FromClause] -> TLB.Builder
-makeFrom conn = uncommas . map mk
+makeFrom :: Escape -> [FromClause] -> TLB.Builder
+makeFrom esc = uncommas . map mk
   where
-    mk (From (I i) def) = fromDBName conn (entityDB def) <> (" AS " <> i)
+    mk (From (I i) def) = esc (entityDB def) <> (" AS " <> i)
 
 
-makeWhere :: Connection -> WhereClause -> (TLB.Builder, [PersistValue])
-makeWhere _    NoWhere               = mempty
-makeWhere conn (Where (ERaw f)) = first ("\nWHERE " <>) (f conn)
+makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])
+makeWhere _   NoWhere          = mempty
+makeWhere esc (Where (ERaw f)) = first ("\nWHERE " <>) (f esc)
 
 
 parens :: TLB.Builder -> TLB.Builder
