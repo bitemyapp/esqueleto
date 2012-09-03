@@ -3,6 +3,7 @@ module Database.Esqueleto.Internal.Sql
   ( SqlQuery
   , SqlExpr
   , select
+  , selectSource
   , toRawSelectSql
   ) where
 

@@ -9,6 +9,7 @@ module Database.Esqueleto
   , SqlQuery
   , SqlExpr
   , select
+  , selectSource
 
     -- * Re-exports
   , module Database.Persist.Store
