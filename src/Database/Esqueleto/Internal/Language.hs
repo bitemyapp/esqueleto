@@ -56,45 +56,49 @@ infixr 3 &&.
 infixr 2 ||.
 
 
+-- | @FROM@ clause: bring an entity into scope.
+--
+-- The following types implement 'from':
+--
+--  * @Expr (Entity val)@, which brings a single entity into scope.
+--
+--  * Tuples of any other types supported by 'from'.  Calling
+--  'from' multiple times is the same as calling 'from' a
+--  single time and using a tuple.
+--
+-- Note that using 'from' for the same entity twice does work
+-- and corresponds to a self-join.  You don't even need to use
+-- two different calls to 'from', you may use a tuple.
+from :: From query expr backend a => (a -> query b) -> query b
+from = (from_ >>=)
+
+
 class Esqueleto query expr backend => From query expr backend a where
-  -- | @FROM@ clause: bring an entity into scope.
-  --
-  -- The following types implement 'from':
-  --
-  --  * @Expr (Entity val)@, which brings a single entity into scope.
-  --
-  --  * Tuples of any other types supported by 'from'.  Calling
-  --  'from' multiple times is the same as calling 'from' a
-  --  single time and using a tuple.
-  --
-  -- Note that using 'from' for the same entity twice does work
-  -- and corresponds to a self-join.  You don't even need to use
-  -- two different calls to 'from', you may use a tuple.
-  from :: query a
+  from_ :: query a
 
 instance ( Esqueleto query expr backend
          , PersistEntity val
          , PersistEntityBackend val ~ backend
          ) => From query expr backend (expr (Entity val)) where
-  from = fromSingle
+  from_ = fromSingle
 
 instance ( From query expr backend a
          , From query expr backend b
          ) => From query expr backend (a, b) where
-  from = (,) <$> from <*> from
+  from_ = (,) <$> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
          , From query expr backend c
          ) => From query expr backend (a, b, c) where
-  from = (,,) <$> from <*> from <*> from
+  from_ = (,,) <$> from_ <*> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
          , From query expr backend c
          , From query expr backend d
          ) => From query expr backend (a, b, c, d) where
-  from = (,,,) <$> from <*> from <*> from <*> from
+  from_ = (,,,) <$> from_ <*> from_ <*> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
@@ -102,7 +106,7 @@ instance ( From query expr backend a
          , From query expr backend d
          , From query expr backend e
          ) => From query expr backend (a, b, c, d, e) where
-  from = (,,,,) <$> from <*> from <*> from <*> from <*> from
+  from_ = (,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
@@ -111,7 +115,7 @@ instance ( From query expr backend a
          , From query expr backend e
          , From query expr backend f
          ) => From query expr backend (a, b, c, d, e, f) where
-  from = (,,,,,) <$> from <*> from <*> from <*> from <*> from <*> from
+  from_ = (,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
@@ -121,7 +125,7 @@ instance ( From query expr backend a
          , From query expr backend f
          , From query expr backend g
          ) => From query expr backend (a, b, c, d, e, f, g) where
-  from = (,,,,,,) <$> from <*> from <*> from <*> from <*> from <*> from <*> from
+  from_ = (,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
 instance ( From query expr backend a
          , From query expr backend b
@@ -132,4 +136,4 @@ instance ( From query expr backend a
          , From query expr backend g
          , From query expr backend h
          ) => From query expr backend (a, b, c, d, e, f, g, h) where
-  from = (,,,,,,,) <$> from <*> from <*> from <*> from <*> from <*> from <*> from <*> from
+  from_ = (,,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
