@@ -15,14 +15,17 @@ cabal-version:       >=1.8
 library
   exposed-modules:
     Database.Esqueleto
-    Database.Esqueleto.Internal.Types
     Database.Esqueleto.Internal.Language
+    Database.Esqueleto.Internal.Sql
   -- other-modules:
   build-depends:
-      base         == 4.5.*
-    , text         == 0.11.*
-    , persistent   == 1.0.*
-    , transformers == 0.3.*
-    , monad-supply == 0.3.*
+      base          == 4.5.*
+    , text          == 0.11.*
+    , persistent    >= 1.0.1  && < 1.1
+    , transformers  == 0.3.*
+    , monad-supply  == 0.3.*
+
+    , monad-logger
+    , resourcet
   hs-source-dirs: src/
   ghc-options: -Wall

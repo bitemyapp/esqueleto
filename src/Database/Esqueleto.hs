@@ -1,15 +1,14 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs #-}
 
 module Database.Esqueleto
-  ( -- * Queries
-    Query
-  , select
+  ( -- * Language
+    Esqueleto
+
+    -- * Queries
   , from
   , where_
 
     -- * Expressions
-  , Expr
-  , Value
   , (^.)
   , val
   , sub
@@ -32,7 +31,11 @@ module Database.Esqueleto
   , (-.)
   , (*.)
   , (/.)
+
+    -- * SQL backend
+  , SqlQuery
+  , select
   ) where
 
-import Database.Esqueleto.Internal.Types
 import Database.Esqueleto.Internal.Language
+import Database.Esqueleto.Internal.Sql
