@@ -111,11 +111,13 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   EEntity (I ident) ^. field = ERaw $ \esc -> (ident <> ("." <> name esc field), [])
       where name esc = esc . fieldDB . persistFieldDef
+  _ ^. _ = error "Esqueleto/Sql/(^.): never here (see GHC #6124)"
 
   val = ERaw . const . (,) "?" . return . toPersistValue
 
   not_ (ERaw f) = ERaw $ \esc -> let (b, vals) = f esc
                                  in ("NOT " <> parens b, vals)
+  not_ _ = error "Esqueleto/Sql/not_: never here (see GHC #6124)"
 
   (==.) = binop " = "
   (>=.) = binop " >= "
@@ -141,6 +143,7 @@ binop op (ERaw f1) (ERaw f2) = ERaw f
                 (b2, vals2) = f2 esc
             in ( parens b1 <> op <> parens b2
                , vals1 <> vals2 )
+binop _ _ _ = error "Esqueleto/Sql/binop: never here (see GHC #6124)"
 
 
 -- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
@@ -227,6 +230,7 @@ makeFrom esc = uncommas . map mk
 makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _   NoWhere          = mempty
 makeWhere esc (Where (ERaw f)) = first ("\nWHERE " <>) (f esc)
+makeWhere _ _ = error "Esqueleto/Sql/makeWhere: never here (see GHC #6124)"
 
 
 parens :: TLB.Builder -> TLB.Builder
@@ -268,6 +272,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
               in (length (entityFields ed) + 1, process ed, mempty)
         getEntityVal :: SqlExpr (Entity a) -> a
         getEntityVal = error "Database.Esqueleto.SqlSelect.getEntityVal"
+  sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Entity]: never here (see GHC #6124)"
   sqlSelectProcessRow (idCol:ent) =
     Entity <$> fromPersistValue idCol
            <*> fromPersistValues ent
@@ -276,6 +281,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
 instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
   sqlSelectCols esc (ERaw f) = let (b, vals) = f esc
                                in (1, parens b, vals)
+  sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Single]: never here (see GHC #6124)"
   sqlSelectProcessRow [pv] = Single <$> fromPersistValue pv
   sqlSelectProcessRow _    = Left "SqlSelect (Single a): wrong number of columns."
 
