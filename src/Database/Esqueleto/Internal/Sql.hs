@@ -9,8 +9,8 @@ module Database.Esqueleto.Internal.Sql
 
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Arrow (first)
+import Control.Exception (throwIO)
 import Control.Monad (ap)
-import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Logger (MonadLogger)
 import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
@@ -168,7 +168,7 @@ selectSource query = src
         mrow <- C.await
         case process <$> mrow of
           Just (Right r)  -> C.yield r >> massage
-          Just (Left err) -> fail (T.unpack err)
+          Just (Left err) -> liftIO $ throwIO $ PersistMarshalError err
           Nothing         -> return ()
 
       process = sqlSelectProcessRow
