@@ -222,7 +222,8 @@ uncommas' xs =
 
 
 makeFrom :: Escape -> [FromClause] -> TLB.Builder
-makeFrom esc = uncommas . map mk
+makeFrom _   [] = mempty
+makeFrom esc fs = "\nFROM " <> uncommas (map mk fs)
   where
     mk (From (I i) def) = esc (entityDB def) <> (" AS " <> i)
 
