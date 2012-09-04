@@ -16,7 +16,9 @@
 -- @
 module Database.Esqueleto
   ( -- * Esqueleto's Language
-    Esqueleto(..)
+    Esqueleto( where_, sub, (^.), val, not_, (==.), (>=.)
+             , (>.), (<=.), (<.), (!=.), (&&.), (||.)
+             , (+.), (-.), (/.), (*.) )
   , from
 
     -- * SQL backend
