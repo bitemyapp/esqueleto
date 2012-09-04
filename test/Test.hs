@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import Control.Applicative (Applicative(..))
+import Control.Applicative (Applicative(..), (<$>))
 import Control.Monad.Base (MonadBase(..))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), LogLevel(..))
@@ -163,6 +163,29 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
+      it "works for a many-to-many implicit join" $
+        run $ do
+          p1e@(Entity p1k _) <- insert' p1
+          p2e@(Entity p2k _) <- insert' p2
+          _                  <- insert' p3
+          p4e@(Entity p4k _) <- insert' p4
+          f12 <- insert' (Follow p1k p2k)
+          f21 <- insert' (Follow p2k p1k)
+          f42 <- insert' (Follow p4k p2k)
+          f11 <- insert' (Follow p1k p1k)
+          ret <- select $
+                 from $ \(follower, follows, followed) -> do
+                 where_ $ follower ^. PersonId ==. follows ^. FollowFollower &&.
+                          followed ^. PersonId ==. follows ^. FollowFollowed
+                 orderBy [ asc (follower ^. PersonName)
+                         , asc (followed ^. PersonName) ]
+                 return (follower, follows, followed)
+          liftIO $ ret `shouldBe` [ (p1e, f11, p1e)
+                                  , (p1e, f12, p2e)
+                                  , (p4e, f42, p2e)
+                                  , (p2e, f21, p1e) ]
+
+
     describe "select/orderBy" $ do
       it "works with a single ASC field" $
         run $ do
@@ -209,6 +232,11 @@ main = do
 
 
 ----------------------------------------------------------------------
+
+
+insert' :: (PersistEntity val, PersistStore (PersistEntityBackend val) m)
+        => val -> PersistEntityBackend val m (Entity val)
+insert' v = flip Entity v <$> insert v
 
 
 type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
