@@ -235,7 +235,7 @@ makeWhere _ _ = error "Esqueleto/Sql/makeWhere: never here (see GHC #6124)"
 
 
 parens :: TLB.Builder -> TLB.Builder
-parens b = "(" <> (b <> "(")
+parens b = "(" <> (b <> ")")
 
 
 -- | Class for mapping results coming from 'SqlQuery' into actual
