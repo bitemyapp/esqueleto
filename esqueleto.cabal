@@ -39,7 +39,7 @@ test-suite test
   build-depends:
       -- Library dependencies used on the tests.  No need to
       -- specify versions since they'll use the same as above.
-      base, persistent, transformers, conduit
+      base, persistent, transformers, conduit, text
 
       -- Test-only dependencies
     , HUnit
@@ -48,6 +48,11 @@ test-suite test
     , hspec-expectations  == 0.3.*
     , persistent-sqlite   == 1.0.*
     , persistent-template == 1.0.*
+    , monad-control
+    , monad-logger
+    , fast-logger         == 0.2.*
+    , transformers-base
+    , template-haskell
 
       -- This library
     , esqueleto
