@@ -8,7 +8,7 @@ module Database.Esqueleto.Internal.Sql
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
-import Control.Arrow (first)
+import Control.Arrow ((***), first)
 import Control.Exception (throwIO)
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO(..))
@@ -199,8 +199,8 @@ toRawSelectSql esc query =
         W.runWriterT $
         unQ query
 
-      (_, selectText, selectVars) = sqlSelectCols esc ret
-      (   whereText,  whereVars)  = makeWhere esc whereClauses
+      (selectText, selectVars) = sqlSelectCols esc ret
+      (whereText,  whereVars)  = makeWhere esc whereClauses
 
       text = mconcat
              [ "SELECT "
@@ -215,10 +215,8 @@ toRawSelectSql esc query =
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = mconcat . intersperse ", "
 
-uncommas' :: Monoid a => [(Int, TLB.Builder, a)] -> (Int, TLB.Builder, a)
-uncommas' xs =
-  let (as, bs, cs) = unzip3 xs
-  in (sum as, uncommas bs, mconcat cs)
+uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
+uncommas' = (uncommas *** mconcat) . unzip
 
 
 makeFrom :: Escape -> [FromClause] -> TLB.Builder
@@ -248,7 +246,11 @@ class SqlSelect a r | a -> r, r -> a where
   -- | Creates the variable part of the @SELECT@ query and
   -- returns the list of 'PersistValue's that will be given to
   -- 'withStmt'.
-  sqlSelectCols :: Escape -> a -> (Int, TLB.Builder, [PersistValue])
+  sqlSelectCols :: Escape -> a -> (TLB.Builder, [PersistValue])
+
+  -- | Number of columns that will be consumed.  Must be
+  -- non-strict on the argument.
+  sqlSelectColCount :: a -> Int
 
   -- | Transform a row of the result into the data type.
   sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
@@ -270,19 +272,22 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         -- example).
         name = ident <> "."
         ret = let ed = entityDef $ getEntityVal expr
-              in (length (entityFields ed) + 1, process ed, mempty)
-        getEntityVal :: SqlExpr (Entity a) -> a
-        getEntityVal = error "Database.Esqueleto.SqlSelect.getEntityVal"
+              in (process ed, mempty)
   sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Entity]: never here (see GHC #6124)"
+  sqlSelectColCount = (+1) . length . entityFields . entityDef . getEntityVal
   sqlSelectProcessRow (idCol:ent) =
     Entity <$> fromPersistValue idCol
            <*> fromPersistValues ent
   sqlSelectProcessRow _ = Left "SqlSelect (Entity a): wrong number of columns."
 
+getEntityVal :: SqlExpr (Entity a) -> a
+getEntityVal = error "Esqueleto/Sql/getEntityVal"
+
 instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
   sqlSelectCols esc (ERaw f) = let (b, vals) = f esc
-                               in (1, parens b, vals)
+                               in (parens b, vals)
   sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Single]: never here (see GHC #6124)"
+  sqlSelectColCount = const 1
   sqlSelectProcessRow [pv] = Single <$> fromPersistValue pv
   sqlSelectProcessRow _    = Left "SqlSelect (Single a): wrong number of columns."
 
@@ -294,13 +299,14 @@ instance ( SqlSelect a ra
       [ sqlSelectCols esc a
       , sqlSelectCols esc b
       ]
+  sqlSelectColCount ~(a,b) = sqlSelectColCount a + sqlSelectColCount b
   sqlSelectProcessRow =
     let x = getType processRow
         getType :: SqlSelect a r => (z -> Either y (r,x)) -> a
         getType = error "Esqueleto/SqlSelect[(a,b)]/sqlSelectProcessRow/getType"
 
-        (colCountFst, _, _) = sqlSelectCols escape x
-          where escape = error "Esqueleto/SqlSelect[(a,b)]/sqlSelectProcessRow/escape"
+        colCountFst = sqlSelectColCount x
+
         processRow row =
             let (rowFst, rowSnd) = splitAt colCountFst row
             in (,) <$> sqlSelectProcessRow rowFst
@@ -319,7 +325,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc b
       , sqlSelectCols esc c
       ]
+  sqlSelectColCount   = sqlSelectColCount . from3
   sqlSelectProcessRow = fmap to3 . sqlSelectProcessRow
+
+from3 :: (a,b,c) -> ((a,b),c)
+from3 (a,b,c) = ((a,b),c)
 
 to3 :: ((a,b),c) -> (a,b,c)
 to3 ((a,b),c) = (a,b,c)
@@ -337,7 +347,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc c
       , sqlSelectCols esc d
       ]
+  sqlSelectColCount   = sqlSelectColCount . from4
   sqlSelectProcessRow = fmap to4 . sqlSelectProcessRow
+
+from4 :: (a,b,c,d) -> ((a,b),(c,d))
+from4 (a,b,c,d) = ((a,b),(c,d))
 
 to4 :: ((a,b),(c,d)) -> (a,b,c,d)
 to4 ((a,b),(c,d)) = (a,b,c,d)
@@ -357,7 +371,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc d
       , sqlSelectCols esc e
       ]
+  sqlSelectColCount   = sqlSelectColCount . from5
   sqlSelectProcessRow = fmap to5 . sqlSelectProcessRow
+
+from5 :: (a,b,c,d,e) -> ((a,b),(c,d),e)
+from5 (a,b,c,d,e) = ((a,b),(c,d),e)
 
 to5 :: ((a,b),(c,d),e) -> (a,b,c,d,e)
 to5 ((a,b),(c,d),e) = (a,b,c,d,e)
@@ -379,7 +397,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc e
       , sqlSelectCols esc f
       ]
+  sqlSelectColCount   = sqlSelectColCount . from6
   sqlSelectProcessRow = fmap to6 . sqlSelectProcessRow
+
+from6 :: (a,b,c,d,e,f) -> ((a,b),(c,d),(e,f))
+from6 (a,b,c,d,e,f) = ((a,b),(c,d),(e,f))
 
 to6 :: ((a,b),(c,d),(e,f)) -> (a,b,c,d,e,f)
 to6 ((a,b),(c,d),(e,f)) = (a,b,c,d,e,f)
@@ -403,7 +425,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc f
       , sqlSelectCols esc g
       ]
+  sqlSelectColCount   = sqlSelectColCount . from7
   sqlSelectProcessRow = fmap to7 . sqlSelectProcessRow
+
+from7 :: (a,b,c,d,e,f,g) -> ((a,b),(c,d),(e,f),g)
+from7 (a,b,c,d,e,f,g) = ((a,b),(c,d),(e,f),g)
 
 to7 :: ((a,b),(c,d),(e,f),g) -> (a,b,c,d,e,f,g)
 to7 ((a,b),(c,d),(e,f),g) = (a,b,c,d,e,f,g)
@@ -429,7 +455,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc g
       , sqlSelectCols esc h
       ]
+  sqlSelectColCount   = sqlSelectColCount . from8
   sqlSelectProcessRow = fmap to8 . sqlSelectProcessRow
+
+from8 :: (a,b,c,d,e,f,g,h) -> ((a,b),(c,d),(e,f),(g,h))
+from8 (a,b,c,d,e,f,g,h) = ((a,b),(c,d),(e,f),(g,h))
 
 to8 :: ((a,b),(c,d),(e,f),(g,h)) -> (a,b,c,d,e,f,g,h)
 to8 ((a,b),(c,d),(e,f),(g,h)) = (a,b,c,d,e,f,g,h)
