@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs #-}
--- | Main module of Esqueleto.  This module replaces
+-- | Main module of @esqueleto@.  This module replaces
 -- @Database.Persist@, so instead of importing that module you
 -- should just import this one:
 --
@@ -15,7 +15,7 @@
 -- import qualified Database.Persist.Query as OldQuery
 -- @
 module Database.Esqueleto
-  ( -- * Esqueleto's Language
+  ( -- * @esqueleto@'s Language
     Esqueleto( where_, orderBy, asc, desc, sub, (^.), val
              , isNothing, just, nothing, not_, (==.), (>=.)
              , (>.), (<=.), (<.), (!=.), (&&.), (||.)
@@ -43,5 +43,5 @@ import Database.Persist.GenericSql
 -- $reexports
 --
 -- We re-export @Database.Persist.Store@ for convenience, since
--- Esqueleto currently does not provide a way of doing @insert@s
--- or @update@s.
+-- @esqueleto@ currently does not provide a way of doing
+-- @insert@s or @update@s.

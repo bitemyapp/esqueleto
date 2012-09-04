@@ -10,7 +10,7 @@ import Database.Persist.GenericSql
 import Database.Persist.Store
 
 
--- | Finally tagless representation of Esqueleto's EDSL.
+-- | Finally tagless representation of @esqueleto@'s EDSL.
 class (Functor query, Applicative query, Monad query) =>
       Esqueleto query expr backend | query -> expr backend, expr -> query backend where
   -- | (Internal) Single entity version of 'from'.

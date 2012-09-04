@@ -33,7 +33,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.Language
 
 
--- | SQL backend for 'Esqueleto' using 'SqlPersist'.
+-- | SQL backend for @esqueleto@ using 'SqlPersist'.
 newtype SqlQuery a =
   Q { unQ :: W.WriterT SideData (S.Supply Ident) a }
 
