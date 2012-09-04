@@ -12,7 +12,7 @@ import Database.Persist.Store
 -- | Finally tagless representation of Esqueleto's EDSL.
 class (Functor query, Applicative query, Monad query) =>
       Esqueleto query expr backend | query -> expr backend, expr -> query backend where
-  -- | Single entity version of 'from'.
+  -- | (Internal) Single entity version of 'from'.
   fromSingle :: ( PersistEntity val
                 , PersistEntityBackend val ~ backend)
              => query (expr (Entity val))
