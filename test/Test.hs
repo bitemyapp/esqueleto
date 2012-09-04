@@ -106,6 +106,16 @@ main = do
                  where_ (p ^. PersonName ==. val "John")
                  return p
           liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+      it "works for a simple example with (==.) and (||.)" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          _   <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ (p ^. PersonName ==. val "John" ||. p ^. PersonName ==. val "Rachel")
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1, Entity p2k p2 ]
       it "works for a simple example with (>.)" $
         run $ do
           p1k <- insert p1
