@@ -29,14 +29,14 @@ module Database.Esqueleto
 
     -- * Re-exports
     -- $reexports
-  , Single(..)
+  , module Database.Persist.GenericSql
   , module Database.Persist.Store
   ) where
 
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
 import Database.Persist.Store
-import Database.Persist.GenericSql (Single(..))
+import Database.Persist.GenericSql
 
 -- $reexports
 --
