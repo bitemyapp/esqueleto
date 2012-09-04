@@ -11,7 +11,9 @@ import Control.Applicative (Applicative(..), (<$>))
 import Control.Arrow (first)
 import Control.Exception (throwIO)
 import Control.Monad (ap)
+import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLogger)
+import Control.Monad.Trans.Resource (MonadResourceBase)
 import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
 import Database.Persist.EntityDef
@@ -149,10 +151,9 @@ binop _ _ _ = error "Esqueleto/Sql/binop: never here (see GHC #6124)"
 -- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
 -- 'SqlPersist' monad.
 selectSource :: ( SqlSelect a r
-                , C.MonadResource m
                 , MonadLogger m
-                , MonadIO m )
-             => SqlQuery a -> SqlPersist m (C.Source (SqlPersist m) r)
+                , MonadResourceBase m )
+             => SqlQuery a -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
 selectSource query = src
     where
       src = do
@@ -177,13 +178,12 @@ selectSource query = src
 -- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
 -- 'SqlPersist' monad.
 select :: ( SqlSelect a r
-          , C.MonadResource m
           , MonadLogger m
-          , MonadIO m )
+          , MonadResourceBase m )
        => SqlQuery a -> SqlPersist m [r]
 select query = do
   src <- selectSource query
-  src C.$$ CL.consume
+  C.runResourceT $ src C.$$ CL.consume
 
 
 -- | Get current database 'Connection'.

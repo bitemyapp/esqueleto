@@ -27,6 +27,7 @@ library
 
     , monad-logger
     , conduit
+    , resourcet
   hs-source-dirs: src/
   ghc-options: -Wall
 
