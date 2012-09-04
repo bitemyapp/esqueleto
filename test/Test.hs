@@ -8,7 +8,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), LogLevel(..))
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Database.Esqueleto
-import Database.Persist.Sqlite (runSqlConn, withSqliteConn)
+import Database.Persist.Sqlite (withSqliteConn)
 import Database.Persist.TH
 import Language.Haskell.TH (Loc(..))
 import System.IO (stderr)
@@ -97,11 +97,11 @@ main = do
 
       it "works for a simple projection with a simple self-join" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
+          _ <- insert p1
+          _ <- insert p2
           ret <- select $
-                 from $ \(p1, p2) ->
-                 return (p1 ^. PersonName, p2 ^. PersonName)
+                 from $ \(pa, pb) ->
+                 return (pa ^. PersonName, pb ^. PersonName)
           liftIO $ ret `shouldBe` [ (Single (personName p1), Single (personName p1))
                                   , (Single (personName p1), Single (personName p2))
                                   , (Single (personName p2), Single (personName p1))
@@ -219,8 +219,13 @@ run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersist (C.ResourceT
 runSilent  act = run_worker act
 runVerbose act = execVerbose $ run_worker act
 run =
-   runSilent
--- runVerbose
+  if verbose
+  then runVerbose
+  else runSilent
+
+
+verbose :: Bool
+verbose = True
 
 
 run_worker :: RunDbMonad m => SqlPersist (C.ResourceT m) a -> m a
