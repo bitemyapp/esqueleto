@@ -59,31 +59,31 @@ main = do
     describe "select/from" $ do
       it "works for a simple example" $
         run $ do
-          p1k <- insert p1
+          p1e <- insert' p1
           ret <- select $
                  from $ \person ->
                  return person
-          liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+          liftIO $ ret `shouldBe` [ p1e ]
 
       it "works for a simple self-join (one entity)" $
         run $ do
-          p1k <- insert p1
+          p1e <- insert' p1
           ret <- select $
                  from $ \(person1, person2) ->
                  return (person1, person2)
-          liftIO $ ret `shouldBe` [ (Entity p1k p1, Entity p1k p1) ]
+          liftIO $ ret `shouldBe` [ (p1e, p1e) ]
 
       it "works for a simple self-join (two entities)" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
+          p1e <- insert' p1
+          p2e <- insert' p2
           ret <- select $
                  from $ \(person1, person2) ->
                  return (person1, person2)
-          liftIO $ ret `shouldBe` [ (Entity p1k p1, Entity p1k p1)
-                                  , (Entity p1k p1, Entity p2k p2)
-                                  , (Entity p2k p2, Entity p1k p1)
-                                  , (Entity p2k p2, Entity p2k p2) ]
+          liftIO $ ret `shouldBe` [ (p1e, p1e)
+                                  , (p1e, p2e)
+                                  , (p2e, p1e)
+                                  , (p2e, p2e) ]
 
       it "works for a simple projection" $
         run $ do
@@ -110,58 +110,58 @@ main = do
     describe "select/where_" $ do
       it "works for a simple example with (==.)" $
         run $ do
-          p1k <- insert p1
-          _   <- insert p2
-          _   <- insert p3
+          p1e <- insert' p1
+          _   <- insert' p2
+          _   <- insert' p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName ==. val "John")
                  return p
-          liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+          liftIO $ ret `shouldBe` [ p1e ]
 
       it "works for a simple example with (==.) and (||.)" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          _   <- insert p3
+          p1e <- insert' p1
+          p2e <- insert' p2
+          _   <- insert' p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName ==. val "John" ||. p ^. PersonName ==. val "Rachel")
                  return p
-          liftIO $ ret `shouldBe` [ Entity p1k p1, Entity p2k p2 ]
+          liftIO $ ret `shouldBe` [ p1e, p2e ]
 
       it "works for a simple example with (>.) [uses val . Just]" $
         run $ do
-          p1k <- insert p1
-          _   <- insert p2
-          _   <- insert p3
+          p1e <- insert' p1
+          _   <- insert' p2
+          _   <- insert' p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonAge >. val (Just 17))
                  return p
-          liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+          liftIO $ ret `shouldBe` [ p1e ]
 
       it "works for a simple example with (>.) and not_ [uses just . val]" $
         run $ do
-          _   <- insert p1
-          _   <- insert p2
-          p3k <- insert p3
+          _   <- insert' p1
+          _   <- insert' p2
+          p3e <- insert' p3
           ret <- select $
                  from $ \p -> do
                  where_ (not_ $ p ^. PersonAge >. just (val 17))
                  return p
-          liftIO $ ret `shouldBe` [ Entity p3k p3 ]
+          liftIO $ ret `shouldBe` [ p3e ]
 
       it "works with isNothing" $
         run $ do
-          _   <- insert p1
-          p2k <- insert p2
-          _   <- insert p3
+          _   <- insert' p1
+          p2e <- insert' p2
+          _   <- insert' p3
           ret <- select $
                  from $ \p -> do
                  where_ $ isNothing (p ^. PersonAge)
                  return p
-          liftIO $ ret `shouldBe` [ Entity p2k p2 ]
+          liftIO $ ret `shouldBe` [ p2e ]
 
       it "works for a many-to-many implicit join" $
         run $ do
@@ -189,46 +189,38 @@ main = do
     describe "select/orderBy" $ do
       it "works with a single ASC field" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
           ret <- select $
                  from $ \p -> do
                  orderBy [asc $ p ^. PersonName]
                  return p
-          liftIO $ ret `shouldBe` [ Entity p1k p1
-                                  , Entity p3k p3
-                                  , Entity p2k p2 ]
+          liftIO $ ret `shouldBe` [ p1e, p3e, p2e ]
 
       it "works with two ASC fields" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
-          p4k <- insert p4
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
           ret <- select $
                  from $ \p -> do
                  orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
                  return p
-          liftIO $ ret `shouldBe` [ Entity p2k p2
-                                  , Entity p4k p4
-                                  , Entity p3k p3
-                                  , Entity p1k p1 ]
+          liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
 
       it "works with one ASC and one DESC field" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
-          p4k <- insert p4
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
           ret <- select $
                  from $ \p -> do
                  orderBy [desc (p ^. PersonAge), asc (p ^. PersonName)]
                  return p
-          liftIO $ ret `shouldBe` [ Entity p1k p1
-                                  , Entity p4k p4
-                                  , Entity p3k p3
-                                  , Entity p2k p2 ]
+          liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
 
 ----------------------------------------------------------------------
