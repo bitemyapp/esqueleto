@@ -8,7 +8,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), LogLevel(..))
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Database.Esqueleto
-import Database.Persist.Sqlite
+import Database.Persist.Sqlite (runSqlConn, withSqliteConn)
 import Database.Persist.TH
 import Language.Haskell.TH (Loc(..))
 import System.IO (stderr)
@@ -84,6 +84,48 @@ main = do
                  return (p ^. PersonId, p ^. PersonName)
           liftIO $ ret `shouldBe` [ (Single p1k, Single (personName p1))
                                   , (Single p2k, Single (personName p2)) ]
+      it "works for a simple projection with a simple self-join" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          ret <- select $
+                 from $ \(p1, p2) ->
+                 return (p1 ^. PersonName, p2 ^. PersonName)
+          liftIO $ ret `shouldBe` [ (Single (personName p1), Single (personName p1))
+                                  , (Single (personName p1), Single (personName p2))
+                                  , (Single (personName p2), Single (personName p1))
+                                  , (Single (personName p2), Single (personName p2)) ]
+    describe "select/where_" $ do
+      it "works for a simple example with (==.)" $
+        run $ do
+          p1k <- insert p1
+          _   <- insert p2
+          _   <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ (p ^. PersonName ==. val "John")
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+      it "works for a simple example with (>.)" $
+        run $ do
+          p1k <- insert p1
+          _   <- insert p2
+          _   <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ (p ^. PersonAge >. val (Just 17))
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1 ]
+      it "works for a simple example with (>.) and not_" $
+        run $ do
+          _   <- insert p1
+          _   <- insert p2
+          p3k <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ (not_ $ p ^. PersonAge >. val (Just 17))
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p3k p3 ]
 
 
 ----------------------------------------------------------------------
