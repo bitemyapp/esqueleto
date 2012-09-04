@@ -297,9 +297,10 @@ instance ( SqlSelect a ra
   sqlSelectProcessRow =
     let x = getType processRow
         getType :: SqlSelect a r => (z -> Either y (r,x)) -> a
-        getType = undefined
+        getType = error "Esqueleto/SqlSelect[(a,b)]/sqlSelectProcessRow/getType"
 
-        (colCountFst, _, _) = sqlSelectCols undefined x
+        (colCountFst, _, _) = sqlSelectCols escape x
+          where escape = error "Esqueleto/SqlSelect[(a,b)]/sqlSelectProcessRow/escape"
         processRow row =
             let (rowFst, rowSnd) = splitAt colCountFst row
             in (,) <$> sqlSelectProcessRow rowFst
