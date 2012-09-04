@@ -29,3 +29,24 @@ library
     , conduit
   hs-source-dirs: src/
   ghc-options: -Wall
+
+test-suite test
+  type: exitcode-stdio-1.0
+  ghc-options:    -Wall
+  hs-source-dirs: test
+  main-is:        Test.hs
+  build-depends:
+      -- Library dependencies used on the tests.  No need to
+      -- specify versions since they'll use the same as above.
+      base, persistent, transformers, conduit
+
+      -- Test-only dependencies
+    , HUnit
+    , QuickCheck
+    , hspec               == 1.3.*
+    , hspec-expectations  == 0.3.*
+    , persistent-sqlite   == 1.0.*
+    , persistent-template == 1.0.*
+
+      -- This library
+    , esqueleto
