@@ -52,12 +52,13 @@ instance Applicative SqlQuery where
 -- | Side data written by 'SqlQuery'.
 data SideData = SideData { sdFromClause    :: ![FromClause]
                          , sdWhereClause   :: !WhereClause
+                         , sdOrderByClause :: ![OrderByClause]
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty
-  SideData f w `mappend` SideData f' w' =
-    SideData (f <> f') (w <> w')
+  mempty = SideData mempty mempty mempty
+  SideData f w o `mappend` SideData f' w' o' =
+    SideData (f <> f') (w <> w') (o <> o')
 
 
 -- | A part of a @FROM@ clause.
@@ -73,6 +74,10 @@ instance Monoid WhereClause where
   NoWhere  `mappend` w        = w
   w        `mappend` NoWhere  = w
   Where e1 `mappend` Where e2 = Where (e1 &&. e2)
+
+
+-- | A @ORDER BY@ clause.
+type OrderByClause = SqlExpr OrderBy
 
 
 -- | Identifier used for tables.
@@ -92,8 +97,11 @@ idents _ =
 
 -- | An expression on the SQL backend.
 data SqlExpr a where
-  EEntity :: Ident -> SqlExpr (Entity val)
-  ERaw    :: (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
+  EEntity  :: Ident -> SqlExpr (Entity val)
+  ERaw     :: (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
+  EOrderBy :: OrderByType -> SqlExpr (Single a) -> SqlExpr OrderBy
+
+data OrderByType = ASC | DESC
 
 type Escape = DBName -> TLB.Builder
 
@@ -108,6 +116,10 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
     return ret
 
   where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
+
+  orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
+  asc  = EOrderBy ASC
+  desc = EOrderBy DESC
 
   sub query = ERaw $ \esc -> first parens (toRawSelectSql esc query)
 
@@ -200,22 +212,16 @@ getConnection = SqlPersist R.ask
 -- | Pretty prints a 'SqlQuery' into a SQL query.
 toRawSelectSql :: SqlSelect a r => Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSelectSql esc query =
-  let (ret, SideData fromClauses whereClauses) =
+  let (ret, SideData fromClauses whereClauses orderByClauses) =
         flip S.evalSupply (idents ()) $
         W.runWriterT $
         unQ query
-
-      (selectText, selectVars) = sqlSelectCols esc ret
-      (whereText,  whereVars)  = makeWhere esc whereClauses
-
-      text = mconcat
-             [ "SELECT "
-             , selectText
-             , makeFrom esc fromClauses
-             , whereText
-             ]
-
-  in (text, selectVars <> whereVars)
+  in mconcat
+      [ makeSelect  esc ret
+      , makeFrom    esc fromClauses
+      , makeWhere   esc whereClauses
+      , makeOrderBy esc orderByClauses
+      ]
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
@@ -225,9 +231,13 @@ uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
 
 
-makeFrom :: Escape -> [FromClause] -> TLB.Builder
+makeSelect :: SqlSelect a r => Escape -> a -> (TLB.Builder, [PersistValue])
+makeSelect esc ret = first ("SELECT " <>) (sqlSelectCols esc ret)
+
+
+makeFrom :: Escape -> [FromClause] -> (TLB.Builder, [PersistValue])
 makeFrom _   [] = mempty
-makeFrom esc fs = "\nFROM " <> uncommas (map mk fs)
+makeFrom esc fs = ("\nFROM " <> uncommas (map mk fs), mempty)
   where
     mk (From (I i) def) = esc (entityDB def) <> (" AS " <> i)
 
@@ -236,6 +246,16 @@ makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _   NoWhere          = mempty
 makeWhere esc (Where (ERaw f)) = first ("\nWHERE " <>) (f esc)
 makeWhere _ _ = error "Esqueleto/Sql/makeWhere: never here (see GHC #6124)"
+
+
+makeOrderBy :: Escape -> [OrderByClause] -> (TLB.Builder, [PersistValue])
+makeOrderBy _   [] = mempty
+makeOrderBy esc os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
+  where
+    mk (EOrderBy t (ERaw f)) = first (<> orderByType t) (f esc)
+    mk _ = error "Esqueleto/Sql/makeOrderBy: never here (see GHC #6124)"
+    orderByType ASC  = " ASC"
+    orderByType DESC = " DESC"
 
 
 parens :: TLB.Builder -> TLB.Builder

@@ -16,11 +16,12 @@
 -- @
 module Database.Esqueleto
   ( -- * Esqueleto's Language
-    Esqueleto( where_, sub, (^.), val, isNothing, just, nothing
-             , not_, (==.), (>=.)
+    Esqueleto( where_, orderBy, asc, desc, sub, (^.), val
+             , isNothing, just, nothing, not_, (==.), (>=.)
              , (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.) )
   , from
+  , OrderBy
 
     -- * SQL backend
   , SqlQuery

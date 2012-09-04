@@ -1,7 +1,8 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, EmptyDataDecls #-}
 module Database.Esqueleto.Internal.Language
   ( Esqueleto(..)
   , from
+  , OrderBy
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -19,6 +20,15 @@ class (Functor query, Applicative query, Monad query) =>
 
   -- | @WHERE@ clause: restrict the query's result.
   where_ :: expr (Single Bool) -> query ()
+
+  -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
+  orderBy :: [expr OrderBy] -> query ()
+
+  -- | Ascending order of this field or expression.
+  asc :: PersistField a => expr (Single a) -> expr OrderBy
+
+  -- | Descending order of this field or expression.
+  desc :: PersistField a => expr (Single a) -> expr OrderBy
 
   -- | Execute a subquery in an expression.
   sub  :: PersistField a => query (expr (Single a)) -> expr (Single a)
@@ -65,6 +75,10 @@ infixl 6 +., -.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&.
 infixr 2 ||.
+
+
+-- | Phantom type used by 'orderBy', 'asc' and 'desc'.
+data OrderBy
 
 
 -- | @FROM@ clause: bring an entity into scope.

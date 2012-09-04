@@ -40,9 +40,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persist|
 
 main :: IO ()
 main = do
-  let p1 = Person "John" (Just 36)
+  let p1 = Person "John"  (Just 36)
       p2 = Person "Rachel" Nothing
-      p3 = Person "Mike" (Just 17)
+      p3 = Person "Mike"  (Just 17)
+      p4 = Person "Livia" (Just 17)
   hspec $ do
     describe "select" $ do
       it "works for a single value" $
@@ -161,6 +162,50 @@ main = do
                  where_ $ isNothing (p ^. PersonAge)
                  return p
           liftIO $ ret `shouldBe` [ Entity p2k p2 ]
+
+    describe "select/orderBy" $ do
+      it "works with a single ASC field" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 orderBy [asc $ p ^. PersonName]
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1
+                                  , Entity p3k p3
+                                  , Entity p2k p2 ]
+
+      it "works with two ASC fields" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          p4k <- insert p4
+          ret <- select $
+                 from $ \p -> do
+                 orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p2k p2
+                                  , Entity p4k p4
+                                  , Entity p3k p3
+                                  , Entity p1k p1 ]
+
+      it "works with one ASC and one DESC field" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          p4k <- insert p4
+          ret <- select $
+                 from $ \p -> do
+                 orderBy [desc (p ^. PersonAge), asc (p ^. PersonName)]
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1
+                                  , Entity p4k p4
+                                  , Entity p3k p3
+                                  , Entity p2k p2 ]
 
 
 ----------------------------------------------------------------------
