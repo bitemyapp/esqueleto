@@ -30,6 +30,17 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Lift a constant value from Haskell-land to the query.
   val  :: PersistField typ => typ -> expr (Single typ)
 
+  -- | @IS NULL@ comparison.
+  isNothing :: PersistField typ => expr (Single (Maybe typ)) -> expr (Single Bool)
+
+  -- | Analog to 'Just', promotes a value of type @typ@ into one
+  -- of type @Maybe typ@.  It should hold that @val . Just ===
+  -- just . val@.
+  just :: expr (Single typ) -> expr (Single (Maybe typ))
+
+  -- | @NULL@ value.
+  nothing :: expr (Single (Maybe typ))
+
   not_ :: expr (Single Bool) -> expr (Single Bool)
 
   (==.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)

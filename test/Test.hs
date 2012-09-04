@@ -50,6 +50,11 @@ main = do
           ret <- select $ return $ val (3 :: Int)
           liftIO $ ret `shouldBe` [ Single 3 ]
 
+      it "works for a single NULL value" $
+        run $ do
+          ret <- select $ return $ nothing
+          liftIO $ ret `shouldBe` [ Single (Nothing :: Maybe Int) ]
+
     describe "select/from" $ do
       it "works for a simple example" $
         run $ do
@@ -124,7 +129,7 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ Entity p1k p1, Entity p2k p2 ]
 
-      it "works for a simple example with (>.)" $
+      it "works for a simple example with (>.) [uses val . Just]" $
         run $ do
           p1k <- insert p1
           _   <- insert p2
@@ -135,16 +140,27 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ Entity p1k p1 ]
 
-      it "works for a simple example with (>.) and not_" $
+      it "works for a simple example with (>.) and not_ [uses just . val]" $
         run $ do
           _   <- insert p1
           _   <- insert p2
           p3k <- insert p3
           ret <- select $
                  from $ \p -> do
-                 where_ (not_ $ p ^. PersonAge >. val (Just 17))
+                 where_ (not_ $ p ^. PersonAge >. just (val 17))
                  return p
           liftIO $ ret `shouldBe` [ Entity p3k p3 ]
+
+      it "works with isNothing" $
+        run $ do
+          _   <- insert p1
+          p2k <- insert p2
+          _   <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ $ isNothing (p ^. PersonAge)
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
 
 ----------------------------------------------------------------------

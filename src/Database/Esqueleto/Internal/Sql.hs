@@ -117,6 +117,12 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   val = ERaw . const . (,) "?" . return . toPersistValue
 
+  isNothing (ERaw f) = ERaw $ first ((<> " IS NULL") . parens) . f
+  isNothing _        = error "Esqueleto/Sql/isNothing: never here (see GHC #6124)"
+  just (ERaw f) = ERaw f
+  just _        = error "Esqueleto/Sql/just: never here (see GHC #6124)"
+  nothing = ERaw $ \_ -> ("NULL", mempty)
+
   not_ (ERaw f) = ERaw $ \esc -> let (b, vals) = f esc
                                  in ("NOT " <> parens b, vals)
   not_ _ = error "Esqueleto/Sql/not_: never here (see GHC #6124)"
