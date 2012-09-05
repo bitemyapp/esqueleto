@@ -303,15 +303,16 @@ makeFrom esc fs = ret
   where
     ret = case collectOnClauses fs of
             Left expr -> throw $ mkExc expr
-            Right fs' -> first ("\nFROM " <>) $ uncommas' (map mk fs')
+            Right fs' -> first ("\nFROM " <>) $ uncommas' (map (mk False mempty) fs')
 
-    mk (FromStart (I i) def) = base i def
-    mk (FromJoin lhs kind rhs monClause) =
-      mconcat [ mk lhs
+    mk _     onClause (FromStart (I i) def) = base i def <> onClause
+    mk paren onClause (FromJoin lhs kind rhs monClause) =
+      (if paren then first parens else id) $
+      mconcat [ mk True onClause lhs
               , (fromKind kind, mempty)
-              , mk rhs
-              , maybe mempty makeOnClause monClause ]
-    mk (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
+              , mk False (maybe mempty makeOnClause monClause) rhs
+              ]
+    mk _ _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
 
     base i def = (esc (entityDB def) <> (" AS " <> i), mempty)
 
