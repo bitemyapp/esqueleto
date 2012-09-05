@@ -49,11 +49,11 @@ library
     Database.Esqueleto.Internal.Language
     Database.Esqueleto.Internal.Sql
   build-depends:
-      base          == 4.5.*
-    , text          == 0.11.*
-    , persistent    >= 1.0.1  && < 1.1
-    , transformers  == 0.3.*
-    , monad-supply  == 0.3.*
+      base                 == 4.5.*
+    , text                 == 0.11.*
+    , persistent           >= 1.0.1  && < 1.1
+    , transformers         == 0.3.*
+    , unordered-containers >= 0.2
 
     , monad-logger
     , conduit
