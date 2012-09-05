@@ -127,6 +127,22 @@ main = do
                                   , (p3e, Just b31e)
                                   , (p2e, Nothing) ]
 
+      it "typechecks (A LEFT OUTER JOIN (B LEFT OUTER JOIN C))" $
+        let _ = run $
+                select $
+                from $ \(a `LeftOuterJoin` (b `LeftOuterJoin` c)) ->
+                let _ = [a, b, c] :: [ SqlExpr (Entity Person) ]
+                in return a
+        in return () :: IO ()
+
+      it "typechecks ((A LEFT OUTER JOIN B) LEFT OUTER JOIN C)" $
+        let _ = run $
+                select $
+                from $ \((a `LeftOuterJoin` b) `LeftOuterJoin` c) ->
+                let _ = [a, b, c] :: [ SqlExpr (Entity Person) ]
+                in return a
+        in return () :: IO ()
+
       it "throws an error for using on without joins" $
         run (do
           p1e <- insert' p1

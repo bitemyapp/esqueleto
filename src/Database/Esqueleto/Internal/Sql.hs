@@ -64,7 +64,7 @@ instance Monoid SideData where
 -- | A part of a @FROM@ clause.
 data FromClause =
     FromStart Ident EntityDef
-  | FromJoin Ident EntityDef JoinKind FromClause (Maybe (SqlExpr (Single Bool)))
+  | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Single Bool)))
   | OnClause (SqlExpr (Single Bool))
 
 
@@ -79,8 +79,8 @@ collectOnClauses = go []
     go acc (f:fs)                 = go (f:acc) fs
     go acc []                     = return $ reverse acc
 
-    findMatching (FromJoin i e k f Nothing : acc) expr =
-      return (FromJoin i e k f (Just expr) : acc)
+    findMatching (FromJoin l k r Nothing : acc) expr =
+      return (FromJoin l k r (Just expr) : acc)
     findMatching (f : acc) expr = (f:) <$> findMatching acc expr
     findMatching []        expr = Left expr
 
@@ -142,16 +142,15 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
       maybelize (EPreprocessedFrom ret from_) = EPreprocessedFrom (EMaybe ret) from_
       maybelize _ = error "Esqueleto/Sql/fromStartMaybe: never here (see GHC #6124)"
 
-  fromJoin (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
-    lhsIdent <- S.supply
-    let lhsRet = EEntity lhsIdent
-        ret    = smartJoin lhsRet rhsRet
-        from_  = FromJoin lhsIdent (entityDef $ getVal lhsRet) -- LHS
-                          (reifyJoinKind ret)                  -- JOIN
-                          rhsFrom                              -- RHS
-                          Nothing                              -- ON
+  fromJoin (EPreprocessedFrom lhsRet lhsFrom)
+           (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
+    let ret   = smartJoin lhsRet rhsRet
+        from_ = FromJoin lhsFrom             -- LHS
+                         (reifyJoinKind ret) -- JOIN
+                         rhsFrom             -- RHS
+                         Nothing             -- ON
     return (EPreprocessedFrom ret from_)
-  fromJoin _ = error "Esqueleto/Sql/fromJoin: never here (see GHC #6124)"
+  fromJoin _ _ = error "Esqueleto/Sql/fromJoin: never here (see GHC #6124)"
 
   fromFinish (EPreprocessedFrom ret from_) = Q $ do
     W.tell mempty { sdFromClause = [from_] }
@@ -299,10 +298,10 @@ makeFrom esc fs = ret
             Right fs' -> first ("\nFROM " <>) $ uncommas' (map mk fs')
 
     mk (FromStart (I i) def) = base i def
-    mk (FromJoin (I i) def kind rest monClause) =
-      mconcat [ base i def
+    mk (FromJoin lhs kind rhs monClause) =
+      mconcat [ mk lhs
               , (fromKind kind, mempty)
-              , mk rest
+              , mk rhs
               , maybe mempty makeOnClause monClause ]
     mk (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
 

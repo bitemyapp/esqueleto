@@ -48,11 +48,10 @@ class (Functor query, Applicative query, Monad query) =>
     => query (expr (PreprocessedFrom (expr (Maybe (Entity a)))))
   -- | (Internal) Do a @JOIN@.
   fromJoin
-    :: ( PersistEntity a
-       , PersistEntityBackend a ~ backend
-       , IsJoinKind join )
-    => expr (PreprocessedFrom b)
-    -> query (expr (PreprocessedFrom (join (expr (Entity a)) b)))
+    :: IsJoinKind join
+    => expr (PreprocessedFrom a)
+    -> expr (PreprocessedFrom b)
+    -> query (expr (PreprocessedFrom (join a b)))
   -- | (Internal) Finish a @JOIN@.
   fromFinish
     :: expr (PreprocessedFrom a)
@@ -286,28 +285,28 @@ instance ( Esqueleto query expr backend
   from_ = fromPreprocess >>= fromFinish
 
 instance ( Esqueleto query expr backend
-         , FromPreprocess query expr backend (InnerJoin (expr (Entity val)) b)
-         ) => From query expr backend (InnerJoin (expr (Entity val)) b) where
+         , FromPreprocess query expr backend (InnerJoin a b)
+         ) => From query expr backend (InnerJoin a b) where
   from_ = fromPreprocess >>= fromFinish
 
 instance ( Esqueleto query expr backend
-         , FromPreprocess query expr backend (CrossJoin (expr (Entity val)) b)
-         ) => From query expr backend (CrossJoin (expr (Entity val)) b) where
+         , FromPreprocess query expr backend (CrossJoin a b)
+         ) => From query expr backend (CrossJoin a b) where
   from_ = fromPreprocess >>= fromFinish
 
 instance ( Esqueleto query expr backend
-         , FromPreprocess query expr backend (LeftOuterJoin (expr (Entity val)) b)
-         ) => From query expr backend (LeftOuterJoin (expr (Entity val)) b) where
+         , FromPreprocess query expr backend (LeftOuterJoin a b)
+         ) => From query expr backend (LeftOuterJoin a b) where
   from_ = fromPreprocess >>= fromFinish
 
 instance ( Esqueleto query expr backend
-         , FromPreprocess query expr backend (RightOuterJoin (expr (Entity val)) b)
-         ) => From query expr backend (RightOuterJoin (expr (Entity val)) b) where
+         , FromPreprocess query expr backend (RightOuterJoin a b)
+         ) => From query expr backend (RightOuterJoin a b) where
   from_ = fromPreprocess >>= fromFinish
 
 instance ( Esqueleto query expr backend
-         , FromPreprocess query expr backend (FullOuterJoin (expr (Entity val)) b)
-         ) => From query expr backend (FullOuterJoin (expr (Entity val)) b) where
+         , FromPreprocess query expr backend (FullOuterJoin a b)
+         ) => From query expr backend (FullOuterJoin a b) where
   from_ = fromPreprocess >>= fromFinish
 
 instance ( From query expr backend a
@@ -386,9 +385,11 @@ instance ( Esqueleto query expr backend
   fromPreprocess = fromStartMaybe
 
 instance ( Esqueleto query expr backend
-         , PersistEntity val
-         , PersistEntityBackend val ~ backend
-         , IsJoinKind join
+         , FromPreprocess query expr backend a
          , FromPreprocess query expr backend b
-         ) => FromPreprocess query expr backend (join (expr (Entity val)) b) where
-  fromPreprocess = fromPreprocess >>= fromJoin
+         , IsJoinKind join
+         ) => FromPreprocess query expr backend (join a b) where
+  fromPreprocess = do
+    a <- fromPreprocess
+    b <- fromPreprocess
+    fromJoin a b
