@@ -140,18 +140,10 @@ newtype Ident = I T.Text
 
 -- | List of identifiers already in use and supply of temporary
 -- identifiers.
-data IdentState = IdentState { inUse :: !(HS.HashSet T.Text)
-                             , fresh :: ![T.Text] }
+newtype IdentState = IdentState { inUse :: HS.HashSet T.Text }
 
 initialIdentState :: IdentState
-initialIdentState = IdentState mempty idents
-  where
-    idents =
-      let alpha      = ['A'..'Z']
-          letters 1  = map return alpha
-          letters n  = (:) <$> alpha <*> letters (n-1)
-          everything = concat (map letters [(1::Int)..])
-      in map T.pack everything
+initialIdentState = IdentState mempty
 
 
 -- | Create a fresh 'Ident'.  If possible, use the given
@@ -159,20 +151,21 @@ initialIdentState = IdentState mempty idents
 newIdentFor :: DBName -> SqlQuery Ident
 newIdentFor = Q . lift . try . unDBName
   where
-    try t = do
+    try orig = do
       s <- S.get
-      if t `HS.member` inUse s
-        then newIdent
-        else markAsUsed t >> return (I t)
+      let go (t:ts) | t `HS.member` inUse s = go ts
+                    | otherwise             = use t
+          go [] = error "Esqueleto/Sql/newIdentFor: never here"
+      go (possibilities orig)
 
-    newIdent = do
-      s <- S.get
-      let (f:fs) = fresh s
-      S.put s { fresh = fs }
-      try f
+    possibilities t = t : map addNum [2..]
+      where
+        addNum :: Int -> T.Text
+        addNum = T.append t . T.pack . show
 
-    markAsUsed t =
+    use t = do
       S.modify (\s -> s { inUse = HS.insert t (inUse s) })
+      return (I t)
 
 
 -- | Use an identifier.
