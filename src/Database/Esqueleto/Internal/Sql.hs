@@ -258,7 +258,7 @@ rawSelectSource :: ( SqlSelect a r
 rawSelectSource mode query = src
     where
       src = do
-        conn <- getConnection
+        conn <- SqlPersist R.ask
         return $ run conn C.$= massage
 
       run conn =
@@ -321,11 +321,6 @@ runSource :: MonadResourceBase m =>
              C.Source (C.ResourceT (SqlPersist m)) r
           -> SqlPersist m [r]
 runSource src = C.runResourceT $ src C.$$ CL.consume
-
-
--- | Get current database 'Connection'.
-getConnection :: Monad m => SqlPersist m Connection
-getConnection = SqlPersist R.ask
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
