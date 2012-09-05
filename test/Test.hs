@@ -297,7 +297,7 @@ run =
 
 
 verbose :: Bool
-verbose = True
+verbose = False
 
 
 run_worker :: RunDbMonad m => SqlPersist (C.ResourceT m) a -> m a
