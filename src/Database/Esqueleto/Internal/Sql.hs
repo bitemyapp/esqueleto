@@ -480,6 +480,10 @@ class SqlSelect a r | a -> r, r -> a where
   -- | Transform a row of the result into the data type.
   sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
 
+instance SqlSelect () () where
+  sqlSelectCols _ _ = mempty
+  sqlSelectColCount _ = 0
+  sqlSelectProcessRow _ = Right ()
 
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
   sqlSelectCols escape expr@(EEntity ident) = ret
