@@ -4,13 +4,18 @@ module Database.Esqueleto.Internal.Sql
   , SqlExpr
   , select
   , selectSource
-  , toRawSelectSql
+  , selectDistinct
+  , selectDistinctSource
+  , rawSelectSource
+  , runSource
+  , toRawSql
+  , Mode(..)
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad (ap, MonadPlus(..))
+import Control.Monad ((>=>), ap, MonadPlus(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLogger)
 import Control.Monad.Trans.Resource (MonadResourceBase)
@@ -176,7 +181,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   asc  = EOrderBy ASC
   desc = EOrderBy DESC
 
-  sub query = ERaw $ \esc -> first parens (toRawSelectSql esc query)
+  sub_select         = sub SELECT
+  sub_selectDistinct = sub SELECT_DISTINCT
 
   EEntity (I ident) ^. field = ERaw $ \esc -> (ident <> ("." <> name esc field), [])
       where name esc = esc . fieldDB . persistFieldDef
@@ -214,6 +220,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   (/.)  = binop " / "
   (*.)  = binop " * "
 
+sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Single a)) -> SqlExpr (Single a)
+sub mode query = ERaw $ \esc -> first parens (toRawSql mode esc query)
 
 getVal :: SqlExpr (Entity val) -> val
 getVal = error "SqlQuery/getVal: never here"
@@ -231,13 +239,15 @@ binop op (ERaw f1) (ERaw f2) = ERaw f
 binop _ _ _ = error "Esqueleto/Sql/binop: never here (see GHC #6124)"
 
 
--- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
--- 'SqlPersist' monad.
-selectSource :: ( SqlSelect a r
-                , MonadLogger m
-                , MonadResourceBase m )
-             => SqlQuery a -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
-selectSource query = src
+-- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
+-- @persistent@'s 'SqlPersist' monad.
+rawSelectSource :: ( SqlSelect a r
+                   , MonadLogger m
+                   , MonadResourceBase m )
+                 => Mode
+                 -> SqlQuery a
+                 -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+rawSelectSource mode query = src
     where
       src = do
         conn <- getConnection
@@ -246,7 +256,7 @@ selectSource query = src
       run conn =
         uncurry withStmt $
         first (TL.toStrict . TLB.toLazyText) $
-        toRawSelectSql (fromDBName conn) query
+        toRawSql mode (fromDBName conn) query
 
       massage = do
         mrow <- C.await
@@ -258,15 +268,51 @@ selectSource query = src
       process = sqlSelectProcessRow
 
 
--- | Execute an Esqueleto's 'SqlQuery' inside @persistent@'s
--- 'SqlPersist' monad.
+-- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
+-- 'SqlPersist' monad and return a 'C.Source' of rows.
+selectSource :: ( SqlSelect a r
+                , MonadLogger m
+                , MonadResourceBase m )
+             => SqlQuery a
+             -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+selectSource = rawSelectSource SELECT
+
+
+-- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
+-- 'SqlPersist' monad and return a list of rows.
 select :: ( SqlSelect a r
           , MonadLogger m
           , MonadResourceBase m )
        => SqlQuery a -> SqlPersist m [r]
-select query = do
-  src <- selectSource query
-  C.runResourceT $ src C.$$ CL.consume
+select = selectSource >=> runSource
+
+
+-- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
+-- @persistent@'s 'SqlPersist' monad and return a 'C.Source' of
+-- rows.
+selectDistinctSource
+  :: ( SqlSelect a r
+     , MonadLogger m
+     , MonadResourceBase m )
+  => SqlQuery a
+  -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+selectDistinctSource = rawSelectSource SELECT_DISTINCT
+
+
+-- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
+-- @persistent@'s 'SqlPersist' monad and return a list of rows.
+selectDistinct :: ( SqlSelect a r
+                  , MonadLogger m
+                  , MonadResourceBase m )
+               => SqlQuery a -> SqlPersist m [r]
+selectDistinct = selectDistinctSource >=> runSource
+
+
+-- | Runs a 'C.Source' of rows.
+runSource :: MonadResourceBase m =>
+             C.Source (C.ResourceT (SqlPersist m)) r
+          -> SqlPersist m [r]
+runSource src = C.runResourceT $ src C.$$ CL.consume
 
 
 -- | Get current database 'Connection'.
@@ -275,18 +321,20 @@ getConnection = SqlPersist R.ask
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
-toRawSelectSql :: SqlSelect a r => Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
-toRawSelectSql esc query =
+toRawSql :: SqlSelect a r => Mode -> Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
+toRawSql mode esc query =
   let (ret, SideData fromClauses whereClauses orderByClauses) =
         flip S.evalSupply (idents ()) $
         W.runWriterT $
         unQ query
   in mconcat
-      [ makeSelect  esc ret
+      [ makeSelect  esc mode ret
       , makeFrom    esc fromClauses
       , makeWhere   esc whereClauses
       , makeOrderBy esc orderByClauses
       ]
+
+data Mode = SELECT | SELECT_DISTINCT
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
@@ -296,8 +344,12 @@ uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
 
 
-makeSelect :: SqlSelect a r => Escape -> a -> (TLB.Builder, [PersistValue])
-makeSelect esc ret = first ("SELECT " <>) (sqlSelectCols esc ret)
+makeSelect :: SqlSelect a r => Escape -> Mode -> a -> (TLB.Builder, [PersistValue])
+makeSelect esc mode ret = first (s <>) (sqlSelectCols esc ret)
+  where
+    s = case mode of
+          SELECT          -> "SELECT "
+          SELECT_DISTINCT -> "SELECT DISTINCT "
 
 
 makeFrom :: Escape -> [FromClause] -> (TLB.Builder, [PersistValue])

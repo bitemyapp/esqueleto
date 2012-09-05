@@ -120,8 +120,11 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Descending order of this field or expression.
   desc :: PersistField a => expr (Single a) -> expr OrderBy
 
-  -- | Execute a subquery in an expression.
-  sub  :: PersistField a => query (expr (Single a)) -> expr (Single a)
+  -- | Execute a subquery @SELECT@ in an expression.
+  sub_select :: PersistField a => query (expr (Single a)) -> expr (Single a)
+
+  -- | Execute a subquery @SELECT_DISTINCT@ in an expression.
+  sub_selectDistinct :: PersistField a => query (expr (Single a)) -> expr (Single a)
 
   -- | Project a field of an entity.
   (^.) :: (PersistEntity val, PersistField typ) =>

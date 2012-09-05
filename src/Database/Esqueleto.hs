@@ -16,7 +16,8 @@
 -- @
 module Database.Esqueleto
   ( -- * @esqueleto@'s Language
-    Esqueleto( where_, on, orderBy, asc, desc, sub, (^.), (?.)
+    Esqueleto( where_, on, orderBy, asc, desc
+             , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, not_, (==.), (>=.)
              , (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.) )
@@ -34,7 +35,9 @@ module Database.Esqueleto
   , SqlQuery
   , SqlExpr
   , select
+  , selectDistinct
   , selectSource
+  , selectDistinctSource
 
     -- * Re-exports
     -- $reexports

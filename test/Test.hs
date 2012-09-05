@@ -320,6 +320,19 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
+    describe "selectDistinct" $
+      it "works on a simple example" $
+        run $ do
+          p1k <- insert p1
+          let (t1, t2, t3) = ("a", "b", "c")
+          mapM_ (insert . flip BlogPost p1k) [t1, t3, t2, t2, t1]
+          ret <- selectDistinct $
+                 from $ \b -> do
+                 let title = b ^. BlogPostTitle
+                 orderBy [asc title]
+                 return title
+          liftIO $ ret `shouldBe` [ Single t1, Single t2, Single t3 ]
+
 
 ----------------------------------------------------------------------
 
