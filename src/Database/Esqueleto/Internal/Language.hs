@@ -201,7 +201,7 @@ data CrossJoin a b = a `CrossJoin` b
 --
 -- @
 -- SELECT ...
--- FROM Person AS TB LEFT OUTER JOIN Pet AS TA
+-- FROM Person LEFT OUTER JOIN Pet
 -- ...
 -- @
 data LeftOuterJoin a b = a `LeftOuterJoin` b

@@ -187,9 +187,15 @@ useIdent esc (I ident) = esc (DBName ident)
 data SqlExpr a where
   EEntity  :: Ident -> SqlExpr (Entity val)
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
-  ERaw     :: (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
+  ERaw     :: NeedParens -> (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
   EOrderBy :: OrderByType -> SqlExpr (Single a) -> SqlExpr OrderBy
   EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
+
+data NeedParens = Parens | Never
+
+parensM :: NeedParens -> TLB.Builder -> TLB.Builder
+parensM Never  = id
+parensM Parens = parens
 
 data OrderByType = ASC | DESC
 
@@ -241,27 +247,27 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   sub_select         = sub SELECT
   sub_selectDistinct = sub SELECT_DISTINCT
 
-  EEntity ident ^. field = ERaw $ \esc -> (useIdent esc ident <> ("." <> name esc field), [])
+  EEntity ident ^. field = ERaw Never $ \esc -> (useIdent esc ident <> ("." <> name esc field), [])
       where name esc = esc . fieldDB . persistFieldDef
   _ ^. _ = error "Esqueleto/Sql/(^.): never here (see GHC #6124)"
 
   EMaybe r ?. field = maybelize (r ^. field)
     where
       maybelize :: SqlExpr (Single a) -> SqlExpr (Single (Maybe a))
-      maybelize (ERaw f) = ERaw f
-      maybelize _        = error "Esqueleto/Sql/(?.): never here 1 (see GHC #6124)"
+      maybelize (ERaw p f) = ERaw p f
+      maybelize _ = error "Esqueleto/Sql/(?.): never here 1 (see GHC #6124)"
   _ ?. _ = error "Esqueleto/Sql/(?.): never here 2 (see GHC #6124)"
 
-  val = ERaw . const . (,) "?" . return . toPersistValue
+  val = ERaw Never . const . (,) "?" . return . toPersistValue
 
-  isNothing (ERaw f) = ERaw $ first ((<> " IS NULL") . parens) . f
-  isNothing _        = error "Esqueleto/Sql/isNothing: never here (see GHC #6124)"
-  just (ERaw f) = ERaw f
-  just _        = error "Esqueleto/Sql/just: never here (see GHC #6124)"
-  nothing = ERaw $ \_ -> ("NULL", mempty)
+  isNothing (ERaw p f) = ERaw Never $ first ((<> " IS NULL") . parensM p) . f
+  isNothing _ = error "Esqueleto/Sql/isNothing: never here (see GHC #6124)"
+  just (ERaw p f) = ERaw p f
+  just _ = error "Esqueleto/Sql/just: never here (see GHC #6124)"
+  nothing = ERaw Never $ \_ -> ("NULL", mempty)
 
-  not_ (ERaw f) = ERaw $ \esc -> let (b, vals) = f esc
-                                 in ("NOT " <> parens b, vals)
+  not_ (ERaw p f) = ERaw Never $ \esc -> let (b, vals) = f esc
+                                         in ("NOT " <> parensM p b, vals)
   not_ _ = error "Esqueleto/Sql/not_: never here (see GHC #6124)"
 
   (==.) = binop " = "
@@ -278,17 +284,17 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   (*.)  = binop " * "
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Single a)) -> SqlExpr (Single a)
-sub mode query = ERaw $ \esc -> first parens (toRawSql mode esc query)
+sub mode query = ERaw Parens $ \esc -> first parens (toRawSql mode esc query)
 
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . escapeName conn
 
 binop :: TLB.Builder -> SqlExpr (Single a) -> SqlExpr (Single b) -> SqlExpr (Single c)
-binop op (ERaw f1) (ERaw f2) = ERaw f
+binop op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
   where
     f esc = let (b1, vals1) = f1 esc
                 (b2, vals2) = f2 esc
-            in ( parens b1 <> op <> parens b2
+            in ( parensM p1 b1 <> op <> parensM p2 b2
                , vals1 <> vals2 )
 binop _ _ _ = error "Esqueleto/Sql/binop: never here (see GHC #6124)"
 
@@ -450,14 +456,14 @@ makeFrom esc fs = ret
   where
     ret = case collectOnClauses fs of
             Left expr -> throw $ mkExc expr
-            Right fs' -> first ("\nFROM " <>) $ uncommas' (map (mk False mempty) fs')
+            Right fs' -> first ("\nFROM " <>) $ uncommas' (map (mk Never mempty) fs')
 
     mk _     onClause (FromStart i def) = base i def <> onClause
     mk paren onClause (FromJoin lhs kind rhs monClause) =
-      (if paren then first parens else id) $
-      mconcat [ mk True onClause lhs
+      first (parensM paren) $
+      mconcat [ mk Parens onClause lhs
               , (fromKind kind, mempty)
-              , mk False (maybe mempty makeOnClause monClause) rhs
+              , mk Never (maybe mempty makeOnClause monClause) rhs
               ]
     mk _ _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
 
@@ -474,18 +480,18 @@ makeFrom esc fs = ret
     fromKind RightOuterJoinKind = " RIGHT OUTER JOIN "
     fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
 
-    makeOnClause (ERaw f) = first (" ON " <>) (f esc)
+    makeOnClause (ERaw _ f) = first (" ON " <>) (f esc)
     makeOnClause _ = error "Esqueleto/Sql/makeFrom/makeOnClause: never here (see GHC #6124)"
 
-    mkExc (ERaw f) =
+    mkExc (ERaw _ f) =
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f esc)
     mkExc _ = OnClauseWithoutMatchingJoinException "???"
 
 
 makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])
-makeWhere _   NoWhere          = mempty
-makeWhere esc (Where (ERaw f)) = first ("\nWHERE " <>) (f esc)
+makeWhere _   NoWhere            = mempty
+makeWhere esc (Where (ERaw _ f)) = first ("\nWHERE " <>) (f esc)
 makeWhere _ _ = error "Esqueleto/Sql/makeWhere: never here (see GHC #6124)"
 
 
@@ -493,7 +499,7 @@ makeOrderBy :: Escape -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _   [] = mempty
 makeOrderBy esc os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
   where
-    mk (EOrderBy t (ERaw f)) = first (<> orderByType t) (f esc)
+    mk (EOrderBy t (ERaw _ f)) = first (<> orderByType t) (f esc)
     mk _ = error "Esqueleto/Sql/makeOrderBy: never here (see GHC #6124)"
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
@@ -566,8 +572,8 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
     | otherwise                 = Just <$> sqlSelectProcessRow cols
 
 instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
-  sqlSelectCols esc (ERaw f) = let (b, vals) = f esc
-                               in (parens b, vals)
+  sqlSelectCols esc (ERaw p f) = let (b, vals) = f esc
+                                 in (parensM p b, vals)
   sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Single]: never here (see GHC #6124)"
   sqlSelectColCount = const 1
   sqlSelectProcessRow [pv] = Single <$> fromPersistValue pv
