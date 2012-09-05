@@ -94,7 +94,7 @@ main = do
           liftIO $ ret `shouldBe` [ (Single p1k, Single (personName p1))
                                   , (Single p2k, Single (personName p2)) ]
 
-      it "works for a simple projection with a simple self-join" $
+      it "works for a simple projection with a simple implicit self-join" $
         run $ do
           _ <- insert p1
           _ <- insert p2
@@ -106,6 +106,7 @@ main = do
                                   , (Single (personName p2), Single (personName p1))
                                   , (Single (personName p2), Single (personName p2)) ]
 
+    describe "select/JOIN" $ do
       it "works with a LEFT OUTER JOIN" $
         run $ do
           p1e <- insert' p1
