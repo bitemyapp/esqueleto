@@ -260,6 +260,29 @@ main = do
                                   , (p4e, f42, p2e)
                                   , (p2e, f21, p1e) ]
 
+      it "works for a many-to-many explicit join with LEFT OUTER JOINs" $
+        run $ do
+          p1e@(Entity p1k _) <- insert' p1
+          p2e@(Entity p2k _) <- insert' p2
+          p3e                <- insert' p3
+          p4e@(Entity p4k _) <- insert' p4
+          f12 <- insert' (Follow p1k p2k)
+          f21 <- insert' (Follow p2k p1k)
+          f42 <- insert' (Follow p4k p2k)
+          f11 <- insert' (Follow p1k p1k)
+          ret <- select $
+                 from $ \(follower `LeftOuterJoin` mfollows `LeftOuterJoin` mfollowed) -> do
+                 on $      mfollowed ?. PersonId  ==. mfollows ?. FollowFollowed
+                 on $ just (follower ^. PersonId) ==. mfollows ?. FollowFollower
+                 orderBy [ asc ( follower ^. PersonName)
+                         , asc (mfollowed ?. PersonName) ]
+                 return (follower, mfollows, mfollowed)
+          liftIO $ ret `shouldBe` [ (p1e, Just f11, Just p1e)
+                                  , (p1e, Just f12, Just p2e)
+                                  , (p4e, Just f42, Just p2e)
+                                  , (p3e, Nothing,  Nothing)
+                                  , (p2e, Just f21, Just p1e) ]
+
 
     describe "select/orderBy" $ do
       it "works with a single ASC field" $
