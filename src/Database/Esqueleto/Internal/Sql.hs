@@ -85,11 +85,14 @@ collectOnClauses = go []
         Nothing -> (f:) <$> findMatching acc expr
     findMatching [] expr = Left expr
 
-    tryMatch expr (FromJoin l k r Nothing) =
-      return (FromJoin l k r (Just expr))
-    tryMatch expr (FromJoin l k r j@(Just _)) =
-      ((\r' -> FromJoin l k r' j) <$> tryMatch expr r) `mplus`
-      ((\l' -> FromJoin l' k r j) <$> tryMatch expr l)
+    tryMatch expr (FromJoin l k r onClause) =
+      matchR `mplus` matchC `mplus` matchL -- right to left
+        where
+          matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
+          matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
+          matchC = case onClause of
+                     Nothing -> return (FromJoin l k r (Just expr))
+                     Just _  -> mzero
     tryMatch _ _ = mzero
 
 
