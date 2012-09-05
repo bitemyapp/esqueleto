@@ -1,4 +1,12 @@
-{-# LANGUAGE ConstraintKinds, MultiParamTypeClasses, FunctionalDependencies, FlexibleContexts, FlexibleInstances, UndecidableInstances, GADTs, OverloadedStrings #-}
+{-# LANGUAGE ConstraintKinds
+           , FlexibleContexts
+           , FlexibleInstances
+           , FunctionalDependencies
+           , GADTs
+           , MultiParamTypeClasses
+           , OverloadedStrings
+           , UndecidableInstances
+ #-}
 module Database.Esqueleto.Internal.Sql
   ( SqlQuery
   , SqlExpr

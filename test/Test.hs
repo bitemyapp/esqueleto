@@ -1,5 +1,15 @@
-{-# LANGUAGE QuasiQuotes, TemplateHaskell, TypeFamilies, OverloadedStrings, GADTs, FlexibleContexts, EmptyDataDecls, GeneralizedNewtypeDeriving, Rank2Types, ConstraintKinds, MultiParamTypeClasses #-}
-
+{-# LANGUAGE ConstraintKinds
+           , EmptyDataDecls
+           , FlexibleContexts
+           , GADTs
+           , GeneralizedNewtypeDeriving
+           , MultiParamTypeClasses
+           , OverloadedStrings
+           , QuasiQuotes
+           , Rank2Types
+           , TemplateHaskell
+           , TypeFamilies
+ #-}
 module Main (main) where
 
 import Control.Applicative (Applicative(..), (<$>))

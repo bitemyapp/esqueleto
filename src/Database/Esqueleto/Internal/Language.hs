@@ -1,4 +1,12 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, TypeFamilies, EmptyDataDecls, UndecidableInstances, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable
+           , EmptyDataDecls
+           , FlexibleContexts
+           , FlexibleInstances
+           , FunctionalDependencies
+           , MultiParamTypeClasses
+           , TypeFamilies
+           , UndecidableInstances
+ #-}
 module Database.Esqueleto.Internal.Language
   ( Esqueleto(..)
   , from
