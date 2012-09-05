@@ -343,6 +343,26 @@ main = do
                  return title
           liftIO $ ret `shouldBe` [ Single t1, Single t2, Single t3 ]
 
+    describe "delete" $
+      it "works on a simple example" $
+        run $ do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          ret1 <- select $
+                  from $ \p -> do
+                  orderBy [asc (p ^. PersonName)]
+                  return p
+          liftIO $ ret1 `shouldBe` [ p1e, p3e, p2e ]
+          ()   <- delete $
+                  from $ \p ->
+                  where_ (p ^. PersonName ==. val (personName p1))
+          ret2 <- select $
+                  from $ \p -> do
+                  orderBy [asc (p ^. PersonName)]
+                  return p
+          liftIO $ ret2 `shouldBe` [ p3e, p2e ]
+
 
 ----------------------------------------------------------------------
 

@@ -16,6 +16,8 @@ module Database.Esqueleto.Internal.Sql
   , selectDistinctSource
   , rawSelectSource
   , runSource
+  , rawExecute
+  , delete
   , toRawSql
   , Mode(..)
   ) where
@@ -33,8 +35,8 @@ import Data.Monoid (Monoid(..), (<>))
 import Database.Persist.EntityDef
 import Database.Persist.GenericSql
 import Database.Persist.GenericSql.Internal (Connection(escapeName))
-import Database.Persist.GenericSql.Raw (withStmt)
-import Database.Persist.Store
+import Database.Persist.GenericSql.Raw (withStmt, execute)
+import Database.Persist.Store hiding (delete)
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
@@ -370,6 +372,45 @@ runSource :: MonadResourceBase m =>
 runSource src = C.runResourceT $ src C.$$ CL.consume
 
 
+----------------------------------------------------------------------
+
+
+-- | (Internal) Execute an @esqueleto@ statement inside
+-- @persistent@'s 'SqlPersist' monad.
+rawExecute :: ( MonadLogger m
+              , MonadResourceBase m )
+           => Mode
+           -> SqlQuery ()
+           -> SqlPersist m ()
+rawExecute mode query = do
+  conn <- SqlPersist R.ask
+  uncurry execute $
+    first (TL.toStrict . TLB.toLazyText) $
+    toRawSql mode (fromDBName conn) query
+
+
+-- | Execute an @esqueleto@ @DELETE@ query inside @persistent@'s
+-- 'SqlPersist' monad.  Note that currently there are no type
+-- checks for statements that should not appear on a @DELETE@
+-- query.
+--
+-- Example of usage:
+--
+-- @
+-- delete $
+-- from $ \appointment ->
+-- where_ (appointment ^. AppointmentDate <. val now)
+-- @
+delete :: ( MonadLogger m
+          , MonadResourceBase m )
+       => SqlQuery ()
+       -> SqlPersist m ()
+delete = rawExecute DELETE
+
+
+----------------------------------------------------------------------
+
+
 -- | Pretty prints a 'SqlQuery' into a SQL query.
 toRawSql :: SqlSelect a r => Mode -> Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode esc query =
@@ -384,7 +425,7 @@ toRawSql mode esc query =
       , makeOrderBy esc orderByClauses
       ]
 
-data Mode = SELECT | SELECT_DISTINCT
+data Mode = SELECT | SELECT_DISTINCT | DELETE
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
@@ -395,11 +436,12 @@ uncommas' = (uncommas *** mconcat) . unzip
 
 
 makeSelect :: SqlSelect a r => Escape -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeSelect esc mode ret = first (s <>) (sqlSelectCols esc ret)
+makeSelect esc mode   ret = first (s <>) (sqlSelectCols esc ret)
   where
     s = case mode of
           SELECT          -> "SELECT "
           SELECT_DISTINCT -> "SELECT DISTINCT "
+          DELETE          -> "DELETE"
 
 
 makeFrom :: Escape -> [FromClause] -> (TLB.Builder, [PersistValue])

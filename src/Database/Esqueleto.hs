@@ -38,17 +38,27 @@ module Database.Esqueleto
   , selectDistinct
   , selectSource
   , selectDistinctSource
+  , delete
 
     -- * Re-exports
     -- $reexports
+  , deleteKey
   , module Database.Persist.GenericSql
   , module Database.Persist.Store
   ) where
 
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
-import Database.Persist.Store
+import Database.Persist.Store hiding (delete)
 import Database.Persist.GenericSql
+import qualified Database.Persist.Store
+
+
+-- | Synonym for 'Database.Persist.Store.delete' that does not
+-- clash with @esqueleto@'s 'delete'.
+deleteKey :: (PersistStore backend m, PersistEntity val)
+          => Key backend val -> backend m ()
+deleteKey = Database.Persist.Store.delete
 
 -- $reexports
 --
