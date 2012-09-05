@@ -107,6 +107,61 @@ main = do
                                   , (Single (personName p2), Single (personName p1))
                                   , (Single (personName p2), Single (personName p2)) ]
 
+      it "works with a LEFT OUTER JOIN" $
+        run $ do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
+          b12e <- insert' $ BlogPost "b" (entityKey p1e)
+          b11e <- insert' $ BlogPost "a" (entityKey p1e)
+          b31e <- insert' $ BlogPost "c" (entityKey p3e)
+          ret <- select $
+                 from $ \(p `LeftOuterJoin` mb) -> do
+                 on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+                 orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
+                 return (p, mb)
+          liftIO $ ret `shouldBe` [ (p1e, Just b11e)
+                                  , (p1e, Just b12e)
+                                  , (p4e, Nothing)
+                                  , (p3e, Just b31e)
+                                  , (p2e, Nothing) ]
+
+      it "throws an error for using on without joins" $
+        run (do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
+          b12e <- insert' $ BlogPost "b" (entityKey p1e)
+          b11e <- insert' $ BlogPost "a" (entityKey p1e)
+          b31e <- insert' $ BlogPost "c" (entityKey p3e)
+          ret <- select $
+                 from $ \(p, mb) -> do
+                 on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+                 orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
+                 return (p, mb)
+          return ()
+        ) `shouldThrow` (\(OnClauseWithoutMatchingJoinException _) -> True)
+
+      it "throws an error for using too many ons" $
+        run (do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
+          b12e <- insert' $ BlogPost "b" (entityKey p1e)
+          b11e <- insert' $ BlogPost "a" (entityKey p1e)
+          b31e <- insert' $ BlogPost "c" (entityKey p3e)
+          ret <- select $
+                 from $ \(p `FullOuterJoin` mb) -> do
+                 on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+                 on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+                 orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
+                 return (p, mb)
+          return ()
+        ) `shouldThrow` (\(OnClauseWithoutMatchingJoinException _) -> True)
+
     describe "select/where_" $ do
       it "works for a simple example with (==.)" $
         run $ do

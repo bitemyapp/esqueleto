@@ -9,7 +9,7 @@ module Database.Esqueleto.Internal.Sql
 
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Arrow ((***), first)
-import Control.Exception (throwIO)
+import Control.Exception (throw, throwIO)
 import Control.Monad (ap)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLogger)
@@ -62,7 +62,27 @@ instance Monoid SideData where
 
 
 -- | A part of a @FROM@ clause.
-data FromClause  = From Ident EntityDef
+data FromClause =
+    FromStart Ident EntityDef
+  | FromJoin Ident EntityDef JoinKind FromClause (Maybe (SqlExpr (Single Bool)))
+  | OnClause (SqlExpr (Single Bool))
+
+
+-- | Collect 'OnClause's on 'FromJoin's.  Returns the first
+-- unmatched 'OnClause's data on error.  Returns a list without
+-- 'OnClauses' on success.
+collectOnClauses :: [FromClause] -> Either (SqlExpr (Single Bool)) [FromClause]
+collectOnClauses = go []
+  where
+    go []  (f@(FromStart _ _):fs) = fmap (f:) (go [] fs) -- fast path
+    go acc (OnClause expr    :fs) = findMatching acc expr >>= flip go fs
+    go acc (f:fs)                 = go (f:acc) fs
+    go acc []                     = return $ reverse acc
+
+    findMatching (FromJoin i e k f Nothing : acc) expr =
+      return (FromJoin i e k f (Just expr) : acc)
+    findMatching (f : acc) expr = (f:) <$> findMatching acc expr
+    findMatching []        expr = Left expr
 
 
 -- | A complete @WHERE@ clause.
@@ -98,24 +118,49 @@ idents _ =
 -- | An expression on the SQL backend.
 data SqlExpr a where
   EEntity  :: Ident -> SqlExpr (Entity val)
+  EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
   ERaw     :: (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
   EOrderBy :: OrderByType -> SqlExpr (Single a) -> SqlExpr OrderBy
+  EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
 
 data OrderByType = ASC | DESC
 
 type Escape = DBName -> TLB.Builder
 
+
 instance Esqueleto SqlQuery SqlExpr SqlPersist where
-  fromSingle = Q $ do
+  fromStart = Q $ do
     ident <- S.supply
-    let from_ = From ident $ entityDef (getVal ret)
-        ret   = EEntity ident
-        getVal :: SqlExpr (Entity val) -> val
-        getVal = error "SqlQuery/getVal: never here"
+    let ret   = EEntity ident
+        from_ = FromStart ident $ entityDef (getVal ret)
+    return (EPreprocessedFrom ret from_)
+
+  fromStartMaybe = maybelize <$> fromStart
+    where
+      maybelize :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
+                -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
+      maybelize (EPreprocessedFrom ret from_) = EPreprocessedFrom (EMaybe ret) from_
+      maybelize _ = error "Esqueleto/Sql/fromStartMaybe: never here (see GHC #6124)"
+
+  fromJoin (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
+    lhsIdent <- S.supply
+    let lhsRet = EEntity lhsIdent
+        ret    = smartJoin lhsRet rhsRet
+        from_  = FromJoin lhsIdent (entityDef $ getVal lhsRet) -- LHS
+                          (reifyJoinKind ret)                  -- JOIN
+                          rhsFrom                              -- RHS
+                          Nothing                              -- ON
+    return (EPreprocessedFrom ret from_)
+  fromJoin _ = error "Esqueleto/Sql/fromJoin: never here (see GHC #6124)"
+
+  fromFinish (EPreprocessedFrom ret from_) = Q $ do
     W.tell mempty { sdFromClause = [from_] }
     return ret
+  fromFinish _ = error "Esqueleto/Sql/fromFinish: never here (see GHC #6124)"
 
   where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
+
+  on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -126,6 +171,13 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   EEntity (I ident) ^. field = ERaw $ \esc -> (ident <> ("." <> name esc field), [])
       where name esc = esc . fieldDB . persistFieldDef
   _ ^. _ = error "Esqueleto/Sql/(^.): never here (see GHC #6124)"
+
+  EMaybe r ?. field = maybelize (r ^. field)
+    where
+      maybelize :: SqlExpr (Single a) -> SqlExpr (Single (Maybe a))
+      maybelize (ERaw f) = ERaw f
+      maybelize _        = error "Esqueleto/Sql/(?.): never here 1 (see GHC #6124)"
+  _ ?. _ = error "Esqueleto/Sql/(?.): never here 2 (see GHC #6124)"
 
   val = ERaw . const . (,) "?" . return . toPersistValue
 
@@ -152,6 +204,9 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   (/.)  = binop " / "
   (*.)  = binop " * "
 
+
+getVal :: SqlExpr (Entity val) -> val
+getVal = error "SqlQuery/getVal: never here"
 
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . escapeName conn
@@ -237,9 +292,35 @@ makeSelect esc ret = first ("SELECT " <>) (sqlSelectCols esc ret)
 
 makeFrom :: Escape -> [FromClause] -> (TLB.Builder, [PersistValue])
 makeFrom _   [] = mempty
-makeFrom esc fs = ("\nFROM " <> uncommas (map mk fs), mempty)
+makeFrom esc fs = ret
   where
-    mk (From (I i) def) = esc (entityDB def) <> (" AS " <> i)
+    ret = case collectOnClauses fs of
+            Left expr -> throw $ mkExc expr
+            Right fs' -> first ("\nFROM " <>) $ uncommas' (map mk fs')
+
+    mk (FromStart (I i) def) = base i def
+    mk (FromJoin (I i) def kind rest monClause) =
+      mconcat [ base i def
+              , (fromKind kind, mempty)
+              , mk rest
+              , maybe mempty makeOnClause monClause ]
+    mk (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
+
+    base i def = (esc (entityDB def) <> (" AS " <> i), mempty)
+
+    fromKind InnerJoinKind      = " INNER JOIN "
+    fromKind CrossJoinKind      = " CROSS JOIN "
+    fromKind LeftOuterJoinKind  = " LEFT OUTER JOIN "
+    fromKind RightOuterJoinKind = " RIGHT OUTER JOIN "
+    fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
+
+    makeOnClause (ERaw f) = first (" ON " <>) (f esc)
+    makeOnClause _ = error "Esqueleto/Sql/makeFrom/makeOnClause: never here (see GHC #6124)"
+
+    mkExc (ERaw f) =
+      OnClauseWithoutMatchingJoinException $
+      TL.unpack $ TLB.toLazyText $ fst (f esc)
+    mkExc _ = OnClauseWithoutMatchingJoinException "???"
 
 
 makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])
@@ -308,6 +389,17 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
 
 getEntityVal :: SqlExpr (Entity a) -> a
 getEntityVal = error "Esqueleto/Sql/getEntityVal"
+
+instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
+  sqlSelectCols escape (EMaybe ent) = sqlSelectCols escape ent
+  sqlSelectCols _ _ = error "Esqueleto/Sql/sqlSelectCols[Maybe Entity]: never here (see GHC #6124)"
+  sqlSelectColCount = sqlSelectColCount . fromEMaybe
+    where
+      fromEMaybe :: SqlExpr (Maybe e) -> SqlExpr e
+      fromEMaybe = error "Esqueleto/Sql/sqlSelectColCount[Maybe Entity]/fromEMaybe"
+  sqlSelectProcessRow cols
+    | all (== PersistNull) cols = return Nothing
+    | otherwise                 = Just <$> sqlSelectProcessRow cols
 
 instance PersistField a => SqlSelect (SqlExpr (Single a)) (Single a) where
   sqlSelectCols esc (ERaw f) = let (b, vals) = f esc

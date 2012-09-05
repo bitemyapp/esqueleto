@@ -16,12 +16,19 @@
 -- @
 module Database.Esqueleto
   ( -- * @esqueleto@'s Language
-    Esqueleto( where_, orderBy, asc, desc, sub, (^.), val
-             , isNothing, just, nothing, not_, (==.), (>=.)
+    Esqueleto( where_, on, orderBy, asc, desc, sub, (^.), (?.)
+             , val, isNothing, just, nothing, not_, (==.), (>=.)
              , (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.) )
   , from
   , OrderBy
+    -- ** Joins
+  , InnerJoin(..)
+  , CrossJoin(..)
+  , LeftOuterJoin(..)
+  , RightOuterJoin(..)
+  , FullOuterJoin(..)
+  , OnClauseWithoutMatchingJoinException(..)
 
     -- * SQL backend
   , SqlQuery
