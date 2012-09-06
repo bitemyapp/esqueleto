@@ -359,6 +359,45 @@ selectSource = rawSelectSource SELECT
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersist' monad and return a list of rows.
+--
+-- We've seen that 'from' has some magic about which kinds of
+-- things you may bring into scope.  This 'select' function also
+-- has some magic for which kinds of things you may bring back to
+-- Haskell-land by using @SqlQuery@'s @return@:
+--
+--  * You may return a @SqlExpr ('Entity' v)@ for an entity @v@
+--  (i.e., like the @*@ in SQL), which is then returned to
+--  Haskell-land as just @Entity v@.
+--
+--  * You may return a @SqlExpr (Maybe (Entity v))@ for an entity
+--  @v@ that may be @NULL@, which is then returned to
+--  Haskell-land as @Maybe (Entity v)@.  Used for @OUTER JOIN@s.
+--
+--  * You may return a @SqlExpr ('Value' t)@ for a value @t@
+--  (i.e., a single column), where @t@ is any instance of
+--  'PersistField', which is then returned to Haskell-land as
+--  @Value t@.  You may use @Value@ to return projections of an
+--  @Entity@ (see @('^.')@ and @('?.')@) or to return any other
+--  value calculated on the query (e.g., 'countRows' or
+--  'sub_select').
+--
+-- The @SqlSelect a r@ class has functional dependencies that
+-- allow type information to flow both from @a@ to @r@ and
+-- vice-versa.  This means that you'll almost never have to give
+-- any type signatures for @esqueleto@ queries.  For example, the
+-- query @select $ from $ \\p -> return p@ alone is ambiguous, but
+-- in the context of
+--
+-- @
+-- do ps <- select $
+--          from $ \\p ->
+--          return p
+--    liftIO $ mapM_ (putStrLn . personName . entityVal) ps
+-- @
+--
+-- we are able to infer from that single @personName . entityVal@
+-- function composition that the @p@ inside the query is of type
+-- @SqlExpr (Entity Person)@.
 select :: ( SqlSelect a r
           , MonadLogger m
           , MonadResourceBase m )
@@ -422,6 +461,16 @@ rawExecute mode query = do
 -- delete $
 -- from $ \\appointment ->
 -- where_ (appointment ^. AppointmentDate <. val now)
+-- @
+--
+-- Unlike 'select', there is a useful way of using 'delete' that
+-- will lead to type ambiguities.  If you want to delete all rows
+-- (i.e., no 'where_' clause), you'll have to use a type signature:
+--
+-- @
+-- delete $
+-- from $ \\(appointment :: SqlExpr (Entity Appointment)) ->
+-- return ()
 -- @
 delete :: ( MonadLogger m
           , MonadResourceBase m )
