@@ -7,8 +7,12 @@
            , TypeFamilies
            , UndecidableInstances
  #-}
+-- | This is an internal module, anything exported by this module
+-- may change without a major version bump.  Please use only
+-- "Database.Esqueleto" if possible.
 module Database.Esqueleto.Internal.Language
-  ( Esqueleto(..)
+  ( -- * The pretty face
+    Esqueleto(..)
   , from
   , Value(..)
   , InnerJoin(..)
@@ -16,12 +20,13 @@ module Database.Esqueleto.Internal.Language
   , LeftOuterJoin(..)
   , RightOuterJoin(..)
   , FullOuterJoin(..)
-  , JoinKind(..)
-  , IsJoinKind(..)
   , OnClauseWithoutMatchingJoinException(..)
-  , PreprocessedFrom
   , OrderBy
   , Update
+    -- * The guts
+  , JoinKind(..)
+  , IsJoinKind(..)
+  , PreprocessedFrom
   , From
   , FromPreprocess
   ) where

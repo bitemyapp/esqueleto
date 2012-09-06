@@ -7,18 +7,23 @@
            , OverloadedStrings
            , UndecidableInstances
  #-}
+-- | This is an internal module, anything exported by this module
+-- may change without a major version bump.  Please use only
+-- "Database.Esqueleto" if possible.
 module Database.Esqueleto.Internal.Sql
-  ( SqlQuery
+  ( -- * The pretty face
+    SqlQuery
   , SqlExpr
   , select
   , selectSource
   , selectDistinct
   , selectDistinctSource
+  , delete
+  , update
+    -- * The guts
   , rawSelectSource
   , runSource
   , rawExecute
-  , delete
-  , update
   , toRawSql
   , Mode(..)
   , Escape
@@ -426,7 +431,7 @@ selectDistinct :: ( SqlSelect a r
 selectDistinct = selectDistinctSource >=> runSource
 
 
--- | Runs a 'C.Source' of rows.
+-- | (Internal) Run a 'C.Source' of rows.
 runSource :: MonadResourceBase m =>
              C.Source (C.ResourceT (SqlPersist m)) r
           -> SqlPersist m [r]
