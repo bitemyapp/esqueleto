@@ -25,6 +25,7 @@ module Database.Esqueleto
              , (+.), (-.), (/.), (*.)
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
+  , Value(..)
   , OrderBy
     -- ** Joins
   , InnerJoin(..)
@@ -191,8 +192,8 @@ import qualified Database.Persist.Store
 -- @
 --
 -- Since @age@ is an optional @Person@ field, we use 'just' lift
--- @val 18 :: SqlExpr (Single Int)@ into @just (val 18) ::
--- SqlExpr (Single (Just Int))@.
+-- @val 18 :: SqlExpr (Value Int)@ into @just (val 18) ::
+-- SqlExpr (Value (Just Int))@.
 --
 -- Implicit joins are represented by tuples.  For example, to get
 -- the list of all blog posts and their authors, we could write:

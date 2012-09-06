@@ -59,12 +59,12 @@ main = do
       it "works for a single value" $
         run $ do
           ret <- select $ return $ val (3 :: Int)
-          liftIO $ ret `shouldBe` [ Single 3 ]
+          liftIO $ ret `shouldBe` [ Value 3 ]
 
       it "works for a single NULL value" $
         run $ do
           ret <- select $ return $ nothing
-          liftIO $ ret `shouldBe` [ Single (Nothing :: Maybe Int) ]
+          liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
     describe "select/from" $ do
       it "works for a simple example" $
@@ -102,8 +102,8 @@ main = do
           ret <- select $
                  from $ \p ->
                  return (p ^. PersonId, p ^. PersonName)
-          liftIO $ ret `shouldBe` [ (Single p1k, Single (personName p1))
-                                  , (Single p2k, Single (personName p2)) ]
+          liftIO $ ret `shouldBe` [ (Value p1k, Value (personName p1))
+                                  , (Value p2k, Value (personName p2)) ]
 
       it "works for a simple projection with a simple implicit self-join" $
         run $ do
@@ -112,10 +112,10 @@ main = do
           ret <- select $
                  from $ \(pa, pb) ->
                  return (pa ^. PersonName, pb ^. PersonName)
-          liftIO $ ret `shouldBe` [ (Single (personName p1), Single (personName p1))
-                                  , (Single (personName p1), Single (personName p2))
-                                  , (Single (personName p2), Single (personName p1))
-                                  , (Single (personName p2), Single (personName p2)) ]
+          liftIO $ ret `shouldBe` [ (Value (personName p1), Value (personName p1))
+                                  , (Value (personName p1), Value (personName p2))
+                                  , (Value (personName p2), Value (personName p1))
+                                  , (Value (personName p2), Value (personName p2)) ]
 
     describe "select/JOIN" $ do
       it "works with a LEFT OUTER JOIN" $
@@ -342,7 +342,7 @@ main = do
                  let title = b ^. BlogPostTitle
                  orderBy [asc title]
                  return title
-          liftIO $ ret `shouldBe` [ Single t1, Single t2, Single t3 ]
+          liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
     describe "delete" $
       it "works on a simple example" $

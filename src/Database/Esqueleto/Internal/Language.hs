@@ -10,6 +10,7 @@
 module Database.Esqueleto.Internal.Language
   ( Esqueleto(..)
   , from
+  , Value(..)
   , InnerJoin(..)
   , CrossJoin(..)
   , LeftOuterJoin(..)
@@ -67,7 +68,7 @@ class (Functor query, Applicative query, Monad query) =>
     -> query a
 
   -- | @WHERE@ clause: restrict the query's result.
-  where_ :: expr (Single Bool) -> query ()
+  where_ :: expr (Value Bool) -> query ()
 
   -- | @ON@ clause: restrict the a @JOIN@'s result.  The @ON@
   -- clause will be applied to the /last/ @JOIN@ that does not
@@ -118,75 +119,75 @@ class (Functor query, Applicative query, Monad query) =>
   -- If the order was *not* reversed, then @test2@ would be
   -- broken: @query1@'s 'on' would refer to @query2@'s
   -- 'LeftOuterJoin'.
-  on :: expr (Single Bool) -> query ()
+  on :: expr (Value Bool) -> query ()
 
   -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
   orderBy :: [expr OrderBy] -> query ()
 
   -- | Ascending order of this field or expression.
-  asc :: PersistField a => expr (Single a) -> expr OrderBy
+  asc :: PersistField a => expr (Value a) -> expr OrderBy
 
   -- | Descending order of this field or expression.
-  desc :: PersistField a => expr (Single a) -> expr OrderBy
+  desc :: PersistField a => expr (Value a) -> expr OrderBy
 
   -- | Execute a subquery @SELECT@ in an expression.
-  sub_select :: PersistField a => query (expr (Single a)) -> expr (Single a)
+  sub_select :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
   -- | Execute a subquery @SELECT_DISTINCT@ in an expression.
-  sub_selectDistinct :: PersistField a => query (expr (Single a)) -> expr (Single a)
+  sub_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
   -- | Project a field of an entity.
   (^.) :: (PersistEntity val, PersistField typ) =>
-          expr (Entity val) -> EntityField val typ -> expr (Single typ)
+          expr (Entity val) -> EntityField val typ -> expr (Value typ)
 
   -- | Project a field of an entity that may be null.
   (?.) :: (PersistEntity val, PersistField typ) =>
-          expr (Maybe (Entity val)) -> EntityField val typ -> expr (Single (Maybe typ))
+          expr (Maybe (Entity val)) -> EntityField val typ -> expr (Value (Maybe typ))
 
   -- | Lift a constant value from Haskell-land to the query.
-  val  :: PersistField typ => typ -> expr (Single typ)
+  val  :: PersistField typ => typ -> expr (Value typ)
 
   -- | @IS NULL@ comparison.
-  isNothing :: PersistField typ => expr (Single (Maybe typ)) -> expr (Single Bool)
+  isNothing :: PersistField typ => expr (Value (Maybe typ)) -> expr (Value Bool)
 
   -- | Analog to 'Just', promotes a value of type @typ@ into one
   -- of type @Maybe typ@.  It should hold that @val . Just ===
   -- just . val@.
-  just :: expr (Single typ) -> expr (Single (Maybe typ))
+  just :: expr (Value typ) -> expr (Value (Maybe typ))
 
   -- | @NULL@ value.
-  nothing :: expr (Single (Maybe typ))
+  nothing :: expr (Value (Maybe typ))
 
   -- | @COUNT(*)@ value.
-  countRows :: Num a => expr (Single a)
+  countRows :: Num a => expr (Value a)
 
-  not_ :: expr (Single Bool) -> expr (Single Bool)
+  not_ :: expr (Value Bool) -> expr (Value Bool)
 
-  (==.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
-  (>=.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
-  (>.)  :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
-  (<=.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
-  (<.)  :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
-  (!=.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
+  (==.) :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
+  (>=.) :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
+  (>.)  :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
+  (<=.) :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
+  (<.)  :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
+  (!=.) :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
 
-  (&&.) :: expr (Single Bool) -> expr (Single Bool) -> expr (Single Bool)
-  (||.) :: expr (Single Bool) -> expr (Single Bool) -> expr (Single Bool)
+  (&&.) :: expr (Value Bool) -> expr (Value Bool) -> expr (Value Bool)
+  (||.) :: expr (Value Bool) -> expr (Value Bool) -> expr (Value Bool)
 
-  (+.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (-.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (/.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (*.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
+  (+.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
+  (-.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
+  (/.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
+  (*.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
 
   -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
   -- a type error to use this function on a @SELECT@, it will
   -- most certainly result in a runtime error.
   set :: PersistEntity val => expr (Entity val) -> [expr (Update val)] -> query ()
 
-  (=.)  :: (PersistEntity val, PersistField typ) => EntityField val typ -> expr (Single typ) -> expr (Update val)
-  (+=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
-  (-=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
-  (*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
-  (/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
+  (=.)  :: (PersistEntity val, PersistField typ) => EntityField val typ -> expr (Value typ) -> expr (Update val)
+  (+=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
+  (-=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
+  (*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
+  (/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
 
 
 -- Fixity declarations
@@ -196,6 +197,12 @@ infixl 6 +., -.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
+
+
+-- | A single value (as opposed to a whole entity).  You may use
+-- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
+data Value a = Value a deriving (Eq, Ord, Show, Typeable)
+-- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
 
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
