@@ -20,6 +20,7 @@ module Database.Esqueleto.Internal.Language
   , OnClauseWithoutMatchingJoinException(..)
   , PreprocessedFrom
   , OrderBy
+  , Update
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -173,12 +174,24 @@ class (Functor query, Applicative query, Monad query) =>
   (/.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
   (*.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
 
+  -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
+  -- a type error to use this function on a @SELECT@, it will
+  -- most certainly result in a runtime error.
+  set :: PersistEntity val => expr (Entity val) -> [expr (Update val)] -> query ()
+
+  (=.)  :: (PersistEntity val, PersistField typ) => EntityField val typ -> expr (Single typ) -> expr (Update val)
+  (+=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
+  (-=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
+  (*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
+  (/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Single a) -> expr (Update val)
+
+
 -- Fixity declarations
 infixl 9 ^.
 infixl 7 *., /.
 infixl 6 +., -.
 infix  4 ==., >=., >., <=., <., !=.
-infixr 3 &&.
+infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||.
 infixr 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
 
@@ -261,6 +274,11 @@ data PreprocessedFrom a
 
 -- | Phantom type used by 'orderBy', 'asc' and 'desc'.
 data OrderBy
+
+
+-- | Phantom type for a @SET@ operation on an entity of the given
+-- type (see 'set' and '(=.)').
+data Update typ
 
 
 -- | @FROM@ clause: bring an entity into scope.

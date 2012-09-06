@@ -20,7 +20,8 @@ module Database.Esqueleto
              , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, not_, (==.), (>=.)
              , (>.), (<=.), (<.), (!=.), (&&.), (||.)
-             , (+.), (-.), (/.), (*.) )
+             , (+.), (-.), (/.), (*.)
+             , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , OrderBy
     -- ** Joins
@@ -39,6 +40,7 @@ module Database.Esqueleto
   , selectSource
   , selectDistinctSource
   , delete
+  , update
 
     -- * Re-exports
     -- $reexports

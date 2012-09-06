@@ -18,6 +18,7 @@ module Database.Esqueleto.Internal.Sql
   , runSource
   , rawExecute
   , delete
+  , update
   , toRawSql
   , Mode(..)
   ) where
@@ -71,14 +72,15 @@ instance Applicative SqlQuery where
 
 -- | Side data written by 'SqlQuery'.
 data SideData = SideData { sdFromClause    :: ![FromClause]
+                         , sdSetClause     :: ![SetClause]
                          , sdWhereClause   :: !WhereClause
                          , sdOrderByClause :: ![OrderByClause]
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty
-  SideData f w o `mappend` SideData f' w' o' =
-    SideData (f <> f') (w <> w') (o <> o')
+  mempty = SideData mempty mempty mempty mempty
+  SideData f s w o `mappend` SideData f' s' w' o' =
+    SideData (f <> f') (s <> s') (w <> w') (o <> o')
 
 
 -- | A part of a @FROM@ clause.
@@ -86,6 +88,10 @@ data FromClause =
     FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Single Bool)))
   | OnClause (SqlExpr (Single Bool))
+
+
+-- | A part of a @SET@ clause.
+newtype SetClause = SetClause (SqlExpr (Single ()))
 
 
 -- | Collect 'OnClause's on 'FromJoin's.  Returns the first
@@ -182,6 +188,7 @@ data SqlExpr a where
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
   ERaw     :: NeedParens -> (Escape -> (TLB.Builder, [PersistValue])) -> SqlExpr (Single a)
   EOrderBy :: OrderByType -> SqlExpr (Single a) -> SqlExpr OrderBy
+  ESet     :: (SqlExpr (Entity val) -> SqlExpr (Single ())) -> SqlExpr (Update val)
   EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
 
 data NeedParens = Parens | Never
@@ -240,8 +247,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   sub_select         = sub SELECT
   sub_selectDistinct = sub SELECT_DISTINCT
 
-  EEntity ident ^. field = ERaw Never $ \esc -> (useIdent esc ident <> ("." <> name esc field), [])
-      where name esc = esc . fieldDB . persistFieldDef
+  EEntity ident ^. field =
+    ERaw Never $ \esc -> (useIdent esc ident <> ("." <> fieldName esc field), [])
   _ ^. _ = error "Esqueleto/Sql/(^.): never here (see GHC #6124)"
 
   EMaybe r ?. field = maybelize (r ^. field)
@@ -275,6 +282,29 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   (-.)  = binop " - "
   (/.)  = binop " / "
   (*.)  = binop " * "
+
+  set ent upds = Q $ W.tell mempty { sdSetClause = map apply upds }
+    where
+      apply (ESet f) = SetClause (f ent)
+      apply _ = error "Esqueleto/Sql/set/apply: never here (see GHC #6124)"
+
+  field  =. expr = setAux field (const expr)
+  field +=. expr = setAux field (\ent -> ent ^. field +. expr)
+  field -=. expr = setAux field (\ent -> ent ^. field -. expr)
+  field *=. expr = setAux field (\ent -> ent ^. field *. expr)
+  field /=. expr = setAux field (\ent -> ent ^. field /. expr)
+
+
+fieldName :: (PersistEntity val, PersistField typ)
+          => Escape -> EntityField val typ -> TLB.Builder
+fieldName esc = esc . fieldDB . persistFieldDef
+
+setAux :: (PersistEntity val, PersistField typ)
+       => EntityField val typ
+       -> (SqlExpr (Entity val) -> SqlExpr (Single typ))
+       -> SqlExpr (Update val)
+setAux field mkVal = ESet $ \ent -> binop " = " name (mkVal ent)
+  where name = ERaw Never $ \esc -> (fieldName esc field, mempty)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Single a)) -> SqlExpr (Single a)
 sub mode query = ERaw Parens $ \esc -> first parens (toRawSql mode esc query)
@@ -407,24 +437,46 @@ delete :: ( MonadLogger m
 delete = rawExecute DELETE
 
 
+-- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
+-- 'SqlPersist' monad.  Note that currently there are no type
+-- checks for statements that should not appear on a @UPDATE@
+-- query.
+--
+-- Example of usage:
+--
+-- @
+-- update $ \p -> do
+-- set p [ PersonAge =. just (val thisYear) -. p ^. PersonBorn ]
+-- where_ $ isNull (p ^. PersonAge)
+-- @
+update :: ( MonadLogger m
+          , MonadResourceBase m
+          , PersistEntity val
+          , PersistEntityBackend val ~ SqlPersist )
+       => (SqlExpr (Entity val) -> SqlQuery ())
+       -> SqlPersist m ()
+update = rawExecute UPDATE . from
+
+
 ----------------------------------------------------------------------
 
 
 -- | Pretty prints a 'SqlQuery' into a SQL query.
 toRawSql :: SqlSelect a r => Mode -> Escape -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode esc query =
-  let (ret, SideData fromClauses whereClauses orderByClauses) =
+  let (ret, SideData fromClauses setClauses whereClauses orderByClauses) =
         flip S.evalState initialIdentState $
         W.runWriterT $
         unQ query
   in mconcat
       [ makeSelect  esc mode ret
-      , makeFrom    esc fromClauses
+      , makeFrom    esc mode fromClauses
+      , makeSet     esc setClauses
       , makeWhere   esc whereClauses
       , makeOrderBy esc orderByClauses
       ]
 
-data Mode = SELECT | SELECT_DISTINCT | DELETE
+data Mode = SELECT | SELECT_DISTINCT | DELETE | UPDATE
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
@@ -435,21 +487,25 @@ uncommas' = (uncommas *** mconcat) . unzip
 
 
 makeSelect :: SqlSelect a r => Escape -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeSelect esc mode   ret = first (s <>) (sqlSelectCols esc ret)
+makeSelect esc mode ret = first (s <>) (sqlSelectCols esc ret)
   where
     s = case mode of
           SELECT          -> "SELECT "
           SELECT_DISTINCT -> "SELECT DISTINCT "
           DELETE          -> "DELETE"
+          UPDATE          -> "UPDATE "
 
 
-makeFrom :: Escape -> [FromClause] -> (TLB.Builder, [PersistValue])
-makeFrom _   [] = mempty
-makeFrom esc fs = ret
+makeFrom :: Escape -> Mode -> [FromClause] -> (TLB.Builder, [PersistValue])
+makeFrom _   _    [] = mempty
+makeFrom esc mode fs = ret
   where
     ret = case collectOnClauses fs of
             Left expr -> throw $ mkExc expr
-            Right fs' -> first ("\nFROM " <>) $ uncommas' (map (mk Never mempty) fs')
+            Right fs' -> keyword $ uncommas' (map (mk Never mempty) fs')
+    keyword = case mode of
+                UPDATE -> id
+                _      -> first ("\nFROM " <>)
 
     mk _     onClause (FromStart i def) = base i def <> onClause
     mk paren onClause (FromJoin lhs kind rhs monClause) =
@@ -480,6 +536,14 @@ makeFrom esc fs = ret
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f esc)
     mkExc _ = OnClauseWithoutMatchingJoinException "???"
+
+
+makeSet :: Escape -> [SetClause] -> (TLB.Builder, [PersistValue])
+makeSet _   [] = mempty
+makeSet esc os = first ("\nSET " <>) $ uncommas' (map mk os)
+  where
+    mk (SetClause (ERaw _ f)) = f esc
+    mk _ = error "Esqueleto/Sql/makeSet: never here (see GHC #6124)"
 
 
 makeWhere :: Escape -> WhereClause -> (TLB.Builder, [PersistValue])

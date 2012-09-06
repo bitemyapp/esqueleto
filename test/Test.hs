@@ -363,6 +363,25 @@ main = do
                   return p
           liftIO $ ret2 `shouldBe` [ p3e, p2e ]
 
+    describe "update" $
+      it "works on a simple example" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          let anon = "Anonymous"
+          ()  <- update $ \p -> do
+                 set p [ PersonName =. val anon
+                       , PersonAge *=. just (val 2) ]
+                 where_ (p ^. PersonName !=. val "Mike")
+          ret <- select $
+                 from $ \p -> do
+                 orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
+                                  , Entity p1k (Person anon (Just 72))
+                                  , Entity p3k p3 ]
+
 
 ----------------------------------------------------------------------
 
