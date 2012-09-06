@@ -417,7 +417,7 @@ rawExecute mode query = do
 --
 -- @
 -- delete $
--- from $ \appointment ->
+-- from $ \\appointment ->
 -- where_ (appointment ^. AppointmentDate <. val now)
 -- @
 delete :: ( MonadLogger m
