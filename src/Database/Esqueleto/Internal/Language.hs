@@ -360,6 +360,12 @@ data Update typ
 --                            (expr (Entity Follow)))
 --                 (expr (Entity Person))
 -- @
+--
+-- Note that some backends may not support all kinds of @JOIN@s.
+-- For example, when using the SQL backend with SQLite, it will
+-- not accept the last example above (which is associated to the
+-- left, instead of being to the right) and will not accept
+-- 'RightOuterJoin's or 'FullOuterJoin's.
 from :: From query expr backend a => (a -> query b) -> query b
 from = (from_ >>=)
 
