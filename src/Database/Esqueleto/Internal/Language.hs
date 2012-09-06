@@ -168,10 +168,10 @@ class (Functor query, Applicative query, Monad query) =>
   (&&.) :: expr (Single Bool) -> expr (Single Bool) -> expr (Single Bool)
   (||.) :: expr (Single Bool) -> expr (Single Bool) -> expr (Single Bool)
 
-  (+.)  :: (Num a, PersistField a) => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (-.)  :: (Num a, PersistField a) => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (/.)  :: (Num a, PersistField a) => expr (Single a) -> expr (Single a) -> expr (Single a)
-  (*.)  :: (Num a, PersistField a) => expr (Single a) -> expr (Single a) -> expr (Single a)
+  (+.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
+  (-.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
+  (/.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
+  (*.)  :: PersistField a => expr (Single a) -> expr (Single a) -> expr (Single a)
 
 -- Fixity declarations
 infixl 9 ^.
