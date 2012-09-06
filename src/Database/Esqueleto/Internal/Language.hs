@@ -202,10 +202,10 @@ infixr 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuter
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
 data InnerJoin a b = a `InnerJoin` b
 
--- | Data type that represents an @CROSS JOIN@ (see 'LeftOuterJoin' for an example).
+-- | Data type that represents a @CROSS JOIN@ (see 'LeftOuterJoin' for an example).
 data CrossJoin a b = a `CrossJoin` b
 
--- | Data type that represents an @LEFT OUTER JOIN@. For example,
+-- | Data type that represents a @LEFT OUTER JOIN@. For example,
 --
 -- @
 -- select $
@@ -222,10 +222,10 @@ data CrossJoin a b = a `CrossJoin` b
 -- @
 data LeftOuterJoin a b = a `LeftOuterJoin` b
 
--- | Data type that represents an @RIGHT OUTER JOIN@ (see 'LeftOuterJoin' for an example).
+-- | Data type that represents a @RIGHT OUTER JOIN@ (see 'LeftOuterJoin' for an example).
 data RightOuterJoin a b = a `RightOuterJoin` b
 
--- | Data type that represents an @FULL OUTER JOIN@ (see 'LeftOuterJoin' for an example).
+-- | Data type that represents a @FULL OUTER JOIN@ (see 'LeftOuterJoin' for an example).
 data FullOuterJoin a b = a `FullOuterJoin` b
 
 
