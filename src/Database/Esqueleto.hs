@@ -295,4 +295,4 @@ deleteKey = Database.Persist.Store.delete
 --
 -- We re-export @Database.Persist.Store@ for convenience, since
 -- @esqueleto@ currently does not provide a way of doing
--- @insert@s or @update@s.
+-- @INSERT@s.
