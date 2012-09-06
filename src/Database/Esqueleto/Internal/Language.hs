@@ -121,7 +121,7 @@ class (Functor query, Applicative query, Monad query) =>
   --     test2 = flip (,) \<$\> query2 \<*\> query1
   -- @
   --
-  -- If the order was *not* reversed, then @test2@ would be
+  -- If the order was /not/ reversed, then @test2@ would be
   -- broken: @query1@'s 'on' would refer to @query2@'s
   -- 'LeftOuterJoin'.
   on :: expr (Value Bool) -> query ()
@@ -155,9 +155,9 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @IS NULL@ comparison.
   isNothing :: PersistField typ => expr (Value (Maybe typ)) -> expr (Value Bool)
 
-  -- | Analog to 'Just', promotes a value of type @typ@ into one
-  -- of type @Maybe typ@.  It should hold that @val . Just ===
-  -- just . val@.
+  -- | Analogous to 'Just', promotes a value of type @typ@ into
+  -- one of type @Maybe typ@.  It should hold that @val . Just
+  -- === just . val@.
   just :: expr (Value typ) -> expr (Value (Maybe typ))
 
   -- | @NULL@ value.
