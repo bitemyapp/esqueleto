@@ -138,7 +138,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Execute a subquery @SELECT@ in an expression.
   sub_select :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
-  -- | Execute a subquery @SELECT_DISTINCT@ in an expression.
+  -- | Execute a subquery @SELECT DISTINCT@ in an expression.
   sub_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
   -- | Project a field of an entity.
