@@ -195,8 +195,7 @@ infixl 7 *., /.
 infixl 6 +., -.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
-infixr 2 ||.
-infixr 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
+infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
 
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
