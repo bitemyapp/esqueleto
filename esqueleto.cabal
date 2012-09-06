@@ -1,5 +1,5 @@
 name:                esqueleto
-version:             0.2
+version:             0.2.1
 synopsis:            Bare bones, type-safe EDSL for SQL queries on persistent backends.
 homepage:            https://github.com/meteficha/esqueleto
 license:             BSD3
