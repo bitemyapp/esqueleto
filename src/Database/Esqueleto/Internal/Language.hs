@@ -22,6 +22,8 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , OrderBy
   , Update
+  , From
+  , FromPreprocess
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -290,19 +292,69 @@ data OrderBy
 data Update typ
 
 
--- | @FROM@ clause: bring an entity into scope.
+-- | @FROM@ clause: bring entities into scope.
 --
--- The following types implement 'from':
+-- This function internally uses two type classes in order to
+-- provide some flexibility of how you may call it.  Internally
+-- we refer to these type classes as the two different magics.
 --
---  * @Expr (Entity val)@, which brings a single entity into scope.
+-- The innermost magic allows you to use @from@ with the
+-- following types:
 --
---  * Tuples of any other types supported by 'from'.  Calling
---  'from' multiple times is the same as calling 'from' a
---  single time and using a tuple.
+--  * @expr (Entity val)@, which brings a single entity into
+--  scope.
 --
--- Note that using 'from' for the same entity twice does work
--- and corresponds to a self-join.  You don't even need to use
--- two different calls to 'from', you may use a tuple.
+--  * @expr (Maybe (Entity val))@, which brings a single entity
+--  that may be @NULL@ into scope.  Used for @OUTER JOIN@s.
+--
+--  * A @JOIN@ of any other two types allowed by the innermost
+--  magic, where a @JOIN@ may be an 'InnerJoin', a 'CrossJoin', a
+--  'LeftOuterJoin', a 'RightOuterJoin', or a 'FullOuterJoin'.
+--  The @JOINs@ have right fixity, the same as in SQL.
+--
+-- The outermost magic allows you to use @from@ on any tuples of
+-- types supported by innermost magic (and also tuples of tuples,
+-- and so on), up to 8-tuples.
+--
+-- Note that using @from@ for the same entity twice does work and
+-- corresponds to a self-join.  You don't even need to use two
+-- different calls to @from@, you may use a @JOIN@ or a tuple.
+--
+-- The following are valid examples of uses of @from@ (the types
+-- of the arguments of the lambda are inside square brackets):
+--
+-- @
+-- from $ \\person -> ...
+-- from $ \\(person, blogPost) -> ...
+-- from $ \\(p ``LeftOuterJoin`` mb) -> ...
+-- from $ \\(p1 ``InnerJoin`` f ``InnerJoin`` p2) -> ...
+-- from $ \\((p1 ``InnerJoin`` f) ``InnerJoin`` p2) -> ...
+-- @
+--
+-- The types of the arguments to the lambdas above are,
+-- respectively:
+--
+-- @
+-- person
+--   :: ( Esqueleto query expr backend
+--      , PersistEntity Person
+--      , PersistEntityBackend Person ~ backend
+--      ) => expr (Entity Person)
+-- (person, blogPost)
+--   :: (...) => (expr (Entity Person), expr (Entity BlogPost))
+-- (p ``LeftOuterJoin`` mb)
+--   :: (...) => InnerJoin (expr (Entity Person)) (expr (Maybe (Entity BlogPost)))
+-- (p1 ``InnerJoin`` f ``InnerJoin`` p2)
+--   :: (...) => InnerJoin
+--                 (expr (Entity Person))
+--                 (InnerJoin (expr (Entity Follow))
+--                            (expr (Entity Person)))
+-- ((p1 ``InnerJoin`` f) ``InnerJoin`` p2) ::
+--   :: (...) => InnerJoin
+--                 (InnerJoin (expr (Entity Person))
+--                            (expr (Entity Follow)))
+--                 (expr (Entity Person))
+-- @
 from :: From query expr backend a => (a -> query b) -> query b
 from = (from_ >>=)
 
