@@ -264,7 +264,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   isNothing _ = error "Esqueleto/Sql/isNothing: never here (see GHC #6124)"
   just (ERaw p f) = ERaw p f
   just _ = error "Esqueleto/Sql/just: never here (see GHC #6124)"
-  nothing = ERaw Never $ \_ -> ("NULL", mempty)
+  nothing   = ERaw Never $ \_ -> ("NULL",     mempty)
+  countRows = ERaw Never $ \_ -> ("COUNT(*)", mempty)
 
   not_ (ERaw p f) = ERaw Never $ \esc -> let (b, vals) = f esc
                                          in ("NOT " <> parensM p b, vals)

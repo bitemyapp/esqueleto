@@ -18,8 +18,8 @@ module Database.Esqueleto
   ( -- * @esqueleto@'s Language
     Esqueleto( where_, on, orderBy, asc, desc
              , sub_select, sub_selectDistinct, (^.), (?.)
-             , val, isNothing, just, nothing, not_, (==.), (>=.)
-             , (>.), (<=.), (<.), (!=.), (&&.), (||.)
+             , val, isNothing, just, nothing, countRows, not_
+             , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from

@@ -13,6 +13,7 @@
 module Main (main) where
 
 import Control.Applicative (Applicative(..), (<$>))
+import Control.Monad (replicateM_)
 import Control.Monad.Base (MonadBase(..))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), LogLevel(..))
@@ -363,7 +364,7 @@ main = do
                   return p
           liftIO $ ret2 `shouldBe` [ p3e, p2e ]
 
-    describe "update" $
+    describe "update" $ do
       it "works on a simple example" $
         run $ do
           p1k <- insert p1
@@ -381,6 +382,27 @@ main = do
           liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
                                   , Entity p1k (Person anon (Just 72))
                                   , Entity p3k p3 ]
+
+      it "works with a subexpression having COUNT(*)" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          replicateM_ 3 (insert $ BlogPost "" p1k)
+          replicateM_ 7 (insert $ BlogPost "" p3k)
+          let blogPostsBy p =
+                from $ \b -> do
+                where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
+                return countRows
+          ()  <- update $ \p -> do
+                 set p [ PersonAge =. just (sub_select (blogPostsBy p)) ]
+          ret <- select $
+                 from $ \p -> do
+                 orderBy [ asc (p ^. PersonName) ]
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1 { personAge = Just 3 }
+                                  , Entity p3k p3 { personAge = Just 7 }
+                                  , Entity p2k p2 { personAge = Just 0 } ]
 
 
 ----------------------------------------------------------------------

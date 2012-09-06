@@ -157,6 +157,9 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @NULL@ value.
   nothing :: expr (Single (Maybe typ))
 
+  -- | @COUNT(*)@ value.
+  countRows :: Num a => expr (Single a)
+
   not_ :: expr (Single Bool) -> expr (Single Bool)
 
   (==.) :: PersistField typ => expr (Single typ) -> expr (Single typ) -> expr (Single Bool)
