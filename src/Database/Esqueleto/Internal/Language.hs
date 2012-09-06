@@ -84,7 +84,7 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \(foo `InnerJoin` bar) -> do
+  -- from $ \\(foo ``InnerJoin`` bar) -> do
   --   on (foo ^. FooId ==. bar ^. BarFooId)
   --   ...
   -- @
@@ -96,7 +96,7 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \(foo `InnerJoin` bar `InnerJoin` baz) -> do
+  -- from $ \\(foo ``InnerJoin`` bar ``InnerJoin`` baz) -> do
   --   on (baz ^. BazId ==. bar ^. BarBazId)
   --   on (foo ^. FooId ==. bar ^. BarFooId)
   --   ...
@@ -107,15 +107,13 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- let query1 =
-  --       from $ \(foo `InnerJoin` bar) -> do
+  --       from $ \\(foo ``InnerJoin`` bar) -> do
   --         on (foo ^. FooId ==. bar ^. BarFooId)
-  --
   --     query2 =
-  --       from $ \(mbaz `LeftOuterJoin` quux) -> do
+  --       from $ \\(mbaz ``LeftOuterJoin`` quux) -> do
   --         return (mbaz ?. BazName, quux)
-  --
-  --     test1 =      (,) <$> query1 <*> query2
-  --     test2 = flip (,) <$> query2 <*> query1
+  --     test1 =      (,) \<$\> query1 \<*\> query2
+  --     test2 = flip (,) \<$\> query2 \<*\> query1
   -- @
   --
   -- If the order was *not* reversed, then @test2@ would be
@@ -217,7 +215,7 @@ data CrossJoin a b = a `CrossJoin` b
 --
 -- @
 -- select $
--- from $ \(person `LeftOuterJoin` pet) ->
+-- from $ \\(person ``LeftOuterJoin`` pet) ->
 --   ...
 -- @
 --
@@ -228,6 +226,8 @@ data CrossJoin a b = a `CrossJoin` b
 -- FROM Person LEFT OUTER JOIN Pet
 -- ...
 -- @
+--
+-- See also: 'from'.
 data LeftOuterJoin a b = a `LeftOuterJoin` b
 
 -- | Data type that represents a @RIGHT OUTER JOIN@ (see 'LeftOuterJoin' for an example).
