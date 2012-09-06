@@ -42,7 +42,8 @@ description:
   <https://github.com/meteficha/esqueleto/>.
   .
   The name of this library means \"skeleton\" in Portuguese and
-  contains all three SQL letters in the correct order =).
+  contains all three SQL letters in the correct order =).  It was
+  inspired by Scala's Squeryl but created from scratch.
 
 source-repository head
   type:     git
