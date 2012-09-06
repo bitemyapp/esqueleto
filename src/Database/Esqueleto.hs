@@ -269,7 +269,7 @@ import qualified Database.Persist.Store
 -- order because that helps composability (see the documentation
 -- of 'on' for more details).
 --
--- We also currently supports @UPDATE@ and @DELETE@ statements.
+-- We also currently support @UPDATE@ and @DELETE@ statements.
 -- For example:
 --
 -- @
