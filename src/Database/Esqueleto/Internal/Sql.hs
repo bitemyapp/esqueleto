@@ -339,7 +339,7 @@ rawSelectSource mode query = src
 
       run conn =
         uncurry withStmt $
-        first (TL.toStrict . TLB.toLazyText) $
+        first builderToText $
         toRawSql mode (fromDBName conn) query
 
       massage = do
@@ -451,7 +451,7 @@ rawExecute :: ( MonadLogger m
 rawExecute mode query = do
   conn <- SqlPersist R.ask
   uncurry execute $
-    first (TL.toStrict . TLB.toLazyText) $
+    first builderToText $
     toRawSql mode (fromDBName conn) query
 
 
@@ -506,6 +506,12 @@ update = rawExecute UPDATE . from
 
 
 ----------------------------------------------------------------------
+
+
+builderToText :: TLB.Builder -> T.Text
+builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
+  where
+    defaultChunkSize = 1024 - 32
 
 
 -- | (Internal) Pretty prints a 'SqlQuery' into a SQL query.
