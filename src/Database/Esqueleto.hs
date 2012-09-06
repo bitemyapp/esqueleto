@@ -266,8 +266,8 @@ import qualified Database.Persist.Store
 --
 -- /Note carefully that the order of the ON clauses is/
 -- /reversed!/ You're required to write your 'on's in reverse
--- order because that helps composability (see the documention of
--- 'on' for more details).
+-- order because that helps composability (see the documentation
+-- of 'on' for more details).
 --
 -- We also currently supports @UPDATE@ and @DELETE@ statements.
 -- For example:
