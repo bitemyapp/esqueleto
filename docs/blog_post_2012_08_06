@@ -1,8 +1,8 @@
-Announcing esqueleto, a type-safe SQL EDSL for Haskell
+Announcing esqueleto, a type-safe ESDL for SQL queries
 
 I'm very pleased to announce a preview release of <a href="http://hackage.haskell.org/package/esqueleto">esqueleto</a>, a bare bones, type-safe EDSL for SQL queries.
 
-<!-- more -->
+<!--more-->
 
 On the first part of this blog post I'll talk about persistent and HaskellDB.  You may jump <a href="#esqueleto">right into where I talk about esqueleto</a> if you want, though.
 
@@ -65,7 +65,7 @@ For these reasons I've created the <a href="http://hackage.haskell.org/packages/
 
 <a href="http://hackage.haskell.org/package/haskelldb">HaskellDB</a> is a type-safe EDSL that allows you to write SQL queries using relational algebra.  It's as old as Parsec, having been introduced in 1999!
 
-Recently there has been some people showing interesting in using it with Yesod.  Last month <a href="https://groups.google.com/d/msg/yesodweb/nQjQuwydfI8/vB9mM47uZ0AJ">Mats Rauhala</a> wrote the following summary about his opinion at the time on Yesod's mailing list:
+Recently some people have been showing interest in using it with Yesod.  Last month <a href="https://groups.google.com/d/msg/yesodweb/nQjQuwydfI8/vB9mM47uZ0AJ">Mats Rauhala</a> wrote the following summary about his opinion at the time on Yesod's mailing list:
 
 <blockquote>
 1. Direct sql
@@ -240,6 +240,6 @@ WHERE stock.stock_id = end_of_day.stock_id AND (stock.ticker = ? AND end_of_day.
 
 The full power of raw SQL.  Type-checked queries, no type signatures required.  Complete control over the resulting SQL.  The robustness and performance of persistent.  And with only 800 source lines of code (+ 400 SLOC for the test suite).  What's not to like about esqueleto? =D
 
-This is just a preview release.  I'm eager to hear what you have to say about it.  Send pull requests, open issues, comment about it on <a href="http://www.reddit.com/r/haskell/comments/zh3h6/announcing_esqueleto_a_typesafe_edsl_for_sql/">reddit</a> or send e-mails to Yesod's mailing list.  Or, even better, give it a spin a let me know how it went!  Its <a href="http://hackage.haskell.org/packages/archive/esqueleto/latest/doc/html/Database-Esqueleto.html">Haddock documentation</a> should get you started.
+This is just a preview release.  I'm eager to hear what you have to say about it.  Send pull requests, open issues, comment about it <a href="http://www.reddit.com/r/haskell/comments/zh3h6/announcing_esqueleto_a_typesafe_edsl_for_sql/">on reddit</a> or send e-mails to Yesod's mailing list.  Or, even better, give it a spin a let me know how it went!  Its <a href="http://hackage.haskell.org/packages/archive/esqueleto/latest/doc/html/Database-Esqueleto.html">Haddock documentation</a> should get you started.
 
 Thanks for reading this rather long blog post! =)
