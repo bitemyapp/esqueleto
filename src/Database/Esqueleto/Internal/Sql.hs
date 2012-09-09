@@ -30,6 +30,7 @@ module Database.Esqueleto.Internal.Sql
   , Mode(..)
   , Escape
   , SqlSelect
+  , veryUnsafeCoerceSqlExprValue
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -341,6 +342,13 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 (b2, vals2) = f2 esc
             in ( parensM p1 b1 <> op <> parensM p2 b2
                , vals1 <> vals2 )
+
+
+-- | (Internal) Coerce a type of a 'SqlExpr (Value a)' into
+-- another 'SqlExpr (Value b)'.  You should /not/ use this
+-- function unless you know what you're doing!
+veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
+veryUnsafeCoerceSqlExprValue (ERaw p f) = ERaw p f
 
 
 ----------------------------------------------------------------------
