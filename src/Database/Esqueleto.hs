@@ -86,14 +86,18 @@ import qualified Database.Persist.Store
 --   project page (<https://github.com/meteficha/esqueleto>) if
 --   there's anything missing that you'd like to see.
 --
---   * Be as type-safe as possible.  There are ways of shooting
---   yourself in the foot while using @esqueleto@ because it's
---   extremely hard to provide 100% type-safety into a SQL-like
---   EDSL---there's a tension between supporting features with a
---   nice syntax and rejecting bad code.  However, we strive to
---   provide as many type checks as possible.  If you get bitten
---   by some invalid code that type-checks, please open an issue
---   on our project page so we can take a look.
+--   * Be as type-safe as possible.  We strive to provide as many
+--   type checks as possible.  If you get bitten by some invalid
+--   code that type-checks, please open an issue on our project
+--   page so we can take a look.
+--
+-- However, it is /not/ a goal to be able to write portable SQL.
+-- We do not try to hide the differences between DBMSs from you,
+-- and @esqueleto@ code that works for one database may not work
+-- on another.  This is a compromise we have to make in order to
+-- give you as much control over the raw SQL as possible without
+-- losing too much convenience.  This also means that you may
+-- type-check a query that doesn't work on your DBMS.
 
 ----------------------------------------------------------------------
 
