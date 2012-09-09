@@ -38,6 +38,7 @@ module Database.Esqueleto
     -- * SQL backend
   , SqlQuery
   , SqlExpr
+  , SqlEntity
   , select
   , selectDistinct
   , selectSource

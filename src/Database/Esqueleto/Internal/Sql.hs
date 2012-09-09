@@ -14,6 +14,7 @@ module Database.Esqueleto.Internal.Sql
   ( -- * The pretty face
     SqlQuery
   , SqlExpr
+  , SqlEntity
   , select
   , selectSource
   , selectDistinct
@@ -72,6 +73,11 @@ instance Monad SqlQuery where
 instance Applicative SqlQuery where
   pure  = return
   (<*>) = ap
+
+
+-- | Constraint synonym for @persistent@ entities whose backend
+-- is 'SqlPersist'.
+type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlPersist)
 
 
 ----------------------------------------------------------------------
@@ -498,8 +504,7 @@ delete = rawExecute DELETE
 -- @
 update :: ( MonadLogger m
           , MonadResourceBase m
-          , PersistEntity val
-          , PersistEntityBackend val ~ SqlPersist )
+          , SqlEntity val )
        => (SqlExpr (Entity val) -> SqlQuery ())
        -> SqlPersist m ()
 update = rawExecute UPDATE . from
