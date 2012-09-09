@@ -117,6 +117,50 @@ main = do
                                   , (Value (personName p2), Value (personName p1))
                                   , (Value (personName p2), Value (personName p2)) ]
 
+      it "works with many kinds of LIMITs and OFFSETs" $
+        run $ do
+          [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+          let people = from $ \p -> do
+                       orderBy [asc (p ^. PersonName)]
+                       return p
+          ret1 <- select $ do
+                  p <- people
+                  limit 2
+                  limit 1
+                  return p
+          liftIO $ ret1 `shouldBe` [ p1e ]
+          ret2 <- select $ do
+                  p <- people
+                  limit 1
+                  limit 2
+                  return p
+          liftIO $ ret2 `shouldBe` [ p1e, p4e ]
+          ret3 <- select $ do
+                  p <- people
+                  offset 3
+                  offset 2
+                  return p
+          liftIO $ ret3 `shouldBe` [ p3e, p2e ]
+          ret4 <- select $ do
+                  p <- people
+                  offset 3
+                  limit 5
+                  offset 2
+                  limit 3
+                  offset 1
+                  limit 2
+                  return p
+          liftIO $ ret4 `shouldBe` [ p4e, p3e ]
+          ret5 <- select $ do
+                  p <- people
+                  offset 1000
+                  limit  1
+                  limit  1000
+                  offset 0
+                  return p
+          liftIO $ ret5 `shouldBe` [ p1e, p4e, p3e, p2e ]
+
+
     describe "select/JOIN" $ do
       it "works with a LEFT OUTER JOIN" $
         run $ do

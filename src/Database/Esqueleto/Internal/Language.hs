@@ -33,6 +33,7 @@ module Database.Esqueleto.Internal.Language
 
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Exception (Exception)
+import Data.Int (Int64)
 import Data.String (IsString)
 import Data.Typeable (Typeable)
 import Database.Persist.GenericSql
@@ -135,6 +136,12 @@ class (Functor query, Applicative query, Monad query) =>
 
   -- | Descending order of this field or expression.
   desc :: PersistField a => expr (Value a) -> expr OrderBy
+
+  -- | @LIMIT@.  Limit the number of returned rows.
+  limit :: Int64 -> query ()
+
+  -- | @OFFSET@.  Usually used with 'limit'.
+  offset :: Int64 -> query ()
 
   -- | Execute a subquery @SELECT@ in an expression.
   sub_select :: PersistField a => query (expr (Value a)) -> expr (Value a)
