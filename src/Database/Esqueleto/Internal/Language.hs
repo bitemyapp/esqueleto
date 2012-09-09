@@ -33,6 +33,7 @@ module Database.Esqueleto.Internal.Language
 
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Exception (Exception)
+import Data.String (IsString)
 import Data.Typeable (Typeable)
 import Database.Persist.GenericSql
 import Database.Persist.Store
@@ -183,6 +184,25 @@ class (Functor query, Applicative query, Monad query) =>
   (/.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
   (*.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
 
+  -- | @LIKE@ operator.
+  like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  -- | The string @'%'@.  May be useful while using 'like' and
+  -- concatenation ('concat_' or '++.', depending on your
+  -- database).  Note that you always to type the parenthesis,
+  -- for example:
+  --
+  -- @
+  -- name ``'like'`` (%) ++. val "John" ++. (%)
+  -- @
+  (%) :: (PersistField s, IsString s) => expr (Value s)
+  -- | The @CONCAT@ function with a variable number of
+  -- parameters.  Supported by MySQL and PostgreSQL.
+  concat_ :: (PersistField s, IsString s) => [expr (Value s)] -> expr (Value s)
+  -- | The @||@ string concatenation operator (named after
+  -- Haskell's '++' in order to avoid naming clash with '||.').
+  -- Supported by SQLite and PostgreSQL.
+  (++.) :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
+
   -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
   -- a type error to use this function on a @SELECT@, it will
   -- most certainly result in a runtime error.
@@ -199,9 +219,10 @@ class (Functor query, Applicative query, Monad query) =>
 infixl 9 ^.
 infixl 7 *., /.
 infixl 6 +., -.
+infixr 5 ++.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
-infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
+infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
 
 
 -- | A single value (as opposed to a whole entity).  You may use

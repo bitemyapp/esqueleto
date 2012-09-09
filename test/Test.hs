@@ -344,6 +344,21 @@ main = do
                  return title
           liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
+    describe "text functions" $
+      it "like, (%) and (++.) work on a simple example" $
+         run $ do
+           [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+           let nameContains t expected = do
+                 ret <- select $
+                        from $ \p -> do
+                        where_ (p ^. PersonName `like` (%) ++. val t ++. (%))
+                        orderBy [asc (p ^. PersonName)]
+                        return p
+                 liftIO $ ret `shouldBe` expected
+           nameContains "h"  [p1e, p2e]
+           nameContains "i"  [p4e, p3e]
+           nameContains "iv" [p4e]
+
     describe "delete" $
       it "works on a simple example" $
         run $ do

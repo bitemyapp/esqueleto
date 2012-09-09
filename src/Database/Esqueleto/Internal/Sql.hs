@@ -294,6 +294,11 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   (/.)  = unsafeSqlBinOp " / "
   (*.)  = unsafeSqlBinOp " * "
 
+  like    = unsafeSqlBinOp    " LIKE "
+  (%)     = unsafeSqlValue    "'%'"
+  concat_ = unsafeSqlFunction "CONCAT"
+  (++.)   = unsafeSqlBinOp    " || "
+
   set ent upds = Q $ W.tell mempty { sdSetClause = map apply upds }
     where
       apply (ESet f) = SetClause (f ent)

@@ -23,6 +23,7 @@ module Database.Esqueleto
              , val, isNothing, just, nothing, countRows, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
+             , like, (%), concat_, (++.)
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , Value(..)
