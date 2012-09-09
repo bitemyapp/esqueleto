@@ -24,6 +24,8 @@ module Database.Esqueleto.Internal.Sql
     -- * The guts
   , unsafeSqlBinOp
   , unsafeSqlValue
+  , unsafeSqlFunction
+  , UnsafeSqlFunctionArgument
   , rawSelectSource
   , runSource
   , rawExecute
@@ -351,6 +353,40 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
 unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
 unsafeSqlValue v = ERaw Never $ \_ -> (v, mempty)
 {-# INLINE unsafeSqlValue #-}
+
+
+-- | (Internal) A raw SQL function.  Once again, the same warning
+-- from 'unsafeSqlBinOp' applies to this function as well.
+unsafeSqlFunction :: UnsafeSqlFunctionArgument a =>
+                     TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlFunction name arg =
+  ERaw Never $ \esc ->
+    let (argsTLB, argsVals) =
+          uncommas' $ map (\(ERaw _ f) -> f esc) $ toArgList arg
+    in (name <> parens argsTLB, argsVals)
+
+class UnsafeSqlFunctionArgument a where
+  toArgList :: a -> [SqlExpr (Value ())]
+instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
+  toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
+instance UnsafeSqlFunctionArgument a =>
+         UnsafeSqlFunctionArgument [a] where
+  toArgList = concatMap toArgList
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         ) => UnsafeSqlFunctionArgument (a, b) where
+  toArgList (a, b) = toArgList a ++ toArgList b
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         ) => UnsafeSqlFunctionArgument (a, b, c) where
+  toArgList = toArgList . from3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         ) => UnsafeSqlFunctionArgument (a, b, c, d) where
+  toArgList = toArgList . from4
 
 
 -- | (Internal) Coerce a type of a 'SqlExpr (Value a)' into
