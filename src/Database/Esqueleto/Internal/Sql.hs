@@ -23,6 +23,7 @@ module Database.Esqueleto.Internal.Sql
   , update
     -- * The guts
   , unsafeSqlBinOp
+  , unsafeSqlValue
   , rawSelectSource
   , runSource
   , rawExecute
@@ -272,8 +273,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   isNothing (ERaw p f) = ERaw Never $ first ((<> " IS NULL") . parensM p) . f
   just (ERaw p f) = ERaw p f
-  nothing   = ERaw Never $ \_ -> ("NULL",     mempty)
-  countRows = ERaw Never $ \_ -> ("COUNT(*)", mempty)
+  nothing   = unsafeSqlValue "NULL"
+  countRows = unsafeSqlValue "COUNT(*)"
 
   not_ (ERaw p f) = ERaw Never $ \esc -> let (b, vals) = f esc
                                          in ("NOT " <> parensM p b, vals)
@@ -342,6 +343,14 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 (b2, vals2) = f2 esc
             in ( parensM p1 b1 <> op <> parensM p2 b2
                , vals1 <> vals2 )
+{-# INLINE unsafeSqlBinOp #-}
+
+
+-- | (Internal) A raw SQL value.  The same warning from
+-- 'unsafeSqlBinOp' applies to this function as well.
+unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
+unsafeSqlValue v = ERaw Never $ \_ -> (v, mempty)
+{-# INLINE unsafeSqlValue #-}
 
 
 -- | (Internal) Coerce a type of a 'SqlExpr (Value a)' into
