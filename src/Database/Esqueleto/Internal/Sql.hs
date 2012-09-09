@@ -22,6 +22,7 @@ module Database.Esqueleto.Internal.Sql
   , delete
   , update
     -- * The guts
+  , unsafeSqlBinOp
   , rawSelectSource
   , runSource
   , rawExecute
@@ -276,18 +277,18 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   not_ (ERaw p f) = ERaw Never $ \esc -> let (b, vals) = f esc
                                          in ("NOT " <> parensM p b, vals)
 
-  (==.) = binop " = "
-  (>=.) = binop " >= "
-  (>.)  = binop " > "
-  (<=.) = binop " <= "
-  (<.)  = binop " < "
-  (!=.) = binop " != "
-  (&&.) = binop " AND "
-  (||.) = binop " OR "
-  (+.)  = binop " + "
-  (-.)  = binop " - "
-  (/.)  = binop " / "
-  (*.)  = binop " * "
+  (==.) = unsafeSqlBinOp " = "
+  (>=.) = unsafeSqlBinOp " >= "
+  (>.)  = unsafeSqlBinOp " > "
+  (<=.) = unsafeSqlBinOp " <= "
+  (<.)  = unsafeSqlBinOp " < "
+  (!=.) = unsafeSqlBinOp " != "
+  (&&.) = unsafeSqlBinOp " AND "
+  (||.) = unsafeSqlBinOp " OR "
+  (+.)  = unsafeSqlBinOp " + "
+  (-.)  = unsafeSqlBinOp " - "
+  (/.)  = unsafeSqlBinOp " / "
+  (*.)  = unsafeSqlBinOp " * "
 
   set ent upds = Q $ W.tell mempty { sdSetClause = map apply upds }
     where
@@ -308,7 +309,7 @@ setAux :: (PersistEntity val, PersistField typ)
        => EntityField val typ
        -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
        -> SqlExpr (Update val)
-setAux field mkVal = ESet $ \ent -> binop " = " name (mkVal ent)
+setAux field mkVal = ESet $ \ent -> unsafeSqlBinOp " = " name (mkVal ent)
   where name = ERaw Never $ \esc -> (fieldName esc field, mempty)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
@@ -317,8 +318,24 @@ sub mode query = ERaw Parens $ \esc -> first parens (toRawSql mode esc query)
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . escapeName conn
 
-binop :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-binop op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
+
+----------------------------------------------------------------------
+
+
+-- | (Internal) Create a custom binary operator.  You /should/
+-- /not/ use this function directly since its type is very
+-- general, you should always use it with an explicit type
+-- signature.  For example:
+--
+-- @
+-- (==.) :: SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value Bool)
+-- (==.) = unsafeSqlBinOp " = "
+-- @
+--
+-- In the example above, we constraint the arguments to be of the
+-- same type and constraint the result to be a boolean value.
+unsafeSqlBinOp :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
   where
     f esc = let (b1, vals1) = f1 esc
                 (b2, vals2) = f2 esc
