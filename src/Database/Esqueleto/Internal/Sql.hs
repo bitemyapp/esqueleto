@@ -95,12 +95,13 @@ data SideData = SideData { sdFromClause    :: ![FromClause]
                          , sdWhereClause   :: !WhereClause
                          , sdOrderByClause :: ![OrderByClause]
                          , sdLimitClause   :: !LimitClause
+                         , sdGroupByClause :: !GroupByClause
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty
-  SideData f s w o l `mappend` SideData f' s' w' o' l' =
-    SideData (f <> f') (s <> s') (w <> w') (o <> o') (l <> l')
+  mempty = SideData mempty mempty mempty mempty mempty mempty
+  SideData f s w o l g `mappend` SideData f' s' w' o' l' g' =
+    SideData (f <> f') (s <> s') (w <> w') (o <> o') (l <> l') (g <> g')
 
 
 -- | A part of a @FROM@ clause.
@@ -151,6 +152,19 @@ instance Monoid WhereClause where
   NoWhere  `mappend` w        = w
   w        `mappend` NoWhere  = w
   Where e1 `mappend` Where e2 = Where (e1 &&. e2)
+
+
+-- | A @GROUP BY@ clause.
+data GroupByClause = GroupBy [SomeValue]
+
+-- Used to implement heterogeneous list for GroupByClause, may be
+-- useful elsewhere.
+data SomeValue where
+  SomeValue :: SqlExpr (Value a) -> SomeValue
+
+instance Monoid GroupByClause where
+  mempty = GroupBy []
+  GroupBy fs `mappend` GroupBy fs' = GroupBy (fs <> fs')
 
 
 -- | A @ORDER BY@ clause.
@@ -266,6 +280,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
   on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
+
+  groupBy field = Q $ W.tell mempty { sdGroupByClause = GroupBy [SomeValue field] }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -616,7 +632,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- @persistent@.
 toRawSql :: SqlSelect a r => Mode -> Connection -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode conn query =
-  let (ret, SideData fromClauses setClauses whereClauses orderByClauses limitClause) =
+  let (ret, SideData fromClauses setClauses whereClauses orderByClauses limitClause groupByClause) =
         flip S.evalState initialIdentState $
         W.runWriterT $
         unQ query
@@ -625,6 +641,7 @@ toRawSql mode conn query =
       , makeFrom    conn mode fromClauses
       , makeSet     conn setClauses
       , makeWhere   conn whereClauses
+      , makeGroupBy conn groupByClause
       , makeOrderBy conn orderByClauses
       , makeLimit   conn limitClause
       ]
@@ -701,6 +718,12 @@ makeSet conn os = first ("\nSET " <>) $ uncommas' (map mk os)
 makeWhere :: Connection -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _    NoWhere            = mempty
 makeWhere conn (Where (ERaw _ f)) = first ("\nWHERE " <>) (f conn)
+
+
+makeGroupBy :: Connection -> GroupByClause -> (TLB.Builder, [PersistValue])
+makeGroupBy conn (GroupBy fields) = first ("\nGROUP BY " <>) build
+  where
+    build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f conn) fields
 
 
 makeOrderBy :: Connection -> [OrderByClause] -> (TLB.Builder, [PersistValue])

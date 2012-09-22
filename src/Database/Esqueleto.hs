@@ -18,7 +18,7 @@ module Database.Esqueleto
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    Esqueleto( where_, on, orderBy, asc, desc, limit, offset
+    Esqueleto( where_, on, groupBy, orderBy, asc, desc, limit, offset
              , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, countRows, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)

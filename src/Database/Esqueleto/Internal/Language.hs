@@ -128,6 +128,17 @@ class (Functor query, Applicative query, Monad query) =>
   -- 'LeftOuterJoin'.
   on :: expr (Value Bool) -> query ()
 
+  -- | @GROUP BY@ clause. To group by multiple columns call
+  -- groupBy several times.
+  --
+  -- @
+  -- select $ from \(foo `InnerJoin` bar) -> do
+  --   on (foo ^. FooBar ==. bar ^. BarId)
+  --   groupBy (bar ^. BarName)
+  --   return (bar ^. BarName, countRows)
+  -- @
+  groupBy :: expr (Value a) -> query ()
+
   -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
   orderBy :: [expr OrderBy] -> query ()
 
