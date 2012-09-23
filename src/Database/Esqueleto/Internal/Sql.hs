@@ -155,12 +155,7 @@ instance Monoid WhereClause where
 
 
 -- | A @GROUP BY@ clause.
-data GroupByClause = GroupBy [SomeValue]
-
--- Used to implement heterogeneous list for GroupByClause, may be
--- useful elsewhere.
-data SomeValue where
-  SomeValue :: SqlExpr (Value a) -> SomeValue
+data GroupByClause = GroupBy [SomeValue SqlExpr]
 
 instance Monoid GroupByClause where
   mempty = GroupBy []
@@ -281,7 +276,7 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
-  groupBy field = Q $ W.tell mempty { sdGroupByClause = GroupBy [SomeValue field] }
+  groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -338,6 +333,10 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   field -=. expr = setAux field (\ent -> ent ^. field -. expr)
   field *=. expr = setAux field (\ent -> ent ^. field *. expr)
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
+
+
+instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
+  toSomeValues a = [SomeValue a]
 
 
 fieldName :: (PersistEntity val, PersistField typ)
