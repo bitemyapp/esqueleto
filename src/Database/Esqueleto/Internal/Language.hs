@@ -6,6 +6,7 @@
            , MultiParamTypeClasses
            , TypeFamilies
            , UndecidableInstances
+           , GADTs
  #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -15,6 +16,8 @@ module Database.Esqueleto.Internal.Language
     Esqueleto(..)
   , from
   , Value(..)
+  , SomeValue(..)
+  , ToSomeValues(..)
   , InnerJoin(..)
   , CrossJoin(..)
   , LeftOuterJoin(..)
@@ -128,6 +131,33 @@ class (Functor query, Applicative query, Monad query) =>
   -- 'LeftOuterJoin'.
   on :: expr (Value Bool) -> query ()
 
+  -- | @GROUP BY@ clause. You can enclose multiple columns
+  -- in a tuple.
+  --
+  -- @
+  -- select $ from \\(foo ``InnerJoin`` bar) -> do
+  --   on (foo ^. FooBarId ==. bar ^. BarId)
+  --   groupBy (bar ^. BarId, bar ^. BarName)
+  --   return (bar ^. BarId, bar ^. BarName, countRows)
+  -- @
+  --
+  -- With groupBy you can sort by aggregate functions, like so (we
+  -- used @let@ to restrict the more general `countRows` to
+  -- @SqlExpr (Value Int)@ to avoid ambiguity):
+  --
+  -- @
+  -- r \<- select $ from \\(foo ``InnerJoin`` bar) -> do
+  --   on (foo ^. FooBarId ==. bar ^. BarId)
+  --   groupBy $ bar ^. BarName
+  --   let countRows' = countRows
+  --   orderBy [asc countRows']
+  --   return (bar ^. BarName, countRows')
+  -- forM_ r $ \\((Value name), (Value count)) -> do
+  --   print name
+  --   print (count :: Int)
+  -- @
+  groupBy :: (ToSomeValues expr a) => a -> query ()
+
   -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
   orderBy :: [expr OrderBy] -> query ()
 
@@ -236,6 +266,80 @@ infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `Full
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 data Value a = Value a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+
+
+-- | A wrapper type for for any @expr (Value a)@ for all a.
+data SomeValue expr where
+  SomeValue :: Esqueleto query expr backend => expr (Value a) -> SomeValue expr
+
+-- | A class of things that can be converted into a list of SomeValue. It has
+-- instances for tuples and is the reason why groupBy can take tuples, like
+-- @groupBy (foo ^. FooId, foo ^. FooName, foo ^. FooType)@.
+class ToSomeValues expr a where
+  toSomeValues :: a -> [SomeValue expr]
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         ) => ToSomeValues expr (a, b) where
+  toSomeValues (a,b) = toSomeValues a ++ toSomeValues b
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         ) => ToSomeValues expr (a, b, c) where
+  toSomeValues (a,b,c) = toSomeValues a ++ toSomeValues b ++ toSomeValues c
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         , ToSomeValues expr d
+         ) => ToSomeValues expr (a, b, c, d) where
+  toSomeValues (a,b,c,d) = toSomeValues a ++ toSomeValues b ++ toSomeValues c ++
+    toSomeValues d
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         , ToSomeValues expr d
+         , ToSomeValues expr e
+         ) => ToSomeValues expr (a, b, c, d, e) where
+  toSomeValues (a,b,c,d,e) = toSomeValues a ++ toSomeValues b ++
+    toSomeValues c ++ toSomeValues d ++ toSomeValues e
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         , ToSomeValues expr d
+         , ToSomeValues expr e
+         , ToSomeValues expr f
+         ) => ToSomeValues expr (a, b, c, d, e, f) where
+  toSomeValues (a,b,c,d,e,f) = toSomeValues a ++ toSomeValues b ++
+    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         , ToSomeValues expr d
+         , ToSomeValues expr e
+         , ToSomeValues expr f
+         , ToSomeValues expr g
+         ) => ToSomeValues expr (a, b, c, d, e, f, g) where
+  toSomeValues (a,b,c,d,e,f,g) = toSomeValues a ++ toSomeValues b ++
+    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f ++
+    toSomeValues g
+
+instance ( ToSomeValues expr a
+         , ToSomeValues expr b
+         , ToSomeValues expr c
+         , ToSomeValues expr d
+         , ToSomeValues expr e
+         , ToSomeValues expr f
+         , ToSomeValues expr g
+         , ToSomeValues expr h
+         ) => ToSomeValues expr (a, b, c, d, e, f, g, h) where
+  toSomeValues (a,b,c,d,e,f,g,h) = toSomeValues a ++ toSomeValues b ++
+    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f ++
+    toSomeValues g ++ toSomeValues h
 
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).

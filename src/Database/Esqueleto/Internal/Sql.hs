@@ -93,14 +93,15 @@ type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlPersist)
 data SideData = SideData { sdFromClause    :: ![FromClause]
                          , sdSetClause     :: ![SetClause]
                          , sdWhereClause   :: !WhereClause
+                         , sdGroupByClause :: !GroupByClause
                          , sdOrderByClause :: ![OrderByClause]
                          , sdLimitClause   :: !LimitClause
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty
-  SideData f s w o l `mappend` SideData f' s' w' o' l' =
-    SideData (f <> f') (s <> s') (w <> w') (o <> o') (l <> l')
+  mempty = SideData mempty mempty mempty mempty mempty mempty
+  SideData f s w o l g `mappend` SideData f' s' w' o' l' g' =
+    SideData (f <> f') (s <> s') (w <> w') (o <> o') (l <> l') (g <> g')
 
 
 -- | A part of a @FROM@ clause.
@@ -151,6 +152,14 @@ instance Monoid WhereClause where
   NoWhere  `mappend` w        = w
   w        `mappend` NoWhere  = w
   Where e1 `mappend` Where e2 = Where (e1 &&. e2)
+
+
+-- | A @GROUP BY@ clause.
+newtype GroupByClause = GroupBy [SomeValue SqlExpr]
+
+instance Monoid GroupByClause where
+  mempty = GroupBy []
+  GroupBy fs `mappend` GroupBy fs' = GroupBy (fs <> fs')
 
 
 -- | A @ORDER BY@ clause.
@@ -267,6 +276,8 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 
   on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
+  groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
+
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
   desc = EOrderBy DESC
@@ -322,6 +333,10 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   field -=. expr = setAux field (\ent -> ent ^. field -. expr)
   field *=. expr = setAux field (\ent -> ent ^. field *. expr)
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
+
+
+instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
+  toSomeValues a = [SomeValue a]
 
 
 fieldName :: (PersistEntity val, PersistField typ)
@@ -616,7 +631,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- @persistent@.
 toRawSql :: SqlSelect a r => Mode -> Connection -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode conn query =
-  let (ret, SideData fromClauses setClauses whereClauses orderByClauses limitClause) =
+  let (ret, SideData fromClauses setClauses whereClauses groupByClause orderByClauses limitClause) =
         flip S.evalState initialIdentState $
         W.runWriterT $
         unQ query
@@ -625,6 +640,7 @@ toRawSql mode conn query =
       , makeFrom    conn mode fromClauses
       , makeSet     conn setClauses
       , makeWhere   conn whereClauses
+      , makeGroupBy conn groupByClause
       , makeOrderBy conn orderByClauses
       , makeLimit   conn limitClause
       ]
@@ -701,6 +717,13 @@ makeSet conn os = first ("\nSET " <>) $ uncommas' (map mk os)
 makeWhere :: Connection -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _    NoWhere            = mempty
 makeWhere conn (Where (ERaw _ f)) = first ("\nWHERE " <>) (f conn)
+
+
+makeGroupBy :: Connection -> GroupByClause -> (TLB.Builder, [PersistValue])
+makeGroupBy _ (GroupBy []) = (mempty, [])
+makeGroupBy conn (GroupBy fields) = first ("\nGROUP BY " <>) build
+  where
+    build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f conn) fields
 
 
 makeOrderBy :: Connection -> [OrderByClause] -> (TLB.Builder, [PersistValue])
