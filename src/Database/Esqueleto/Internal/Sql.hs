@@ -93,9 +93,9 @@ type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlPersist)
 data SideData = SideData { sdFromClause    :: ![FromClause]
                          , sdSetClause     :: ![SetClause]
                          , sdWhereClause   :: !WhereClause
+                         , sdGroupByClause :: !GroupByClause
                          , sdOrderByClause :: ![OrderByClause]
                          , sdLimitClause   :: !LimitClause
-                         , sdGroupByClause :: !GroupByClause
                          }
 
 instance Monoid SideData where
@@ -155,7 +155,7 @@ instance Monoid WhereClause where
 
 
 -- | A @GROUP BY@ clause.
-data GroupByClause = GroupBy [SomeValue SqlExpr]
+newtype GroupByClause = GroupBy [SomeValue SqlExpr]
 
 instance Monoid GroupByClause where
   mempty = GroupBy []
@@ -631,7 +631,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- @persistent@.
 toRawSql :: SqlSelect a r => Mode -> Connection -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode conn query =
-  let (ret, SideData fromClauses setClauses whereClauses orderByClauses limitClause groupByClause) =
+  let (ret, SideData fromClauses setClauses whereClauses groupByClause orderByClauses limitClause) =
         flip S.evalState initialIdentState $
         W.runWriterT $
         unQ query
