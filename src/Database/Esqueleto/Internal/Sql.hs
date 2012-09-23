@@ -720,6 +720,7 @@ makeWhere conn (Where (ERaw _ f)) = first ("\nWHERE " <>) (f conn)
 
 
 makeGroupBy :: Connection -> GroupByClause -> (TLB.Builder, [PersistValue])
+makeGroupBy _ (GroupBy []) = (mempty, [])
 makeGroupBy conn (GroupBy fields) = first ("\nGROUP BY " <>) build
   where
     build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f conn) fields
