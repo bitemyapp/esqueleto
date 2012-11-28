@@ -85,7 +85,7 @@ test-suite test
     , persistent-template == 1.0.*
     , monad-control
     , monad-logger
-    , fast-logger         == 0.2.*
+    , fast-logger         >= 0.2 && < 0.4
     , transformers-base
     , template-haskell
 
