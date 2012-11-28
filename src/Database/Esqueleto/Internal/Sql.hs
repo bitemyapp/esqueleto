@@ -35,7 +35,7 @@ module Database.Esqueleto.Internal.Sql
   , veryUnsafeCoerceSqlExprValue
   ) where
 
-import Control.Applicative (Applicative(..), (<$>))
+import Control.Applicative (Applicative(..), (<$>), (<$))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
 import Control.Monad ((>=>), ap, MonadPlus(..))
@@ -228,6 +228,7 @@ data SqlExpr a where
   EEntity  :: Ident -> SqlExpr (Entity val)
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
   ERaw     :: NeedParens -> (Connection -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
+  EList    :: SqlExpr (Value a) -> SqlExpr (ValueList a)
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
   ESet     :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
   EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
@@ -324,6 +325,15 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "
 
+  subList_select         = EList . sub_select
+  subList_selectDistinct = EList . sub_selectDistinct
+
+  valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
+                                             , map toPersistValue vals )
+
+  v `in_`   e = unsafeSqlBinOp     " IN " v (veryUnsafeCoerceSqlExprValueList e)
+  v `notIn` e = unsafeSqlBinOp " NOT IN " v (veryUnsafeCoerceSqlExprValueList e)
+
   exists    = unsafeSqlFunction     "EXISTS " . existsHelper
   notExists = unsafeSqlFunction "NOT EXISTS " . existsHelper
 
@@ -341,7 +351,6 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
 instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
 
-
 fieldName :: (PersistEntity val, PersistField typ)
           => Connection -> EntityField val typ -> TLB.Builder
 fieldName conn = fromDBName conn . fieldDB . persistFieldDef
@@ -354,7 +363,7 @@ setAux field mkVal = ESet $ \ent -> unsafeSqlBinOp " = " name (mkVal ent)
   where name = ERaw Never $ \conn -> (fieldName conn field, mempty)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
-sub mode query = ERaw Parens $ \conn -> first parens (toRawSql mode conn query)
+sub mode query = ERaw Parens $ \conn -> toRawSql mode conn query
 
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . escapeName conn
@@ -432,11 +441,17 @@ instance ( UnsafeSqlFunctionArgument a
   toArgList = toArgList . from4
 
 
--- | (Internal) Coerce a type of a 'SqlExpr (Value a)' into
--- another 'SqlExpr (Value b)'.  You should /not/ use this
--- function unless you know what you're doing!
+-- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
+-- 'SqlExpr (Value b)'.  You should /not/ use this function
+-- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
 veryUnsafeCoerceSqlExprValue (ERaw p f) = ERaw p f
+
+
+-- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
+-- a)' to 'SqlExpr (Value a)'.
+veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
+veryUnsafeCoerceSqlExprValueList (EList v) = v
 
 
 ----------------------------------------------------------------------

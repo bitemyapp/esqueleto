@@ -16,6 +16,7 @@ module Database.Esqueleto.Internal.Language
     Esqueleto(..)
   , from
   , Value(..)
+  , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
   , InnerJoin(..)
@@ -173,10 +174,12 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @OFFSET@.  Usually used with 'limit'.
   offset :: Int64 -> query ()
 
-  -- | Execute a subquery @SELECT@ in an expression.
+  -- | Execute a subquery @SELECT@ in an expression.  Returns a
+  -- simple value so should be used only when the @SELECT@ query
+  -- is guaranteed to return just one row.
   sub_select :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
-  -- | Execute a subquery @SELECT DISTINCT@ in an expression.
+  -- | Same as 'sub_select' but using @SELECT DISTINCT@.
   sub_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
   -- | Project a field of an entity.
@@ -240,6 +243,22 @@ class (Functor query, Applicative query, Monad query) =>
   -- Supported by SQLite and PostgreSQL.
   (++.) :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
 
+  -- | Execute a subquery @SELECT@ in an expression.  Returns a
+  -- list of values.
+  subList_select :: PersistField a => query (expr (Value a)) -> expr (ValueList a)
+
+  -- | Same as 'sublist_select' but using @SELECT DISTINCT@.
+  subList_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (ValueList a)
+
+  -- | Lift a list of constant value from Haskell-land to the query.
+  valList :: PersistField typ => [typ] -> expr (ValueList typ)
+
+  -- | @IN@ operator.
+  in_ :: PersistField typ => expr (Value typ) -> expr (ValueList typ) -> expr (Value Bool)
+
+  -- | @NOT IN@ operator.
+  notIn :: PersistField typ => expr (Value typ) -> expr (ValueList typ) -> expr (Value Bool)
+
   -- | @EXISTS@ operator.  For example:
   --
   -- @
@@ -280,6 +299,13 @@ infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `Full
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 data Value a = Value a deriving (Eq, Ord, Show, Typeable)
+-- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+
+
+-- | A list of single values.  There's a limited set of funcitons
+-- able to work with this data type (such as 'subList_select',
+-- 'valList', 'in_' and 'exists').
+data ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
 
 

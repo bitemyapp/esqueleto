@@ -24,10 +24,12 @@ module Database.Esqueleto
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
              , like, (%), concat_, (++.)
-             , exists, notExists
+             , subList_select, subList_selectDistinct, valList
+             , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , Value(..)
+  , ValueList(..)
   , OrderBy
     -- ** Joins
   , InnerJoin(..)
