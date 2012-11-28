@@ -24,6 +24,7 @@ module Database.Esqueleto
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
              , like, (%), concat_, (++.)
+             , exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , Value(..)

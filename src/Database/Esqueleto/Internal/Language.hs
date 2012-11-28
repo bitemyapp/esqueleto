@@ -240,6 +240,21 @@ class (Functor query, Applicative query, Monad query) =>
   -- Supported by SQLite and PostgreSQL.
   (++.) :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
 
+  -- | @EXISTS@ operator.  For example:
+  --
+  -- @
+  -- select $
+  -- from $ \person -> do
+  -- where_ $ exists $
+  --          from $ \post -> do
+  --          where_ (post ^. BlogPostAuthorId ==. person ^. PersonId)
+  -- return person
+  -- @
+  exists :: query () -> expr (Value Bool)
+
+  -- | @NOT EXISTS@ operator.
+  notExists :: query () -> expr (Value Bool)
+
   -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
   -- a type error to use this function on a @SELECT@, it will
   -- most certainly result in a runtime error.

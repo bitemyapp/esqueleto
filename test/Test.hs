@@ -463,6 +463,38 @@ main = do
                                   , Entity p3k p3 { personAge = Just 7 }
                                   , Entity p2k p2 { personAge = Just 0 } ]
 
+    describe "lists of values" $ do
+      it "EXISTS works for subList_select" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          _ <- insert (BlogPost "" p1k)
+          _ <- insert (BlogPost "" p3k)
+          ret <- select $
+                 from $ \p -> do
+                 where_ $ exists $
+                          from $ \bp -> do
+                          where_ (bp ^. BlogPostAuthorId ==. p ^. PersonId)
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p1k p1
+                                  , Entity p3k p3 ]
+
+      it "EXISTS works for subList_select" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          _ <- insert (BlogPost "" p1k)
+          _ <- insert (BlogPost "" p3k)
+          ret <- select $
+                 from $ \p -> do
+                 where_ $ notExists $
+                          from $ \bp -> do
+                          where_ (bp ^. BlogPostAuthorId ==. p ^. PersonId)
+                 return p
+          liftIO $ ret `shouldBe` [ Entity p2k p2 ]
+
 
 ----------------------------------------------------------------------
 

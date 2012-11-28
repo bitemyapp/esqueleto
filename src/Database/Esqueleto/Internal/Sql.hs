@@ -324,6 +324,9 @@ instance Esqueleto SqlQuery SqlExpr SqlPersist where
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "
 
+  exists    = unsafeSqlFunction     "EXISTS " . existsHelper
+  notExists = unsafeSqlFunction "NOT EXISTS " . existsHelper
+
   set ent upds = Q $ W.tell mempty { sdSetClause = map apply upds }
     where
       apply (ESet f) = SetClause (f ent)
@@ -355,6 +358,12 @@ sub mode query = ERaw Parens $ \conn -> first parens (toRawSql mode conn query)
 
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . escapeName conn
+
+existsHelper :: SqlQuery () -> SqlExpr (Value a)
+existsHelper =
+  ERaw Parens .
+  flip (toRawSql SELECT) .
+  (>> return (val True :: SqlExpr (Value Bool)))
 
 
 ----------------------------------------------------------------------
