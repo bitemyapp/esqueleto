@@ -263,9 +263,9 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \person -> do
+  -- from $ \\person -> do
   -- where_ $ exists $
-  --          from $ \post -> do
+  --          from $ \\post -> do
   --          where_ (post ^. BlogPostAuthorId ==. person ^. PersonId)
   -- return person
   -- @
