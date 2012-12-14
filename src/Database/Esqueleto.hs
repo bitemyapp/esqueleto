@@ -50,6 +50,9 @@ module Database.Esqueleto
   , delete
   , update
 
+    -- * Helpers
+  , valkey
+
     -- * Re-exports
     -- $reexports
   , deleteKey
@@ -57,6 +60,7 @@ module Database.Esqueleto
   , module Database.Persist.Store
   ) where
 
+import Data.Int (Int64)
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
 import Database.Persist.Store hiding (delete)
@@ -289,6 +293,16 @@ import qualified Database.Persist.Store
 --      from $ \\p -> do
 --      where_ (p ^. PersonAge <. just (val 14))
 -- @
+
+
+----------------------------------------------------------------------
+
+
+-- | @valkey i = val (Key (PersistInt64 i))@
+-- (<https://github.com/meteficha/esqueleto/issues/9>).
+valkey :: Esqueleto query expr backend =>
+          Int64 -> expr (Value (Key entity))
+valkey = val . Key . PersistInt64
 
 
 ----------------------------------------------------------------------
