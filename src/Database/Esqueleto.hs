@@ -296,8 +296,10 @@ import qualified Database.Persist.Store
 
 -- | Synonym for 'Database.Persist.Store.delete' that does not
 -- clash with @esqueleto@'s 'delete'.
-deleteKey :: (PersistStore backend m, PersistEntity val)
-          => Key backend val -> backend m ()
+deleteKey :: ( PersistStore m
+             , PersistMonadBackend m ~ PersistEntityBackend val
+             , PersistEntity val )
+          => Key val -> m ()
 deleteKey = Database.Persist.Store.delete
 
 -- $reexports

@@ -49,7 +49,7 @@ import Data.Monoid (Monoid(..), (<>))
 import Database.Persist.EntityDef
 import Database.Persist.GenericSql
 import Database.Persist.GenericSql.Internal (Connection(escapeName, noLimit))
-import Database.Persist.GenericSql.Raw (withStmt, execute)
+import Database.Persist.GenericSql.Raw (execute, SqlBackend, withStmt)
 import Database.Persist.Store hiding (delete)
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
@@ -83,7 +83,7 @@ instance Applicative SqlQuery where
 
 -- | Constraint synonym for @persistent@ entities whose backend
 -- is 'SqlPersist'.
-type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlPersist)
+type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlBackend)
 
 
 ----------------------------------------------------------------------
@@ -242,7 +242,7 @@ parensM Parens = parens
 data OrderByType = ASC | DESC
 
 
-instance Esqueleto SqlQuery SqlExpr SqlPersist where
+instance Esqueleto SqlQuery SqlExpr SqlBackend where
   fromStart = x
     where
       x = do

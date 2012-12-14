@@ -544,8 +544,11 @@ main = do
 ----------------------------------------------------------------------
 
 
-insert' :: (PersistEntity val, PersistStore (PersistEntityBackend val) m)
-        => val -> PersistEntityBackend val m (Entity val)
+insert' :: ( Functor m
+           , PersistStore m
+           , PersistMonadBackend m ~ PersistEntityBackend val
+           , PersistEntity val )
+        => val -> m (Entity val)
 insert' v = flip Entity v <$> insert v
 
 
