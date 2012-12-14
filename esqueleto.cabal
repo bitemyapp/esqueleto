@@ -11,8 +11,6 @@ category:            Database
 build-type:          Simple
 cabal-version:       >=1.8
 description:
-  /This is a preview release./
-  .
   @persistent@ is a library for type-safe data serialization.  It
   has many kinds of backends, such as SQL backends
   (@persistent-mysql@, @persistent-postgresql@,
