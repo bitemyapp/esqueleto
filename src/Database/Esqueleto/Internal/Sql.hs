@@ -762,7 +762,7 @@ makeOrderBy :: Connection -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
 makeOrderBy conn os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
   where
-    mk (EOrderBy t (ERaw _ f)) = first (<> orderByType t) (f conn)
+    mk (EOrderBy t (ERaw p f)) = first ((<> orderByType t) . parensM p) (f conn)
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 

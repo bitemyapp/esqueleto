@@ -385,6 +385,21 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
+      it "works with a sub_select" $
+        run $ do
+          [p1k, p2k, p3k, p4k] <- mapM insert [p1, p2, p3, p4]
+          [b1k, b2k, b3k, b4k] <- mapM (insert . BlogPost "") [p1k, p2k, p3k, p4k]
+          ret <- select $
+                 from $ \b -> do
+                 orderBy [desc $ sub_select $
+                                 from $ \p -> do
+                                 where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                 return (p ^. PersonName)
+                         ]
+                 return (b ^. BlogPostId)
+          liftIO $ ret `shouldBe` (Value <$> [b2k, b3k, b4k, b1k])
+
+
     describe "selectDistinct" $
       it "works on a simple example" $
         run $ do
