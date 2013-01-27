@@ -229,6 +229,7 @@ data SqlExpr a where
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
   ERaw     :: NeedParens -> (Connection -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
   EList    :: SqlExpr (Value a) -> SqlExpr (ValueList a)
+  EEmptyList :: SqlExpr (ValueList a)
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
   ESet     :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
   EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
@@ -299,7 +300,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
 
   val = ERaw Never . const . (,) "?" . return . toPersistValue
 
-  isNothing (ERaw p f) = ERaw Never $ first ((<> " IS NULL") . parensM p) . f
+  isNothing (ERaw p f) = ERaw Parens $ first ((<> " IS NULL") . parensM p) . f
   just (ERaw p f) = ERaw p f
   nothing   = unsafeSqlValue "NULL"
   countRows = unsafeSqlValue "COUNT(*)"
@@ -328,11 +329,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   subList_select         = EList . sub_select
   subList_selectDistinct = EList . sub_selectDistinct
 
+  valList []   = EEmptyList
   valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
                                              , map toPersistValue vals )
 
-  v `in_`   e = unsafeSqlBinOp     " IN " v (veryUnsafeCoerceSqlExprValueList e)
-  v `notIn` e = unsafeSqlBinOp " NOT IN " v (veryUnsafeCoerceSqlExprValueList e)
+  v `in_`   e = ifNotEmptyList e False $ unsafeSqlBinOp     " IN " v (veryUnsafeCoerceSqlExprValueList e)
+  v `notIn` e = ifNotEmptyList e True  $ unsafeSqlBinOp " NOT IN " v (veryUnsafeCoerceSqlExprValueList e)
 
   exists    = unsafeSqlFunction     "EXISTS " . existsHelper
   notExists = unsafeSqlFunction "NOT EXISTS " . existsHelper
@@ -373,6 +375,10 @@ existsHelper =
   ERaw Parens .
   flip (toRawSql SELECT) .
   (>> return (val True :: SqlExpr (Value Bool)))
+
+ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+ifNotEmptyList EEmptyList b _ = val b
+ifNotEmptyList (EList _)  _ x = x
 
 
 ----------------------------------------------------------------------
@@ -449,9 +455,11 @@ veryUnsafeCoerceSqlExprValue (ERaw p f) = ERaw p f
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
--- a)' to 'SqlExpr (Value a)'.
+-- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList (EList v) = v
+veryUnsafeCoerceSqlExprValueList (EList v)  = v
+veryUnsafeCoerceSqlExprValueList EEmptyList =
+  error "veryUnsafeCoerceSqlExprValueList: empty list."
 
 
 ----------------------------------------------------------------------

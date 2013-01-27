@@ -271,6 +271,16 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p2e ]
 
+      it "works with not_ . isNothing" $
+        run $ do
+          p1e <- insert' p1
+          _   <- insert' p2
+          ret <- select $
+                 from $ \p -> do
+                 where_ $ not_ (isNothing (p ^. PersonAge))
+                 return p
+          liftIO $ ret `shouldBe` [ p1e ]
+
       it "works for a many-to-many implicit join" $
         run $ do
           p1e@(Entity p1k _) <- insert' p1
@@ -475,6 +485,17 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ Entity p1k p1
                                   , Entity p2k p2 ]
+
+      it "IN works for valList (null list)" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          ret <- select $
+                 from $ \p -> do
+                 where_ (p ^. PersonName `in_` valList [])
+                 return p
+          liftIO $ ret `shouldBe` []
 
       it "IN works for subList_select" $
         run $ do
