@@ -48,7 +48,9 @@ module Database.Esqueleto
   , selectSource
   , selectDistinctSource
   , delete
+  , deleteCount
   , update
+  , updateCount
 
     -- * Helpers
   , valkey

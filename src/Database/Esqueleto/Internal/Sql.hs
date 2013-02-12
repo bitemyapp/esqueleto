@@ -20,7 +20,9 @@ module Database.Esqueleto.Internal.Sql
   , selectDistinct
   , selectDistinctSource
   , delete
+  , deleteCount
   , update
+  , updateCount
     -- * The guts
   , unsafeSqlBinOp
   , unsafeSqlValue
@@ -38,7 +40,7 @@ module Database.Esqueleto.Internal.Sql
 import Control.Applicative (Applicative(..), (<$>), (<$))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad ((>=>), ap, MonadPlus(..))
+import Control.Monad ((>=>), ap, void, MonadPlus(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLogger)
 import Control.Monad.Trans.Class (lift)
@@ -49,7 +51,7 @@ import Data.Monoid (Monoid(..), (<>))
 import Database.Persist.EntityDef
 import Database.Persist.GenericSql
 import Database.Persist.GenericSql.Internal (Connection(escapeName, noLimit))
-import Database.Persist.GenericSql.Raw (execute, SqlBackend, withStmt)
+import Database.Persist.GenericSql.Raw (executeCount, SqlBackend, withStmt)
 import Database.Persist.Store hiding (delete)
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
@@ -589,10 +591,10 @@ rawExecute :: ( MonadLogger m
               , MonadResourceBase m )
            => Mode
            -> SqlQuery ()
-           -> SqlPersist m ()
+           -> SqlPersist m Int64
 rawExecute mode query = do
   conn <- SqlPersist R.ask
-  uncurry execute $
+  uncurry executeCount $
     first builderToText $
     toRawSql mode conn query
 
@@ -623,7 +625,15 @@ delete :: ( MonadLogger m
           , MonadResourceBase m )
        => SqlQuery ()
        -> SqlPersist m ()
-delete = rawExecute DELETE
+delete = void . deleteCount
+
+
+-- | Same as 'delete', but returns the number of rows affected.
+deleteCount :: ( MonadLogger m
+               , MonadResourceBase m )
+            => SqlQuery ()
+            -> SqlPersist m Int64
+deleteCount = rawExecute DELETE
 
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
@@ -643,7 +653,16 @@ update :: ( MonadLogger m
           , SqlEntity val )
        => (SqlExpr (Entity val) -> SqlQuery ())
        -> SqlPersist m ()
-update = rawExecute UPDATE . from
+update = void . updateCount
+
+
+-- | Same as 'update', but returns the number of rows affected.
+updateCount :: ( MonadLogger m
+               , MonadResourceBase m
+               , SqlEntity val )
+            => (SqlExpr (Entity val) -> SqlQuery ())
+            -> SqlPersist m Int64
+updateCount = rawExecute UPDATE . from
 
 
 ----------------------------------------------------------------------

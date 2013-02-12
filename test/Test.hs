@@ -434,19 +434,22 @@ main = do
           p1e <- insert' p1
           p2e <- insert' p2
           p3e <- insert' p3
-          ret1 <- select $
-                  from $ \p -> do
-                  orderBy [asc (p ^. PersonName)]
-                  return p
+          let getAll = select $
+                       from $ \p -> do
+                       orderBy [asc (p ^. PersonName)]
+                       return p
+          ret1 <- getAll
           liftIO $ ret1 `shouldBe` [ p1e, p3e, p2e ]
           ()   <- delete $
                   from $ \p ->
                   where_ (p ^. PersonName ==. val (personName p1))
-          ret2 <- select $
-                  from $ \p -> do
-                  orderBy [asc (p ^. PersonName)]
-                  return p
+          ret2 <- getAll
           liftIO $ ret2 `shouldBe` [ p3e, p2e ]
+          n    <- deleteCount $
+                  from $ \p ->
+                  return ((p :: SqlExpr (Entity Person)) `seq` ())
+          ret3 <- getAll
+          liftIO $ (n, ret3) `shouldBe` (2, [])
 
     describe "update" $ do
       it "works on a simple example" $
@@ -459,12 +462,16 @@ main = do
                  set p [ PersonName =. val anon
                        , PersonAge *=. just (val 2) ]
                  where_ (p ^. PersonName !=. val "Mike")
+          n   <- updateCount $ \p -> do
+                 set p [ PersonAge +=. just (val 1) ]
+                 where_ (p ^. PersonName !=. val "Mike")
           ret <- select $
                  from $ \p -> do
                  orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
                  return p
+          liftIO $ n `shouldBe` 2
           liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
-                                  , Entity p1k (Person anon (Just 72))
+                                  , Entity p1k (Person anon (Just 73))
                                   , Entity p3k p3 ]
 
       it "works with a subexpression having COUNT(*)" $
