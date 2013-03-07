@@ -20,7 +20,7 @@ module Database.Esqueleto
     -- * @esqueleto@'s Language
     Esqueleto( where_, on, groupBy, orderBy, asc, desc, limit, offset
              , sub_select, sub_selectDistinct, (^.), (?.)
-             , val, isNothing, just, nothing, countRows, not_
+             , val, isNothing, just, nothing, countRows, count, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
              , like, (%), concat_, (++.)

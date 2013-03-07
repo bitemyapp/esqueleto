@@ -306,6 +306,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   just (ERaw p f) = ERaw p f
   nothing   = unsafeSqlValue "NULL"
   countRows = unsafeSqlValue "COUNT(*)"
+  count (ERaw _ f) = ERaw Never $ \conn -> let (b, _vals) = f conn
+                                           in ("COUNT" <> parens b, [])
 
   not_ (ERaw p f) = ERaw Never $ \conn -> let (b, vals) = f conn
                                           in ("NOT " <> parensM p b, vals)

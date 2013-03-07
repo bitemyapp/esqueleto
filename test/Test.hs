@@ -495,6 +495,24 @@ main = do
                                   , Entity p3k p3 { personAge = Just 7 }
                                   , Entity p2k p2 { personAge = Just 0 } ]
 
+      it "GROUP BY works with COUNT" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          replicateM_ 3 (insert $ BlogPost "" p1k)
+          replicateM_ 7 (insert $ BlogPost "" p3k)
+          ret <- select $
+                 from $ \(p `LeftOuterJoin` b) -> do
+                 on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                 groupBy (p ^. PersonId)
+                 let cnt = count (b ^. BlogPostId)
+                 orderBy [ asc cnt ]
+                 return (p, cnt)
+          liftIO $ ret `shouldBe` [ (Entity p2k p2, Value (0 :: Int))
+                                  , (Entity p1k p1, Value 3)
+                                  , (Entity p3k p3, Value 7) ]
+
     describe "lists of values" $ do
       it "IN works for valList" $
         run $ do
