@@ -207,6 +207,9 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @COUNT(*)@ value.
   countRows :: Num a => expr (Value a)
 
+  -- | @COUNT@.
+  count :: (Num a) => expr (Value typ) -> expr (Value a)
+
   not_ :: expr (Value Bool) -> expr (Value Bool)
 
   (==.) :: PersistField typ => expr (Value typ) -> expr (Value typ) -> expr (Value Bool)
