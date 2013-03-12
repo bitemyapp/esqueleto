@@ -12,23 +12,17 @@
  #-}
 module Main (main) where
 
-import Control.Applicative (Applicative(..), (<$>))
+import Control.Applicative ((<$>))
 import Control.Monad (replicateM_)
-import Control.Monad.Base (MonadBase(..))
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger(..), LogLevel(..))
+import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Database.Esqueleto
 import Database.Persist.Sqlite (withSqliteConn)
 import Database.Persist.TH
-import Language.Haskell.TH (Loc(..))
-import System.IO (stderr)
 import Test.Hspec
 
-import qualified Control.Monad.Trans.Reader as R
 import qualified Data.Conduit as C
-import qualified Data.Text as T
-import qualified System.Log.FastLogger as FL
 
 
 -- Test schema
@@ -618,8 +612,8 @@ type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
 
 
 run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersist (C.ResourceT m) a) -> IO a
-runSilent  act = run_worker act
-runVerbose act = execVerbose $ run_worker act
+runSilent  act = runNoLoggingT     $ run_worker act
+runVerbose act = runStderrLoggingT $ run_worker act
 run =
   if verbose
   then runVerbose
@@ -636,43 +630,3 @@ run_worker =
   withSqliteConn ":memory:" .
   runSqlConn .
   (runMigrationSilent migrateAll >>)
-
-
-newtype Verbose a = Verbose { unVerbose :: R.ReaderT FL.Logger IO a }
-  deriving (Functor, Applicative, Monad, MonadIO, C.MonadUnsafeIO, C.MonadThrow)
-
-instance MonadBase IO Verbose where
-  liftBase = Verbose . liftBase
-
-instance MonadBaseControl IO Verbose where
-  newtype StM Verbose a = StMV { unStMV :: StM (R.ReaderT FL.Logger IO) a }
-  liftBaseWith f = Verbose . liftBaseWith $ \r -> f (fmap StMV . r . unVerbose)
-  restoreM       = Verbose . restoreM . unStMV
-
-instance MonadLogger Verbose where
-  monadLoggerLog loc level msg =
-    Verbose $ do
-      logger <- R.ask
-      liftIO $ FL.loggerPutStr logger $
-        [ FL.LB "["
-        , FL.LS $ case level of
-                    LevelOther t -> T.unpack t
-                    _ -> drop 5 $ show level
-        , FL.LB "] "
-        , FL.toLogStr msg
-        , FL.LB " @("
-        , FL.LS $ (loc_package loc) ++
-               ':' : (loc_module loc) ++
-               ' ' : (loc_filename loc) ++
-               ':' : (show . fst $ loc_start loc) ++
-               ':' : (show . snd $ loc_start loc)
-        , FL.LB ")\n"
-        ]
-
-
-execVerbose :: Verbose a -> IO a
-execVerbose (Verbose act) = do
-  logger <- FL.mkLogger True stderr
-  x <- R.runReaderT act logger
-  FL.loggerFlush logger
-  return x

@@ -82,10 +82,7 @@ test-suite test
     , persistent-sqlite   == 1.1.*
     , persistent-template == 1.1.*
     , monad-control
-    , monad-logger
-    , fast-logger         >= 0.2 && < 0.4
-    , transformers-base
-    , template-haskell
+    , monad-logger        >= 0.3
 
       -- This library
     , esqueleto
