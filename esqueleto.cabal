@@ -78,7 +78,7 @@ test-suite test
       -- Test-only dependencies
     , HUnit
     , QuickCheck
-    , hspec               >= 1.3 && < 1.5
+    , hspec               >= 1.3 && < 1.6
     , persistent-sqlite   == 1.1.*
     , persistent-template == 1.1.*
     , monad-control
