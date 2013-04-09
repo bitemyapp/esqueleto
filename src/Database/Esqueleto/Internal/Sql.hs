@@ -890,7 +890,7 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
   sqlSelectProcessRow _    = Left "SqlSelect (Value a): wrong number of columns."
 
 
--- | You may return tuples (up to 8-tuples) and tuples of tuples
+-- | You may return tuples (up to 16-tuples) and tuples of tuples
 -- from a 'select' query.
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -1065,3 +1065,308 @@ from8 (a,b,c,d,e,f,g,h) = ((a,b),(c,d),(e,f),(g,h))
 
 to8 :: ((a,b),(c,d),(e,f),(g,h)) -> (a,b,c,d,e,f,g,h)
 to8 ((a,b),(c,d),(e,f),(g,h)) = (a,b,c,d,e,f,g,h)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i) (ra, rb, rc, rd, re, rf, rg, rh, ri) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from9
+  sqlSelectProcessRow = fmap to9 . sqlSelectProcessRow
+
+from9 :: (a,b,c,d,e,f,g,h,i) -> ((a,b),(c,d),(e,f),(g,h),i)
+from9 (a,b,c,d,e,f,g,h,i) = ((a,b),(c,d),(e,f),(g,h),i)
+
+to9 :: ((a,b),(c,d),(e,f),(g,h),i) -> (a,b,c,d,e,f,g,h,i)
+to9 ((a,b),(c,d),(e,f),(g,h),i) = (a,b,c,d,e,f,g,h,i)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from10
+  sqlSelectProcessRow = fmap to10 . sqlSelectProcessRow
+
+from10 :: (a,b,c,d,e,f,g,h,i,j) -> ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
+
+to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
+to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)
+
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from11
+  sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
+
+from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+
+to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
+to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      , sqlSelectCols esc l
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from12
+  sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
+
+from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+
+to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
+to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         , SqlSelect m rm
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      , sqlSelectCols esc l
+      , sqlSelectCols esc m
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from13
+  sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
+
+from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+
+to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
+to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         , SqlSelect m rm
+         , SqlSelect n rn
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      , sqlSelectCols esc l
+      , sqlSelectCols esc m
+      , sqlSelectCols esc n
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from14
+  sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
+
+from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+
+to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         , SqlSelect m rm
+         , SqlSelect n rn
+         , SqlSelect o ro
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      , sqlSelectCols esc l
+      , sqlSelectCols esc m
+      , sqlSelectCols esc n
+      , sqlSelectCols esc o
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from15
+  sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
+
+from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+
+to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
+to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         , SqlSelect m rm
+         , SqlSelect n rn
+         , SqlSelect o ro
+         , SqlSelect p rp
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro, rp) where
+  sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) =
+    uncommas'
+      [ sqlSelectCols esc a
+      , sqlSelectCols esc b
+      , sqlSelectCols esc c
+      , sqlSelectCols esc d
+      , sqlSelectCols esc e
+      , sqlSelectCols esc f
+      , sqlSelectCols esc g
+      , sqlSelectCols esc h
+      , sqlSelectCols esc i
+      , sqlSelectCols esc j
+      , sqlSelectCols esc k
+      , sqlSelectCols esc l
+      , sqlSelectCols esc m
+      , sqlSelectCols esc n
+      , sqlSelectCols esc o
+      , sqlSelectCols esc p
+      ]
+  sqlSelectColCount   = sqlSelectColCount . from16
+  sqlSelectProcessRow = fmap to16 . sqlSelectProcessRow
+
+from16 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+
+to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
+to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
