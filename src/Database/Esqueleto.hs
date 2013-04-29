@@ -4,9 +4,29 @@
 -- importing that module you should just import this one:
 --
 -- @
+-- -- For a module using just esqueleto.
 -- import Database.Esqueleto
--- import qualified Database.Persist.Query as OldQuery
 -- @
+--
+-- If you need to use @persistent@'s default support for queries
+-- as well, either import it qualified:
+--
+-- @
+-- -- For a module that mostly uses esqueleto.
+-- import Database.Esqueleto
+-- import qualified Database.Persistent as P
+-- @
+--
+-- or import @esqueleto@ itself qualified:
+--
+-- @
+-- -- For a module uses esqueleto just on some queries.
+-- import Database.Persistent
+-- import qualified Database.Esqueleto as E
+-- @
+--
+-- Other than identifier name clashes, @esqueleto@ does not
+-- conflict with @persistent@ in any way.
 module Database.Esqueleto
   ( -- * Setup
     -- $setup
@@ -58,16 +78,15 @@ module Database.Esqueleto
     -- * Re-exports
     -- $reexports
   , deleteKey
-  , module Database.Persist.GenericSql
-  , module Database.Persist.Store
+  , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
 import Data.Int (Int64)
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
-import Database.Persist.Store hiding (delete)
-import Database.Persist.GenericSql
-import qualified Database.Persist.Store
+import Database.Esqueleto.Internal.PersistentImport
+import qualified Database.Persist
+
 
 -- $setup
 --
@@ -78,7 +97,9 @@ import qualified Database.Persist.Store
 -- (<http://www.yesodweb.com/book/persistent>) to learn how to
 -- define your schema.
 
+
 ----------------------------------------------------------------------
+
 
 -- $introduction
 --
@@ -109,7 +130,9 @@ import qualified Database.Persist.Store
 -- losing too much convenience.  This also means that you may
 -- type-check a query that doesn't work on your DBMS.
 
+
 ----------------------------------------------------------------------
+
 
 -- $gettingstarted
 --
@@ -300,6 +323,27 @@ import qualified Database.Persist.Store
 ----------------------------------------------------------------------
 
 
+-- $reexports
+--
+-- We re-export many symbols from @persistent@ for convenince,
+-- since @esqueleto@ currently does not provide a way of doing
+-- @INSERT@s:
+--
+--  * \"Store functions\" from "Database.Persist".
+--
+--  * Everything from "Database.Persist.Class" except for
+--    @PersistQuery@ and @delete@ (use 'deleteKey' instead).
+--
+--  * Everything from "Database.Persist.Types" except for
+--    @Update@, @SelectOpt@, @BackendSpecificFilter@ and @Filter@.
+--
+--  * Everything from "Database.Persist.Sql" except for
+--    @deleteWhereCount@ and @updateWhereCount@.
+
+
+----------------------------------------------------------------------
+
+
 -- | @valkey i = val (Key (PersistInt64 i))@
 -- (<https://github.com/meteficha/esqueleto/issues/9>).
 valkey :: Esqueleto query expr backend =>
@@ -316,10 +360,4 @@ deleteKey :: ( PersistStore m
              , PersistMonadBackend m ~ PersistEntityBackend val
              , PersistEntity val )
           => Key val -> m ()
-deleteKey = Database.Persist.Store.delete
-
--- $reexports
---
--- We re-export @Database.Persist.Store@ for convenience, since
--- @esqueleto@ currently does not provide a way of doing
--- @INSERT@s.
+deleteKey = Database.Persist.delete

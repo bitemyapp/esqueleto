@@ -30,7 +30,7 @@ module Database.Esqueleto.Internal.Sql
   , UnsafeSqlFunctionArgument
   , rawSelectSource
   , runSource
-  , rawExecute
+  , rawEsqueleto
   , toRawSql
   , Mode(..)
   , SqlSelect
@@ -48,11 +48,8 @@ import Control.Monad.Trans.Resource (MonadResourceBase)
 import Data.Int (Int64)
 import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
-import Database.Persist.EntityDef
-import Database.Persist.GenericSql
-import Database.Persist.GenericSql.Internal (Connection(escapeName, noLimit))
-import Database.Persist.GenericSql.Raw (executeCount, SqlBackend, withStmt)
-import Database.Persist.Store hiding (delete)
+import Data.Proxy (Proxy(..))
+import Database.Esqueleto.Internal.PersistentImport
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
@@ -67,7 +64,7 @@ import qualified Data.Text.Lazy.Builder.Int as TLBI
 import Database.Esqueleto.Internal.Language
 
 
--- | SQL backend for @esqueleto@ using 'SqlPersist'.
+-- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
   Q { unQ :: W.WriterT SideData (S.State IdentState) a }
 
@@ -84,7 +81,7 @@ instance Applicative SqlQuery where
 
 
 -- | Constraint synonym for @persistent@ entities whose backend
--- is 'SqlPersist'.
+-- is 'SqlPersistT'.
 type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlBackend)
 
 
@@ -108,7 +105,7 @@ instance Monoid SideData where
 
 -- | A part of a @FROM@ clause.
 data FromClause =
-    FromStart Ident EntityDef
+    FromStart Ident (EntityDef SqlType)
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
 
@@ -254,8 +251,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
         let ret   = EEntity ident
             from_ = FromStart ident ed
         return (EPreprocessedFrom ret from_)
-      getVal :: SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))) -> a
-      getVal = error "Esqueleto/Sql/fromStart/getVal: never here"
+      getVal :: SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))) -> Proxy a
+      getVal = const Proxy
 
   fromStartMaybe = maybelize <$> fromStart
     where
@@ -372,7 +369,7 @@ sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value 
 sub mode query = ERaw Parens $ \conn -> toRawSql mode conn query
 
 fromDBName :: Connection -> DBName -> TLB.Builder
-fromDBName conn = TLB.fromText . escapeName conn
+fromDBName conn = TLB.fromText . connEscapeName conn
 
 existsHelper :: SqlQuery () -> SqlExpr (Value a)
 existsHelper =
@@ -470,21 +467,21 @@ veryUnsafeCoerceSqlExprValueList EEmptyList =
 
 
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
--- @persistent@'s 'SqlPersist' monad.
+-- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
                    , MonadLogger m
                    , MonadResourceBase m )
                  => Mode
                  -> SqlQuery a
-                 -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+                 -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
 rawSelectSource mode query = src
     where
       src = do
-        conn <- SqlPersist R.ask
+        conn <- SqlPersistT R.ask
         return $ run conn C.$= massage
 
       run conn =
-        uncurry withStmt $
+        uncurry rawQuery $
         first builderToText $
         toRawSql mode conn query
 
@@ -499,17 +496,17 @@ rawSelectSource mode query = src
 
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
--- 'SqlPersist' monad and return a 'C.Source' of rows.
+-- 'SqlPersistT' monad and return a 'C.Source' of rows.
 selectSource :: ( SqlSelect a r
                 , MonadLogger m
                 , MonadResourceBase m )
              => SqlQuery a
-             -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+             -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
 selectSource = rawSelectSource SELECT
 
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
--- 'SqlPersist' monad and return a list of rows.
+-- 'SqlPersistT' monad and return a list of rows.
 --
 -- We've seen that 'from' has some magic about which kinds of
 -- things you may bring into scope.  This 'select' function also
@@ -552,35 +549,35 @@ selectSource = rawSelectSource SELECT
 select :: ( SqlSelect a r
           , MonadLogger m
           , MonadResourceBase m )
-       => SqlQuery a -> SqlPersist m [r]
+       => SqlQuery a -> SqlPersistT m [r]
 select = selectSource >=> runSource
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
--- @persistent@'s 'SqlPersist' monad and return a 'C.Source' of
+-- @persistent@'s 'SqlPersistT' monad and return a 'C.Source' of
 -- rows.
 selectDistinctSource
   :: ( SqlSelect a r
      , MonadLogger m
      , MonadResourceBase m )
   => SqlQuery a
-  -> SqlPersist m (C.Source (C.ResourceT (SqlPersist m)) r)
+  -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
 selectDistinctSource = rawSelectSource SELECT_DISTINCT
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
--- @persistent@'s 'SqlPersist' monad and return a list of rows.
+-- @persistent@'s 'SqlPersistT' monad and return a list of rows.
 selectDistinct :: ( SqlSelect a r
                   , MonadLogger m
                   , MonadResourceBase m )
-               => SqlQuery a -> SqlPersist m [r]
+               => SqlQuery a -> SqlPersistT m [r]
 selectDistinct = selectDistinctSource >=> runSource
 
 
 -- | (Internal) Run a 'C.Source' of rows.
 runSource :: MonadResourceBase m =>
-             C.Source (C.ResourceT (SqlPersist m)) r
-          -> SqlPersist m [r]
+             C.Source (C.ResourceT (SqlPersistT m)) r
+          -> SqlPersistT m [r]
 runSource src = C.runResourceT $ src C.$$ CL.consume
 
 
@@ -588,21 +585,21 @@ runSource src = C.runResourceT $ src C.$$ CL.consume
 
 
 -- | (Internal) Execute an @esqueleto@ statement inside
--- @persistent@'s 'SqlPersist' monad.
-rawExecute :: ( MonadLogger m
+-- @persistent@'s 'SqlPersistT' monad.
+rawEsqueleto :: ( MonadLogger m
               , MonadResourceBase m )
            => Mode
            -> SqlQuery ()
-           -> SqlPersist m Int64
-rawExecute mode query = do
-  conn <- SqlPersist R.ask
-  uncurry executeCount $
+           -> SqlPersistT m Int64
+rawEsqueleto mode query = do
+  conn <- SqlPersistT R.ask
+  uncurry rawExecuteCount $
     first builderToText $
     toRawSql mode conn query
 
 
 -- | Execute an @esqueleto@ @DELETE@ query inside @persistent@'s
--- 'SqlPersist' monad.  Note that currently there are no type
+-- 'SqlPersistT' monad.  Note that currently there are no type
 -- checks for statements that should not appear on a @DELETE@
 -- query.
 --
@@ -626,7 +623,7 @@ rawExecute mode query = do
 delete :: ( MonadLogger m
           , MonadResourceBase m )
        => SqlQuery ()
-       -> SqlPersist m ()
+       -> SqlPersistT m ()
 delete = void . deleteCount
 
 
@@ -634,12 +631,12 @@ delete = void . deleteCount
 deleteCount :: ( MonadLogger m
                , MonadResourceBase m )
             => SqlQuery ()
-            -> SqlPersist m Int64
-deleteCount = rawExecute DELETE
+            -> SqlPersistT m Int64
+deleteCount = rawEsqueleto DELETE
 
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
--- 'SqlPersist' monad.  Note that currently there are no type
+-- 'SqlPersistT' monad.  Note that currently there are no type
 -- checks for statements that should not appear on a @UPDATE@
 -- query.
 --
@@ -654,7 +651,7 @@ update :: ( MonadLogger m
           , MonadResourceBase m
           , SqlEntity val )
        => (SqlExpr (Entity val) -> SqlQuery ())
-       -> SqlPersist m ()
+       -> SqlPersistT m ()
 update = void . updateCount
 
 
@@ -663,8 +660,8 @@ updateCount :: ( MonadLogger m
                , MonadResourceBase m
                , SqlEntity val )
             => (SqlExpr (Entity val) -> SqlQuery ())
-            -> SqlPersist m Int64
-updateCount = rawExecute UPDATE . from
+            -> SqlPersistT m Int64
+updateCount = rawEsqueleto UPDATE . from
 
 
 ----------------------------------------------------------------------
@@ -798,7 +795,7 @@ makeLimit conn (Limit ml      mo)       = (ret, mempty)
     limitTLB =
       case ml of
         Just l  -> "LIMIT " <> TLBI.decimal l
-        Nothing -> TLB.fromText (noLimit conn)
+        Nothing -> TLB.fromText (connNoLimit conn)
 
     offsetTLB =
       case mo of
@@ -822,12 +819,11 @@ parens b = "(" <> (b <> ")")
 class SqlSelect a r | a -> r, r -> a where
   -- | Creates the variable part of the @SELECT@ query and
   -- returns the list of 'PersistValue's that will be given to
-  -- 'withStmt'.
+  -- 'rawQuery'.
   sqlSelectCols :: Connection -> a -> (TLB.Builder, [PersistValue])
 
-  -- | Number of columns that will be consumed.  Must be
-  -- non-strict on the argument.
-  sqlSelectColCount :: a -> Int
+  -- | Number of columns that will be consumed.
+  sqlSelectColCount :: Proxy a -> Int
 
   -- | Transform a row of the result into the data type.
   sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
@@ -856,7 +852,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         -- name of the table (which doesn't allow self-joins, for
         -- example).
         name = useIdent conn ident <> "."
-        ret = let ed = entityDef $ getEntityVal expr
+        ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
   sqlSelectColCount = (+1) . length . entityFields . entityDef . getEntityVal
   sqlSelectProcessRow (idCol:ent) =
@@ -864,8 +860,8 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
            <*> fromPersistValues ent
   sqlSelectProcessRow _ = Left "SqlSelect (Entity a): wrong number of columns."
 
-getEntityVal :: SqlExpr (Entity a) -> a
-getEntityVal = error "Esqueleto/Sql/getEntityVal"
+getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
+getEntityVal = const Proxy
 
 
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
@@ -873,8 +869,8 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
   sqlSelectCols conn (EMaybe ent) = sqlSelectCols conn ent
   sqlSelectColCount = sqlSelectColCount . fromEMaybe
     where
-      fromEMaybe :: SqlExpr (Maybe e) -> SqlExpr e
-      fromEMaybe = error "Esqueleto/Sql/sqlSelectColCount[Maybe Entity]/fromEMaybe"
+      fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
+      fromEMaybe = const Proxy
   sqlSelectProcessRow cols
     | all (== PersistNull) cols = return Nothing
     | otherwise                 = Just <$> sqlSelectProcessRow cols
@@ -900,11 +896,14 @@ instance ( SqlSelect a ra
       [ sqlSelectCols esc a
       , sqlSelectCols esc b
       ]
-  sqlSelectColCount ~(a,b) = sqlSelectColCount a + sqlSelectColCount b
+  sqlSelectColCount = uncurry (+) . (sqlSelectColCount *** sqlSelectColCount) . fromTuple
+    where
+      fromTuple :: Proxy (a,b) -> (Proxy a, Proxy b)
+      fromTuple = const (Proxy, Proxy)
   sqlSelectProcessRow =
     let x = getType processRow
-        getType :: SqlSelect a r => (z -> Either y (r,x)) -> a
-        getType = error "Esqueleto/SqlSelect[(a,b)]/sqlSelectProcessRow/getType"
+        getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
+        getType = const Proxy
 
         colCountFst = sqlSelectColCount x
 
@@ -927,8 +926,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc b
       , sqlSelectCols esc c
       ]
-  sqlSelectColCount   = sqlSelectColCount . from3
+  sqlSelectColCount   = sqlSelectColCount . from3P
   sqlSelectProcessRow = fmap to3 . sqlSelectProcessRow
+
+from3P :: Proxy (a,b,c) -> Proxy ((a,b),c)
+from3P = const Proxy
 
 from3 :: (a,b,c) -> ((a,b),c)
 from3 (a,b,c) = ((a,b),c)
@@ -949,8 +951,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc c
       , sqlSelectCols esc d
       ]
-  sqlSelectColCount   = sqlSelectColCount . from4
+  sqlSelectColCount   = sqlSelectColCount . from4P
   sqlSelectProcessRow = fmap to4 . sqlSelectProcessRow
+
+from4P :: Proxy (a,b,c,d) -> Proxy ((a,b),(c,d))
+from4P = const Proxy
 
 from4 :: (a,b,c,d) -> ((a,b),(c,d))
 from4 (a,b,c,d) = ((a,b),(c,d))
@@ -973,11 +978,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc d
       , sqlSelectCols esc e
       ]
-  sqlSelectColCount   = sqlSelectColCount . from5
+  sqlSelectColCount   = sqlSelectColCount . from5P
   sqlSelectProcessRow = fmap to5 . sqlSelectProcessRow
 
-from5 :: (a,b,c,d,e) -> ((a,b),(c,d),e)
-from5 (a,b,c,d,e) = ((a,b),(c,d),e)
+from5P :: Proxy (a,b,c,d,e) -> Proxy ((a,b),(c,d),e)
+from5P = const Proxy
 
 to5 :: ((a,b),(c,d),e) -> (a,b,c,d,e)
 to5 ((a,b),(c,d),e) = (a,b,c,d,e)
@@ -999,11 +1004,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc e
       , sqlSelectCols esc f
       ]
-  sqlSelectColCount   = sqlSelectColCount . from6
+  sqlSelectColCount   = sqlSelectColCount . from6P
   sqlSelectProcessRow = fmap to6 . sqlSelectProcessRow
 
-from6 :: (a,b,c,d,e,f) -> ((a,b),(c,d),(e,f))
-from6 (a,b,c,d,e,f) = ((a,b),(c,d),(e,f))
+from6P :: Proxy (a,b,c,d,e,f) -> Proxy ((a,b),(c,d),(e,f))
+from6P = const Proxy
 
 to6 :: ((a,b),(c,d),(e,f)) -> (a,b,c,d,e,f)
 to6 ((a,b),(c,d),(e,f)) = (a,b,c,d,e,f)
@@ -1027,11 +1032,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc f
       , sqlSelectCols esc g
       ]
-  sqlSelectColCount   = sqlSelectColCount . from7
+  sqlSelectColCount   = sqlSelectColCount . from7P
   sqlSelectProcessRow = fmap to7 . sqlSelectProcessRow
 
-from7 :: (a,b,c,d,e,f,g) -> ((a,b),(c,d),(e,f),g)
-from7 (a,b,c,d,e,f,g) = ((a,b),(c,d),(e,f),g)
+from7P :: Proxy (a,b,c,d,e,f,g) -> Proxy ((a,b),(c,d),(e,f),g)
+from7P = const Proxy
 
 to7 :: ((a,b),(c,d),(e,f),g) -> (a,b,c,d,e,f,g)
 to7 ((a,b),(c,d),(e,f),g) = (a,b,c,d,e,f,g)
@@ -1057,11 +1062,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc g
       , sqlSelectCols esc h
       ]
-  sqlSelectColCount   = sqlSelectColCount . from8
+  sqlSelectColCount   = sqlSelectColCount . from8P
   sqlSelectProcessRow = fmap to8 . sqlSelectProcessRow
 
-from8 :: (a,b,c,d,e,f,g,h) -> ((a,b),(c,d),(e,f),(g,h))
-from8 (a,b,c,d,e,f,g,h) = ((a,b),(c,d),(e,f),(g,h))
+from8P :: Proxy (a,b,c,d,e,f,g,h) -> Proxy ((a,b),(c,d),(e,f),(g,h))
+from8P = const Proxy
 
 to8 :: ((a,b),(c,d),(e,f),(g,h)) -> (a,b,c,d,e,f,g,h)
 to8 ((a,b),(c,d),(e,f),(g,h)) = (a,b,c,d,e,f,g,h)
@@ -1088,11 +1093,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc h
       , sqlSelectCols esc i
       ]
-  sqlSelectColCount   = sqlSelectColCount . from9
+  sqlSelectColCount   = sqlSelectColCount . from9P
   sqlSelectProcessRow = fmap to9 . sqlSelectProcessRow
 
-from9 :: (a,b,c,d,e,f,g,h,i) -> ((a,b),(c,d),(e,f),(g,h),i)
-from9 (a,b,c,d,e,f,g,h,i) = ((a,b),(c,d),(e,f),(g,h),i)
+from9P :: Proxy (a,b,c,d,e,f,g,h,i) -> Proxy ((a,b),(c,d),(e,f),(g,h),i)
+from9P = const Proxy
 
 to9 :: ((a,b),(c,d),(e,f),(g,h),i) -> (a,b,c,d,e,f,g,h,i)
 to9 ((a,b),(c,d),(e,f),(g,h),i) = (a,b,c,d,e,f,g,h,i)
@@ -1121,11 +1126,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc i
       , sqlSelectCols esc j
       ]
-  sqlSelectColCount   = sqlSelectColCount . from10
+  sqlSelectColCount   = sqlSelectColCount . from10P
   sqlSelectProcessRow = fmap to10 . sqlSelectProcessRow
 
-from10 :: (a,b,c,d,e,f,g,h,i,j) -> ((a,b),(c,d),(e,f),(g,h),(i,j))
-from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10P :: Proxy (a,b,c,d,e,f,g,h,i,j) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10P = const Proxy
 
 to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
 to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)
@@ -1157,11 +1162,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc j
       , sqlSelectCols esc k
       ]
-  sqlSelectColCount   = sqlSelectColCount . from11
+  sqlSelectColCount   = sqlSelectColCount . from11P
   sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
 
-from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
-from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11P = const Proxy
 
 to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
 to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
@@ -1194,11 +1199,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc k
       , sqlSelectCols esc l
       ]
-  sqlSelectColCount   = sqlSelectColCount . from12
+  sqlSelectColCount   = sqlSelectColCount . from12P
   sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
 
-from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
-from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12P = const Proxy
 
 to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
 to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
@@ -1233,11 +1238,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc l
       , sqlSelectCols esc m
       ]
-  sqlSelectColCount   = sqlSelectColCount . from13
+  sqlSelectColCount   = sqlSelectColCount . from13P
   sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
 
-from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
-from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13P = const Proxy
 
 to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
 to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
@@ -1274,11 +1279,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc m
       , sqlSelectCols esc n
       ]
-  sqlSelectColCount   = sqlSelectColCount . from14
+  sqlSelectColCount   = sqlSelectColCount . from14P
   sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
 
-from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
-from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14P = const Proxy
 
 to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
@@ -1317,11 +1322,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc n
       , sqlSelectCols esc o
       ]
-  sqlSelectColCount   = sqlSelectColCount . from15
+  sqlSelectColCount   = sqlSelectColCount . from15P
   sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
 
-from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
-from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15P = const Proxy
 
 to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
 to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
@@ -1362,11 +1367,11 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc o
       , sqlSelectCols esc p
       ]
-  sqlSelectColCount   = sqlSelectColCount . from16
+  sqlSelectColCount   = sqlSelectColCount . from16P
   sqlSelectProcessRow = fmap to16 . sqlSelectProcessRow
 
-from16 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
-from16 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16P = const Proxy
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)

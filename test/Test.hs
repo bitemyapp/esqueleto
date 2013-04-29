@@ -26,7 +26,7 @@ import qualified Data.Conduit as C
 
 
 -- Test schema
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persist|
+share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Person
     name String
     age Int Maybe
@@ -611,7 +611,7 @@ type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
                     , C.MonadUnsafeIO m, C.MonadThrow m )
 
 
-run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersist (C.ResourceT m) a) -> IO a
+run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (C.ResourceT m) a) -> IO a
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
 run =
@@ -624,7 +624,7 @@ verbose :: Bool
 verbose = True
 
 
-run_worker :: RunDbMonad m => SqlPersist (C.ResourceT m) a -> m a
+run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
 run_worker =
   C.runResourceT .
   withSqliteConn ":memory:" .

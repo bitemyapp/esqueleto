@@ -40,8 +40,7 @@ import Control.Exception (Exception)
 import Data.Int (Int64)
 import Data.String (IsString)
 import Data.Typeable (Typeable)
-import Database.Persist.GenericSql
-import Database.Persist.Store
+import Database.Esqueleto.Internal.PersistentImport
 
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
