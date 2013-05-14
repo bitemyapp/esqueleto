@@ -55,6 +55,11 @@ main = do
           ret <- select $ return $ val (3 :: Int)
           liftIO $ ret `shouldBe` [ Value 3 ]
 
+      it "works for a pair of a single value and ()" $
+        run $ do
+          ret <- select $ return (val (3 :: Int), ())
+          liftIO $ ret `shouldBe` [ (Value 3, ()) ]
+
       it "works for a single NULL value" $
         run $ do
           ret <- select $ return $ nothing
