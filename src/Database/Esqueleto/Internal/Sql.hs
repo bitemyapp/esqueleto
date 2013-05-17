@@ -707,13 +707,15 @@ uncommas' = (uncommas *** mconcat) . unzip
 
 
 makeSelect :: SqlSelect a r => Connection -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeSelect conn mode ret = first (s <>) (sqlSelectCols conn ret)
+makeSelect conn mode ret =
+  case mode of
+    SELECT          -> withCols "SELECT "
+    SELECT_DISTINCT -> withCols "SELECT DISTINCT "
+    DELETE          -> plain "DELETE "
+    UPDATE          -> plain "UPDATE "
   where
-    s = case mode of
-          SELECT          -> "SELECT "
-          SELECT_DISTINCT -> "SELECT DISTINCT "
-          DELETE          -> "DELETE"
-          UPDATE          -> "UPDATE "
+    withCols v = first (v <>) (sqlSelectCols conn ret)
+    plain    v = (v, [])
 
 
 makeFrom :: Connection -> Mode -> [FromClause] -> (TLB.Builder, [PersistValue])
@@ -831,8 +833,8 @@ class SqlSelect a r | a -> r, r -> a where
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
 instance SqlSelect () () where
-  sqlSelectCols _ _ = mempty
-  sqlSelectColCount _ = 0
+  sqlSelectCols _ _ = ("1", [])
+  sqlSelectColCount _ = 1
   sqlSelectProcessRow _ = Right ()
 
 
