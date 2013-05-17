@@ -700,7 +700,7 @@ data Mode = SELECT | SELECT_DISTINCT | DELETE | UPDATE
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
-uncommas = mconcat . intersperse ", "
+uncommas = mconcat . intersperse ", " . filter (/= mempty)
 
 uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
