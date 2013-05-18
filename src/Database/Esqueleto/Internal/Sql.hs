@@ -93,14 +93,15 @@ data SideData = SideData { sdFromClause    :: ![FromClause]
                          , sdSetClause     :: ![SetClause]
                          , sdWhereClause   :: !WhereClause
                          , sdGroupByClause :: !GroupByClause
+                         , sdHavingClause  :: !HavingClause
                          , sdOrderByClause :: ![OrderByClause]
                          , sdLimitClause   :: !LimitClause
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty
-  SideData f s w o l g `mappend` SideData f' s' w' o' l' g' =
-    SideData (f <> f') (s <> s') (w <> w') (o <> o') (l <> l') (g <> g')
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty
+  SideData f s w g h o l `mappend` SideData f' s' w' g' h' o' l' =
+    SideData (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l')
 
 
 -- | A part of a @FROM@ clause.
@@ -160,6 +161,8 @@ instance Monoid GroupByClause where
   mempty = GroupBy []
   GroupBy fs `mappend` GroupBy fs' = GroupBy (fs <> fs')
 
+-- | A @HAVING@ cause.
+type HavingClause = WhereClause
 
 -- | A @ORDER BY@ clause.
 type OrderByClause = SqlExpr OrderBy
@@ -278,6 +281,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
   groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
+
+  having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -681,7 +686,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- @persistent@.
 toRawSql :: SqlSelect a r => Mode -> Connection -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode conn query =
-  let (ret, SideData fromClauses setClauses whereClauses groupByClause orderByClauses limitClause) =
+  let (ret, SideData fromClauses setClauses whereClauses groupByClause havingClause orderByClauses limitClause) =
         flip S.evalState initialIdentState $
         W.runWriterT $
         unQ query
@@ -691,6 +696,7 @@ toRawSql mode conn query =
       , makeSet     conn setClauses
       , makeWhere   conn whereClauses
       , makeGroupBy conn groupByClause
+      , makeHaving  conn havingClause
       , makeOrderBy conn orderByClauses
       , makeLimit   conn limitClause
       ]
@@ -777,6 +783,9 @@ makeGroupBy conn (GroupBy fields) = first ("\nGROUP BY " <>) build
   where
     build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f conn) fields
 
+makeHaving :: Connection -> WhereClause -> (TLB.Builder, [PersistValue])
+makeHaving _    NoWhere            = mempty
+makeHaving conn (Where (ERaw _ f)) = first ("\nHAVING " <>) (f conn)
 
 makeOrderBy :: Connection -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
