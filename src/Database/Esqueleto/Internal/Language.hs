@@ -173,6 +173,9 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @OFFSET@.  Usually used with 'limit'.
   offset :: Int64 -> query ()
 
+  -- | @HAVING@.
+  having :: expr (Value Bool) -> query ()
+
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
   -- simple value so should be used only when the @SELECT@ query
   -- is guaranteed to return just one row.
