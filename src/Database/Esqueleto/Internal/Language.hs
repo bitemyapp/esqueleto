@@ -174,6 +174,8 @@ class (Functor query, Applicative query, Monad query) =>
   offset :: Int64 -> query ()
 
   -- | @HAVING@.
+  --
+  -- /Since: 1.2.2/
   having :: expr (Value Bool) -> query ()
 
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
