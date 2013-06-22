@@ -71,6 +71,10 @@ module Database.Esqueleto
   , deleteCount
   , update
   , updateCount
+  , insertSelect
+  , insertSelectDistinct
+  , (<#)
+  , (<&>)
 
     -- * Helpers
   , valkey

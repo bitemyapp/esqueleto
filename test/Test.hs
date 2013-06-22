@@ -9,6 +9,7 @@
            , Rank2Types
            , TemplateHaskell
            , TypeFamilies
+           , ScopedTypeVariables
  #-}
 module Main (main) where
 
@@ -622,6 +623,17 @@ main = do
                           where_ (bp ^. BlogPostAuthorId ==. p ^. PersonId)
                  return p
           liftIO $ ret `shouldBe` [ Entity p2k p2 ]
+
+    describe "inserts by select" $ do
+      it "IN works for insertSelect" $
+        run $ do
+          _ <- insert p1
+          _ <- insert p2
+          _ <- insert p3
+          insertSelect $ from $ \p -> do
+            return $ BlogPost <# val "FakePost" <&> (p ^. PersonId)
+          ret <- select $ from (\(b::(SqlExpr (Entity BlogPost))) -> return countRows)
+          liftIO $ ret `shouldBe` [Value (3::Int)]
 
 
 ----------------------------------------------------------------------
