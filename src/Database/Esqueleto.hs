@@ -71,6 +71,10 @@ module Database.Esqueleto
   , deleteCount
   , update
   , updateCount
+  , insertSelect
+  , insertSelectDistinct
+  , (<#)
+  , (<&>)
 
     -- * Helpers
   , valkey
@@ -318,17 +322,32 @@ import qualified Database.Persist
 --      from $ \\p -> do
 --      where_ (p ^. PersonAge <. just (val 14))
 -- @
-
-
+-- 
+-- The results of queries can also be used for insertions.
+-- In @SQL@, we might write the following, inserting a new blog
+-- post for every user:
+-- 
+-- @
+-- INSERT INTO BlogPost
+-- SELECT ('Group Blog Post', id)
+-- FROM Person
+-- @
+-- 
+-- In @esqueleto@, we may write the same query above as:
+-- 
+-- @
+-- insertSelect $ from $ \p->
+--  return $ BlogPost \<# \"Group Blog Post\" \<&\> (p ^. PersonId)
+-- @
+-- 
+-- Individual insertions can be performed through Persistent's 
+-- 'insert' function, reexported for convenience. 
 ----------------------------------------------------------------------
 
 
 -- $reexports
 --
--- We re-export many symbols from @persistent@ for convenince,
--- since @esqueleto@ currently does not provide a way of doing
--- @INSERT@s:
---
+-- We re-export many symbols from @persistent@ for convenince
 --  * \"Store functions\" from "Database.Persist".
 --
 --  * Everything from "Database.Persist.Class" except for
