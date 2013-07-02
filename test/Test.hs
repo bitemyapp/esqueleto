@@ -265,6 +265,17 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p3e ]
 
+      it "works with sum_" $
+        run $ do
+          _ <- insert' p1
+          _ <- insert' p2
+          _ <- insert' p3
+          _ <- insert' p4
+          ret <- select $
+                 from $ \p->
+                 return $ sum_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value (36 + 17 + 17 :: Int) ]
+
       it "works with isNothing" $
         run $ do
           _   <- insert' p1
