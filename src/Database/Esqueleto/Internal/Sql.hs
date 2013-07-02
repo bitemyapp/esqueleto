@@ -338,7 +338,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   round_   = unsafeSqlFunction "ROUND_"
   ceil_    = unsafeSqlFunction "CEILING"
   floor_   = unsafeSqlFunction "FLOOR"
-  avg_     = unsafeSqlFunction "AGV"
+  avg_     = unsafeSqlFunction "AVG"
   min_     = unsafeSqlFunction "MIN"
   max_     = unsafeSqlFunction "MAX"
 
