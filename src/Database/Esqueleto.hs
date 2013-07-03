@@ -43,7 +43,7 @@ module Database.Esqueleto
              , val, isNothing, just, nothing, countRows, count, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
-             , random_, sum_, round_, ceil_, floor_, avg_, min_, max_
+             , random_, sum_, round_, ceiling_, floor_, avg_, min_, max_
              , like, (%), concat_, (++.)
              , subList_select, subList_selectDistinct, valList
              , in_, notIn, exists, notExists

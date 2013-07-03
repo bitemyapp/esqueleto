@@ -335,8 +335,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
 
   random_  = unsafeSqlValue "RANDOM()"
   sum_     = unsafeSqlFunction "SUM"
-  round_   = unsafeSqlFunction "ROUND_"
-  ceil_    = unsafeSqlFunction "CEILING"
+  round_   = unsafeSqlFunction "ROUND"
+  ceiling_ = unsafeSqlFunction "CEILING"
   floor_   = unsafeSqlFunction "FLOOR"
   avg_     = unsafeSqlFunction "AVG"
   min_     = unsafeSqlFunction "MIN"
