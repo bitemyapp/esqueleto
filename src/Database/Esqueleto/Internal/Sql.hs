@@ -333,6 +333,15 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (/.)  = unsafeSqlBinOp " / "
   (*.)  = unsafeSqlBinOp " * "
 
+  random_  = unsafeSqlValue "RANDOM()"
+  sum_     = unsafeSqlFunction "SUM"
+  round_   = unsafeSqlFunction "ROUND"
+  ceiling_ = unsafeSqlFunction "CEILING"
+  floor_   = unsafeSqlFunction "FLOOR"
+  avg_     = unsafeSqlFunction "AVG"
+  min_     = unsafeSqlFunction "MIN"
+  max_     = unsafeSqlFunction "MAX"
+
   like    = unsafeSqlBinOp    " LIKE "
   (%)     = unsafeSqlValue    "'%'"
   concat_ = unsafeSqlFunction "CONCAT"

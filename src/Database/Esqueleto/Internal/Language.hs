@@ -231,6 +231,16 @@ class (Functor query, Applicative query, Monad query) =>
   (/.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
   (*.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
 
+
+  random_  :: PersistField a => expr (Value a)
+  round_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  ceiling_ :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  floor_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  sum_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  min_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  max_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and

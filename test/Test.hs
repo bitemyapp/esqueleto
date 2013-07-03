@@ -265,6 +265,60 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p3e ]
 
+      it "works with sum_" $
+        run $ do
+          _ <- insert' p1
+          _ <- insert' p2
+          _ <- insert' p3
+          _ <- insert' p4
+          ret <- select $
+                 from $ \p->
+                 return $ sum_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value (36 + 17 + 17 :: Int) ]
+
+      it "works with sum_" $
+        run $ do
+          _ <- insert' p1
+          _ <- insert' p2
+          _ <- insert' p3
+          _ <- insert' p4
+          ret <- select $
+                 from $ \p->
+                 return $ avg_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value ((36 + 17 + 17) / 3 :: Double) ]
+
+      it "works with min_" $
+        run $ do
+          _ <- insert' p1
+          _ <- insert' p2
+          _ <- insert' p3
+          _ <- insert' p4
+          ret <- select $
+                 from $ \p->
+                 return $ min_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value (17 :: Int) ]
+
+      it "works with max_" $
+        run $ do
+          _ <- insert' p1
+          _ <- insert' p2
+          _ <- insert' p3
+          _ <- insert' p4
+          ret <- select $
+                 from $ \p->
+                 return $ max_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value (36 :: Int) ]
+
+      it "works with random_" $
+        run $ do
+          ret <- select $ return (random_ :: SqlExpr (Value Int))
+          return ()
+
+      it "works with round_" $
+        run $ do
+          ret <- select $ return $ round_ (val (16.2 :: Double))
+          liftIO $ ret `shouldBe` [ Value (16 :: Double) ]
+
       it "works with isNothing" $
         run $ do
           _   <- insert' p1
