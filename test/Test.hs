@@ -14,7 +14,7 @@
 module Main (main) where
 
 import Control.Applicative ((<$>))
-import Control.Monad (replicateM_)
+import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
@@ -24,6 +24,7 @@ import Database.Persist.TH
 import Test.Hspec
 
 import qualified Data.Conduit as C
+import qualified Data.Set as S
 
 
 -- Test schema
@@ -457,6 +458,24 @@ main = do
                          ]
                  return (b ^. BlogPostId)
           liftIO $ ret `shouldBe` (Value <$> [b2k, b3k, b4k, b1k])
+
+      it "works with asc random_" $
+        run $ do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          p3e <- insert' p3
+          p4e <- insert' p4
+          rets <-
+            fmap S.fromList $
+            replicateM 11 $
+            select $
+            from $ \p -> do
+            orderBy [asc (random_ :: SqlExpr (Value Double))]
+            return (p ^. PersonId :: SqlExpr (Value PersonId))
+          -- There are 2^4 = 16 possible orderings.  The chance
+          -- of 11 random samplings returning the same ordering
+          -- is 1/2^40, so this test should pass almost everytime.
+          liftIO $ S.size rets `shouldSatisfy` (>2)
 
 
     describe "selectDistinct" $
