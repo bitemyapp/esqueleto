@@ -236,9 +236,9 @@ class (Functor query, Applicative query, Monad query) =>
   round_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
   ceiling_ :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
   floor_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
-  sum_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
-  min_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
-  max_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  sum_     :: (PersistField a) => expr (Value a) -> expr (Value a)
+  min_     :: (PersistField a) => expr (Value a) -> expr (Value a)
+  max_     :: (PersistField a) => expr (Value a) -> expr (Value a)
   avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
 
   -- | @LIKE@ operator.
