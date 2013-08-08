@@ -274,10 +274,10 @@ main = do
           _ <- insert' p4
           ret <- select $
                  from $ \p->
-                 return $ sum_ (p ^. PersonAge)
-          liftIO $ ret `shouldBe` [ Value (36 + 17 + 17 :: Int) ]
+                 return $ joinV $ sum_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
 
-      it "works with sum_" $
+      it "works with avg_" $
         run $ do
           _ <- insert' p1
           _ <- insert' p2
@@ -296,8 +296,8 @@ main = do
           _ <- insert' p4
           ret <- select $
                  from $ \p->
-                 return $ min_ (p ^. PersonAge)
-          liftIO $ ret `shouldBe` [ Value (17 :: Int) ]
+                 return $ joinV $ min_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value $ Just (17 :: Int) ]
 
       it "works with max_" $
         run $ do
@@ -307,8 +307,8 @@ main = do
           _ <- insert' p4
           ret <- select $
                  from $ \p->
-                 return $ max_ (p ^. PersonAge)
-          liftIO $ ret `shouldBe` [ Value (36 :: Int) ]
+                 return $ joinV $ max_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 :: Int) ]
 
       it "works with random_" $
         run $ do

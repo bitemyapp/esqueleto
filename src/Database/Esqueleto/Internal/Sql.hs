@@ -313,6 +313,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   isNothing (ERaw p f) = ERaw Parens $ first ((<> " IS NULL") . parensM p) . f
   just (ERaw p f) = ERaw p f
   nothing   = unsafeSqlValue "NULL"
+  joinV (ERaw p f) = ERaw p f
   countRows = unsafeSqlValue "COUNT(*)"
   count (ERaw _ f) = ERaw Never $ \conn -> let (b, vals) = f conn
                                            in ("COUNT" <> parens b, vals)
@@ -1432,7 +1433,7 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 
 -- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
 (<&>) :: SqlExpr (Insertion (a -> b)) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x-> 
+(EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x->
   let (fb, fv) = f x
       (gb, gv) = g x
   in (fb <> ", " <> gb, fv ++ gv)
