@@ -285,8 +285,8 @@ main = do
           _ <- insert' p4
           ret <- select $
                  from $ \p->
-                 return $ avg_ (p ^. PersonAge)
-          liftIO $ ret `shouldBe` [ Value ((36 + 17 + 17) / 3 :: Double) ]
+                 return $ joinV $ avg_ (p ^. PersonAge)
+          liftIO $ ret `shouldBe` [ Value $ Just ((36 + 17 + 17) / 3 :: Double) ]
 
       it "works with min_" $
         run $ do
