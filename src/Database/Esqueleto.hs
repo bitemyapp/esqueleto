@@ -44,7 +44,7 @@ module Database.Esqueleto
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
              , random_, round_, ceiling_, floor_
-             , min_, max_,_sum_, avg_
+             , min_, max_, sum_, avg_
              , like, (%), concat_, (++.)
              , subList_select, subList_selectDistinct, valList
              , in_, notIn, exists, notExists
