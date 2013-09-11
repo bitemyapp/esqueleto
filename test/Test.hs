@@ -643,7 +643,8 @@ main = do
           ret <- select $
                  from $ \p -> do
                  let subquery =
-                       from $ \bp ->
+                       from $ \bp -> do
+                       orderBy [ asc (bp ^. BlogPostAuthorId) ]
                        return (bp ^. BlogPostAuthorId)
                  where_ (p ^. PersonId `in_` subList_select subquery)
                  return p
