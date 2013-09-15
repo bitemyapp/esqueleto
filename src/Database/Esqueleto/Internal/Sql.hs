@@ -236,33 +236,33 @@ useIdent info (I ident) = fromDBName info $ DBName ident
 
 -- | An expression on the SQL backend.
 data SqlExpr a where
-  -- | An entity, created by 'from' (cf. 'fromStart').
+  -- An entity, created by 'from' (cf. 'fromStart').
   EEntity  :: Ident -> SqlExpr (Entity val)
 
-  -- | Just a tag stating that something is nullable.
+  -- Just a tag stating that something is nullable.
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
 
-  -- | Raw expression: states whether parenthesis are needed
+  -- Raw expression: states whether parenthesis are needed
   -- around this expression, and takes information about the SQL
   -- connection (mainly for escaping names) and returns both an
   -- string ('TLB.Builder') and a list of values to be
   -- interpolated by the SQL backend.
   ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
 
-  -- | 'EList' and 'EEmptyList' are used by list operators.
+  -- 'EList' and 'EEmptyList' are used by list operators.
   EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
   EEmptyList :: SqlExpr (ValueList a)
 
-  -- | A 'SqlExpr' accepted only by 'orderBy'.
+  -- A 'SqlExpr' accepted only by 'orderBy'.
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
 
-  -- | A 'SqlExpr' accepted only by 'set'.
+  -- A 'SqlExpr' accepted only by 'set'.
   ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
 
-  -- | An internal 'SqlExpr' used by the 'from' hack.
+  -- An internal 'SqlExpr' used by the 'from' hack.
   EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
 
-  -- | Used by 'insertSelect'.
+  -- Used by 'insertSelect'.
   EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
 
 data NeedParens = Parens | Never
