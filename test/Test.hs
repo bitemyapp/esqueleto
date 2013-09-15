@@ -804,7 +804,7 @@ run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
 run_worker act =
   C.runResourceT .
 #if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=joao dbname=esqueleto" .
+  withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
 #elif defined (WITH_MYSQL)
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
