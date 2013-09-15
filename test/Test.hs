@@ -10,6 +10,7 @@
            , TemplateHaskell
            , TypeFamilies
            , ScopedTypeVariables
+           , CPP
  #-}
 module Main (main) where
 
@@ -20,11 +21,20 @@ import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Database.Esqueleto
 import Database.Persist.Sqlite (withSqliteConn)
+#if   defined (WITH_POSTGRESQL)
+import Database.Persist.Postgresql (withPostgresqlConn)
+#elif defined (WITH_MYSQL)
+import Database.Persist.MySQL ( withMySQLConn
+                              , connectHost
+                              , connectDatabase
+                              ,connectUser,connectPassword,defaultConnectInfo)
+#endif
 import Database.Persist.TH
 import Test.Hspec
 
 import qualified Data.Conduit as C
 import qualified Data.Set as S
+import qualified Data.List as L
 
 
 -- Test schema
@@ -43,6 +53,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     deriving Eq Show
 |]
 
+-- | this could be achieved with S.fromList, but not all lists
+--   have Ord instances
+sameElements :: Eq a => [a] -> [a] -> Bool
+sameElements l1 l2 = null (l1 L.\\ l2)
 
 main :: IO ()
 main = do
@@ -96,10 +110,10 @@ main = do
           ret <- select $
                  from $ \(person1, person2) ->
                  return (person1, person2)
-          liftIO $ ret `shouldBe` [ (p1e, p1e)
-                                  , (p1e, p2e)
-                                  , (p2e, p1e)
-                                  , (p2e, p2e) ]
+          liftIO $ ret `shouldSatisfy` sameElements [ (p1e, p1e)
+                                                    , (p1e, p2e)
+                                                    , (p2e, p1e)
+                                                    , (p2e, p2e) ]
 
       it "works for a simple projection" $
         run $ do
@@ -118,7 +132,8 @@ main = do
           ret <- select $
                  from $ \(pa, pb) ->
                  return (pa ^. PersonName, pb ^. PersonName)
-          liftIO $ ret `shouldBe` [ (Value (personName p1), Value (personName p1))
+          liftIO $ ret `shouldSatisfy` sameElements
+                                  [ (Value (personName p1), Value (personName p1))
                                   , (Value (personName p1), Value (personName p2))
                                   , (Value (personName p2), Value (personName p1))
                                   , (Value (personName p2), Value (personName p2)) ]
@@ -312,7 +327,11 @@ main = do
 
       it "works with random_" $
         run $ do
+#if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
+          ret <- select $ return (random_ :: SqlExpr (Value Double))
+#else
           ret <- select $ return (random_ :: SqlExpr (Value Int))
+#endif
           return ()
 
       it "works with round_" $
@@ -431,7 +450,13 @@ main = do
                  from $ \p -> do
                  orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
                  return p
+          -- in PostgreSQL nulls are bigger than everything
+#ifdef WITH_POSTGRESQL
+          liftIO $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
+#else
+          -- in SQLite and MySQL, its the reverse
           liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
+#endif
 
       it "works with one ASC and one DESC field" $
         run $ do
@@ -443,7 +468,11 @@ main = do
                  from $ \p -> do
                  orderBy [desc (p ^. PersonAge), asc (p ^. PersonName)]
                  return p
+#ifdef WITH_POSTGRESQL
+          liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
+#else
           liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+#endif
 
       it "works with a sub_select" $
         run $ do
@@ -547,10 +576,27 @@ main = do
                  from $ \p -> do
                  orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
                  return p
+          -- PostgreSQL: nulls are bigger than data, and update returns
+          --             matched rows, not actually changed rows.
+#if   defined(WITH_POSTGRESQL)
+          liftIO $ n `shouldBe` 2
+          liftIO $ ret `shouldBe` [ Entity p1k (Person anon (Just 73))
+                                  , Entity p2k (Person anon Nothing)
+                                  , Entity p3k p3 ]
+          -- MySQL: nulls appear first, and update returns actual number
+          --        of changed rows
+#elif defined(WITH_MYSQL)
+          liftIO $ n `shouldBe` 1
+          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
+                                  , Entity p1k (Person anon (Just 73))
+                                  , Entity p3k p3 ]
+#else
+          -- SQLite: nulls appear first, update returns matched rows.
           liftIO $ n `shouldBe` 2
           liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
                                   , Entity p1k (Person anon (Just 73))
                                   , Entity p3k p3 ]
+#endif
 
       it "works with a subexpression having COUNT(*)" $
         run $ do
@@ -724,6 +770,16 @@ insert' v = flip Entity v <$> insert v
 type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
                     , C.MonadUnsafeIO m, C.MonadThrow m )
 
+#if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
+cleanDB
+  :: (forall m. RunDbMonad m
+  => SqlPersistT (C.ResourceT m) ())
+cleanDB = do
+  delete $ from $ \(blogpost :: SqlExpr (Entity BlogPost))-> return ()
+  delete $ from $ \(follow   :: SqlExpr (Entity Follow))  -> return ()
+  delete $ from $ \(person   :: SqlExpr (Entity Person))  -> return ()
+#endif
+
 
 run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (C.ResourceT m) a) -> IO a
 runSilent  act = runNoLoggingT     $ run_worker act
@@ -739,8 +795,23 @@ verbose = True
 
 
 run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
-run_worker =
+run_worker act =
   C.runResourceT .
+#if defined(WITH_POSTGRESQL)
+  withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
+#elif defined (WITH_MYSQL)
+  withMySQLConn defaultConnectInfo
+    { connectHost     = "localhost"
+    , connectUser     = "test"
+    , connectPassword = "test"
+    , connectDatabase = "test"
+    } .
+#else
   withSqliteConn ":memory:" .
+#endif
   runSqlConn .
-  (runMigrationSilent migrateAll >>)
+#if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
+  (runMigrationSilent migrateAll >>) $ (cleanDB >> act)
+#else
+  (runMigrationSilent migrateAll >>) $ act
+#endif
