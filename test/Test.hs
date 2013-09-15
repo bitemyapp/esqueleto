@@ -27,7 +27,9 @@ import Database.Persist.Postgresql (withPostgresqlConn)
 import Database.Persist.MySQL ( withMySQLConn
                               , connectHost
                               , connectDatabase
-                              ,connectUser,connectPassword,defaultConnectInfo)
+                              , connectUser
+                              , connectPassword
+                              , defaultConnectInfo)
 #endif
 import Database.Persist.TH
 import Test.Hspec
@@ -55,8 +57,8 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
 
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
-sameElements :: Eq a => [a] -> [a] -> Bool
-sameElements l1 l2 = null (l1 L.\\ l2)
+sameElementsAs :: Eq a => [a] -> [a] -> Bool
+sameElementsAs l1 l2 = null (l1 L.\\ l2)
 
 main :: IO ()
 main = do
@@ -110,10 +112,10 @@ main = do
           ret <- select $
                  from $ \(person1, person2) ->
                  return (person1, person2)
-          liftIO $ ret `shouldSatisfy` sameElements [ (p1e, p1e)
-                                                    , (p1e, p2e)
-                                                    , (p2e, p1e)
-                                                    , (p2e, p2e) ]
+          liftIO $ ret `shouldSatisfy` sameElementsAs [ (p1e, p1e)
+                                                      , (p1e, p2e)
+                                                      , (p2e, p1e)
+                                                      , (p2e, p2e) ]
 
       it "works for a simple projection" $
         run $ do
@@ -132,7 +134,7 @@ main = do
           ret <- select $
                  from $ \(pa, pb) ->
                  return (pa ^. PersonName, pb ^. PersonName)
-          liftIO $ ret `shouldSatisfy` sameElements
+          liftIO $ ret `shouldSatisfy` sameElementsAs
                                   [ (Value (personName p1), Value (personName p1))
                                   , (Value (personName p1), Value (personName p2))
                                   , (Value (personName p2), Value (personName p1))
@@ -771,6 +773,10 @@ type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
                     , C.MonadUnsafeIO m, C.MonadThrow m )
 
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
+-- With SQLite and in-memory databases, a separate connection implies a
+-- separate database. With 'actual databases', the data is persistent and
+-- thus must be cleaned after each test.
+-- TODO: there is certainly a better way...
 cleanDB
   :: (forall m. RunDbMonad m
   => SqlPersistT (C.ResourceT m) ())
@@ -798,7 +804,7 @@ run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
 run_worker act =
   C.runResourceT .
 #if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
+  withPostgresqlConn "host=localhost port=5432 user=joao dbname=esqueleto" .
 #elif defined (WITH_MYSQL)
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
