@@ -101,6 +101,37 @@ main = do
                                   , (p2e, p1e)
                                   , (p2e, p2e) ]
 
+      it "works for a self-join via sub_select" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          f1k <- insert (Follow p1k p2k)
+          f2k <- insert (Follow p2k p1k)
+          ret <- select $
+                 from $ \followA -> do
+                 let subquery =
+                       from $ \followB -> do
+                       where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
+                       return $ followB ^. FollowFollower
+                 where_ $ followA ^. FollowFollowed ==. sub_select subquery
+                 return followA
+          liftIO $ length ret `shouldBe` 2
+
+      it "works for a self-join via exists" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          f1k <- insert (Follow p1k p2k)
+          f2k <- insert (Follow p2k p1k)
+          ret <- select $
+                 from $ \followA -> do
+                 where_ $ exists $
+                          from $ \followB ->
+                          where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
+                 return followA
+          liftIO $ length ret `shouldBe` 2
+
+
       it "works for a simple projection" $
         run $ do
           p1k <- insert p1
