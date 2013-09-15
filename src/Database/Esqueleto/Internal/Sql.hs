@@ -392,11 +392,11 @@ sub mode query = ERaw Parens $ \conn -> toRawSql mode pureQuery conn query
 fromDBName :: Connection -> DBName -> TLB.Builder
 fromDBName conn = TLB.fromText . connEscapeName conn
 
-existsHelper :: SqlQuery () -> SqlExpr (Value a)
-existsHelper =
-  ERaw Parens .
-  flip (toRawSql SELECT pureQuery) .
-  (>> return (val True :: SqlExpr (Value Bool)))
+existsHelper :: SqlQuery () -> SqlExpr (Value Bool)
+existsHelper = sub SELECT . (>> return true)
+  where
+    true :: SqlExpr (Value Bool)
+    true = val True
 
 ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 ifNotEmptyList EEmptyList b _ = val b
