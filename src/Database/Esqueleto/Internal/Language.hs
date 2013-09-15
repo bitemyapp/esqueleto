@@ -27,6 +27,7 @@ module Database.Esqueleto.Internal.Language
   , OnClauseWithoutMatchingJoinException(..)
   , OrderBy
   , Update
+  , Insertion
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
@@ -307,6 +308,12 @@ class (Functor query, Applicative query, Monad query) =>
   (*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
   (/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> expr (Value a) -> expr (Update val)
 
+  -- | Apply a 'PersistField' constructor to @expr Value@ arguments.
+  (<#) :: (a -> b) -> expr (Value a) -> expr (Insertion b)
+
+  -- | Apply extra @expr Value@ arguments to a 'PersistField' constructor
+  (<&>) :: expr (Insertion (a -> b)) -> expr (Value a) -> expr (Insertion b)
+
 
 -- Fixity declarations
 infixl 9 ^.
@@ -490,6 +497,10 @@ data OrderBy
 -- | Phantom type for a @SET@ operation on an entity of the given
 -- type (see 'set' and '(=.)').
 data Update typ
+
+
+-- | Phantom type used by 'insertSelect'.
+data Insertion a
 
 
 -- | @FROM@ clause: bring entities into scope.

@@ -25,8 +25,6 @@ module Database.Esqueleto.Internal.Sql
   , updateCount
   , insertSelectDistinct
   , insertSelect
-  , (<#)
-  , (<&>)
     -- * The guts
   , unsafeSqlBinOp
   , unsafeSqlValue
@@ -228,7 +226,6 @@ useIdent conn (I ident) = fromDBName conn $ DBName ident
 
 ----------------------------------------------------------------------
 
-type Insertion = Proxy
 
 -- | An expression on the SQL backend.
 data SqlExpr a where
@@ -389,6 +386,13 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   field -=. expr = setAux field (\ent -> ent ^. field -. expr)
   field *=. expr = setAux field (\ent -> ent ^. field *. expr)
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
+
+  (<#) _ (ERaw _ f) = EInsert Proxy f
+
+  (EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x ->
+    let (fb, fv) = f x
+        (gb, gv) = g x
+    in (fb <> ", " <> gb, fv ++ gv)
 
 
 instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
@@ -893,10 +897,11 @@ class SqlSelect a r | a -> r, r -> a where
 
 -- | You may return an insertion of some PersistEntity
 instance PersistEntity a => SqlSelect (SqlExpr (Insertion a)) (Insertion a) where
-  sqlSelectCols esc (EInsert _ f) = let (b, vals) = f esc
-                                    in (b, vals)
+  sqlSelectCols conn (EInsert _ f) = f conn
   sqlSelectColCount = const 0
-  sqlSelectProcessRow = const (Right Proxy)
+  sqlSelectProcessRow = const (Right (error msg))
+    where
+      msg = "sqlSelectProcessRow/SqlSelect (SqlExpr (Insertion a)) (Insertion a): never here"
 
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
@@ -1446,23 +1451,14 @@ from16P = const Proxy
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 
--- | Apply a 'PersistField' constructor to @SqlExpr Value@ arguments
-(<#) :: (a -> b) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(<#) _ (ERaw _ f) = EInsert Proxy f
 
--- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
-(<&>) :: SqlExpr (Insertion (a -> b)) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x->
-  let (fb, fv) = f x
-      (gb, gv) = g x
-  in (fb <> ", " <> gb, fv ++ gv)
-
--- | Insert a 'PersistField' for every selected value
+-- | Insert a 'PersistField' for every selected value.
 insertSelect :: (MonadLogger m, MonadResourceBase m, SqlSelect (SqlExpr (Insertion a)) r, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
 insertSelect = insertGeneralSelect SELECT
 
--- | Insert a 'PersistField' for every unique selected value
+
+-- | Insert a 'PersistField' for every unique selected value.
 insertSelectDistinct :: (MonadLogger m, MonadResourceBase m, SqlSelect (SqlExpr (Insertion a)) r, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
 insertSelectDistinct = insertGeneralSelect SELECT_DISTINCT
