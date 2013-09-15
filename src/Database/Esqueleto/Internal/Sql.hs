@@ -23,6 +23,10 @@ module Database.Esqueleto.Internal.Sql
   , deleteCount
   , update
   , updateCount
+  , insertSelectDistinct
+  , insertSelect
+  , (<#)
+  , (<&>)
     -- * The guts
   , unsafeSqlBinOp
   , unsafeSqlValue
@@ -35,10 +39,6 @@ module Database.Esqueleto.Internal.Sql
   , Mode(..)
   , SqlSelect
   , veryUnsafeCoerceSqlExprValue
-  , insertSelectDistinct
-  , insertSelect
-  , (<#)
-  , (<&>)
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<$))
