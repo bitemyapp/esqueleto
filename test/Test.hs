@@ -122,8 +122,8 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          f1k <- insert (Follow p1k p2k)
-          f2k <- insert (Follow p2k p1k)
+          _f1k <- insert (Follow p1k p2k)
+          _f2k <- insert (Follow p2k p1k)
           ret <- select $
                  from $ \followA -> do
                  let subquery =
@@ -138,8 +138,8 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          f1k <- insert (Follow p1k p2k)
-          f2k <- insert (Follow p2k p1k)
+          _f1k <- insert (Follow p1k p2k)
+          _f2k <- insert (Follow p2k p1k)
           ret <- select $
                  from $ \followA -> do
                  where_ $ exists $
@@ -368,9 +368,9 @@ main = do
       it "works with random_" $
         run $ do
 #if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
-          ret <- select $ return (random_ :: SqlExpr (Value Double))
+          _ <- select $ return (random_ :: SqlExpr (Value Double))
 #else
-          ret <- select $ return (random_ :: SqlExpr (Value Int))
+          _ <- select $ return (random_ :: SqlExpr (Value Int))
 #endif
           return ()
 
@@ -530,10 +530,10 @@ main = do
 
       it "works with asc random_" $
         run $ do
-          p1e <- insert' p1
-          p2e <- insert' p2
-          p3e <- insert' p3
-          p4e <- insert' p4
+          _p1e <- insert' p1
+          _p2e <- insert' p2
+          _p3e <- insert' p3
+          _p4e <- insert' p4
           rets <-
             fmap S.fromList $
             replicateM 11 $
@@ -680,7 +680,7 @@ main = do
       it "GROUP BY works with HAVING" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           replicateM_ 3 (insert $ BlogPost "" p1k)
           replicateM_ 7 (insert $ BlogPost "" p3k)
@@ -700,7 +700,7 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          p3k <- insert p3
+          _p3k <- insert p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName `in_` valList (personName <$> [p1, p2]))
@@ -710,9 +710,9 @@ main = do
 
       it "IN works for valList (null list)" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
+          _p1k <- insert p1
+          _p2k <- insert p2
+          _p3k <- insert p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName `in_` valList [])
@@ -722,7 +722,7 @@ main = do
       it "IN works for subList_select" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           _ <- insert (BlogPost "" p1k)
           _ <- insert (BlogPost "" p3k)
@@ -756,7 +756,7 @@ main = do
       it "EXISTS works for subList_select" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           _ <- insert (BlogPost "" p1k)
           _ <- insert (BlogPost "" p3k)
@@ -792,7 +792,7 @@ main = do
           _ <- insert p3
           insertSelect $ from $ \p -> do
             return $ BlogPost <# val "FakePost" <&> (p ^. PersonId)
-          ret <- select $ from (\(b::(SqlExpr (Entity BlogPost))) -> return countRows)
+          ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
           liftIO $ ret `shouldBe` [Value (3::Int)]
 
 
