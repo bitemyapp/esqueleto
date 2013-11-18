@@ -38,7 +38,7 @@ module Database.Esqueleto.Internal.Sql
   , IdentState
   , initialIdentState
   , IdentInfo
-  , SqlSelect
+  , SqlSelect(..)
   , veryUnsafeCoerceSqlExprValue
   ) where
 
