@@ -1,5 +1,5 @@
 name:                esqueleto
-version:             1.3.4.2
+version:             2.0.0
 synopsis:            Bare bones, type-safe EDSL for SQL queries on persistent backends.
 homepage:            https://github.com/meteficha/esqueleto
 license:             BSD3
@@ -65,7 +65,7 @@ library
   build-depends:
       base                 >= 4.5    && < 4.7
     , text                 == 0.11.*
-    , persistent           >= 1.2    && < 1.4
+    , persistent           >= 2.0    && < 2.1
     , transformers         >= 0.2
     , unordered-containers >= 0.2
     , tagged               >= 0.2
@@ -91,8 +91,8 @@ test-suite test
     , HUnit
     , QuickCheck
     , hspec               >= 1.3 && < 1.8
-    , persistent-sqlite   >= 1.2 && < 1.4
-    , persistent-template >= 1.2 && < 1.4
+    , persistent-sqlite   >= 2.0 && < 2.1
+    , persistent-template >= 2.0 && < 2.1
     , monad-control
     , monad-logger        >= 0.3
 
@@ -103,7 +103,7 @@ test-suite test
     build-depends:
         postgresql-simple     >= 0.2
       , postgresql-libpq      >= 0.6
-      , persistent-postgresql >= 1.2.0
+      , persistent-postgresql >= 2.0
     
     cpp-options: -DWITH_POSTGRESQL
 
@@ -111,7 +111,7 @@ test-suite test
     build-depends:
         mysql-simple          >= 0.2.2.3
       , mysql                 >= 0.1.1.3
-      , persistent-mysql      >= 1.2.0
+      , persistent-mysql      >= 2.0
 
     cpp-options: -DWITH_MYSQL
 
