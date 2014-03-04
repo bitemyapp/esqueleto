@@ -65,7 +65,6 @@ import qualified Data.HashSet as HS
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
-import qualified Data.Text.Lazy.Builder.Int as TLBI
 
 import Database.Esqueleto.Internal.Language
 
@@ -782,7 +781,7 @@ toRawSql mode (conn, firstIdentState) query =
       , makeGroupBy    info groupByClause
       , makeHaving     info havingClause
       , makeOrderBy    info orderByClauses
-      , makeLimit      info limitClause
+      , makeLimit      info limitClause orderByClauses
       ]
 
 
@@ -894,22 +893,12 @@ makeOrderBy info os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
     orderByType DESC = " DESC"
 
 
-makeLimit :: IdentInfo -> LimitClause -> (TLB.Builder, [PersistValue])
-makeLimit _    (Limit Nothing Nothing)  = mempty
-makeLimit _    (Limit Nothing (Just 0)) = mempty
-makeLimit info (Limit ml      mo)       = (ret, mempty)
-  where
-    ret = TLB.singleton '\n' <> (limitTLB <> offsetTLB)
-
-    limitTLB =
-      case ml of
-        Just l  -> "LIMIT " <> TLBI.decimal l
-        Nothing -> TLB.fromText (connNoLimit $ fst info)
-
-    offsetTLB =
-      case mo of
-        Just o  -> " OFFSET " <> TLBI.decimal o
-        Nothing -> mempty
+makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
+makeLimit (conn,_) (Limit ml mo) orderByClauses =
+  let limitRaw = connLimitOffset conn (v ml, v mo) hasOrderClause "\n"
+      hasOrderClause = not (null orderByClauses)
+      v = maybe 0 fromIntegral
+  in (TLB.fromText limitRaw, mempty)
 
 
 parens :: TLB.Builder -> TLB.Builder
