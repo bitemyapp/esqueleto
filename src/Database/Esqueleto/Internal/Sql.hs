@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds
+           , EmptyDataDecls
            , FlexibleContexts
            , FlexibleInstances
            , FunctionalDependencies
@@ -264,6 +265,10 @@ data SqlExpr a where
 
   -- Used by 'insertSelect'.
   EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
+  EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
+
+-- | Phantom type used to mark a @INSERT INTO@ query.
+data InsertFinal
 
 data NeedParens = Parens | Never
 
@@ -417,7 +422,7 @@ setAux field mkVal = ESet $ \ent -> unsafeSqlBinOp " = " name (mkVal ent)
   where name = ERaw Never $ \info -> (fieldName info field, mempty)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
-sub mode query = ERaw Parens $ \info -> toRawSql mode pureQuery info query
+sub mode query = ERaw Parens $ \info -> toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
 fromDBName (conn, _) = TLB.fromText . connEscapeName conn
@@ -534,7 +539,7 @@ rawSelectSource mode query = src
       run conn =
         uncurry rawQuery $
         first builderToText $
-        toRawSql mode pureQuery (conn, initialIdentState) query
+        toRawSql mode (conn, initialIdentState) query
 
       massage = do
         mrow <- C.await
@@ -638,15 +643,16 @@ runSource src = C.runResourceT $ src C.$$ CL.consume
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawEsqueleto :: ( MonadLogger m
-              , MonadResourceBase m )
+                , MonadResourceBase m
+                , SqlSelect a r )
            => Mode
-           -> SqlQuery ()
+           -> SqlQuery a
            -> SqlPersistT m Int64
 rawEsqueleto mode query = do
   conn <- SqlPersistT R.ask
   uncurry rawExecuteCount $
     first builderToText $
-    toRawSql mode pureQuery (conn, initialIdentState) query
+    toRawSql mode (conn, initialIdentState) query
 
 
 -- | Execute an @esqueleto@ @DELETE@ query inside @persistent@'s
@@ -715,6 +721,25 @@ updateCount :: ( MonadLogger m
 updateCount = rawEsqueleto UPDATE . from
 
 
+-- | Insert a 'PersistField' for every selected value.
+insertSelect :: ( MonadLogger m
+                , MonadResourceBase m
+                , PersistEntity a )
+             => SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
+insertSelect =
+  void . rawEsqueleto (INSERT_INTO SELECT) . fmap EInsertFinal
+
+
+-- | Insert a 'PersistField' for every unique selected value.
+insertSelectDistinct
+  :: ( MonadLogger m
+     , MonadResourceBase m
+     , PersistEntity a )
+  => SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
+insertSelectDistinct =
+  void . rawEsqueleto (INSERT_INTO SELECT_DISTINCT) . fmap EInsertFinal
+
+
 ----------------------------------------------------------------------
 
 
@@ -730,8 +755,8 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- @esqueleto@, instead of manually using this function (which is
 -- possible but tedious), you may just turn on query logging of
 -- @persistent@.
-toRawSql :: SqlSelect a r => Mode -> QueryType a -> IdentInfo -> SqlQuery a -> (TLB.Builder, [PersistValue])
-toRawSql mode qt (conn, firstIdentState) query =
+toRawSql :: SqlSelect a r => Mode -> IdentInfo -> SqlQuery a -> (TLB.Builder, [PersistValue])
+toRawSql mode (conn, firstIdentState) query =
   let ((ret, sd), finalIdentState) =
         flip S.runState firstIdentState $
         W.runWriterT $
@@ -749,36 +774,27 @@ toRawSql mode qt (conn, firstIdentState) query =
       -- appear on the expressions below.
       info = (conn, finalIdentState)
   in mconcat
-      [ makeInsert  qt ret
-      , makeSelect  info mode ret
-      , makeFrom    info mode fromClauses
-      , makeSet     info setClauses
-      , makeWhere   info whereClauses
-      , makeGroupBy info groupByClause
-      , makeHaving  info havingClause
-      , makeOrderBy info orderByClauses
-      , makeLimit   info limitClause
+      [ makeInsertInto info mode ret
+      , makeSelect     info mode ret
+      , makeFrom       info mode fromClauses
+      , makeSet        info setClauses
+      , makeWhere      info whereClauses
+      , makeGroupBy    info groupByClause
+      , makeHaving     info havingClause
+      , makeOrderBy    info orderByClauses
+      , makeLimit      info limitClause
       ]
 
 
 -- | (Internal) Mode of query being converted by 'toRawSql'.
-data Mode = SELECT | SELECT_DISTINCT | DELETE | UPDATE
+data Mode =
+    SELECT
+  | SELECT_DISTINCT
+  | DELETE
+  | UPDATE
+  | INSERT_INTO Mode
+    -- ^ 'Mode' should be either 'SELECT' or 'SELECT_DISTINCT'.
 
-newtype QueryType a = QueryType { unQueryType :: a -> TLB.Builder }
-
-pureQuery :: QueryType a
-pureQuery = QueryType (const mempty)
-
-insertQuery :: PersistEntity a => QueryType (SqlExpr (Insertion a))
-insertQuery = QueryType $ \(EInsert p _)->
-    let def = entityDef p
-        unName = TLB.fromText . unDBName
-        fields = uncommas $ map (unName . fieldDB) (entityFields def)
-        table = unName . entityDB . entityDef $ p
-    in "INSERT INTO " <> table <> parens fields <> "\n"
-
-makeInsert :: QueryType a -> a -> (TLB.Builder, [PersistValue])
-makeInsert q a = (unQueryType q a, [])
 
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = mconcat . intersperse ", " . filter (/= mempty)
@@ -787,14 +803,21 @@ uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
 
 
+makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
+makeInsertInto info (INSERT_INTO _) ret = sqlInsertInto info ret
+makeInsertInto _    _               _   = mempty
+
+
 makeSelect :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeSelect info mode ret =
-  case mode of
-    SELECT          -> withCols "SELECT "
-    SELECT_DISTINCT -> withCols "SELECT DISTINCT "
-    DELETE          -> plain "DELETE "
-    UPDATE          -> plain "UPDATE "
+makeSelect info mode_ ret = process mode_
   where
+    process mode =
+      case mode of
+        SELECT            -> withCols "SELECT "
+        SELECT_DISTINCT   -> withCols "SELECT DISTINCT "
+        DELETE            -> plain "DELETE "
+        UPDATE            -> plain "UPDATE "
+        INSERT_INTO mode' -> process mode'
     withCols v = first (v <>) (sqlSelectCols info ret)
     plain    v = (v, [])
 
@@ -914,14 +937,25 @@ class SqlSelect a r | a -> r, r -> a where
   -- | Transform a row of the result into the data type.
   sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
 
+  -- | Create @INSERT INTO@ clause instead.
+  sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
+  sqlInsertInto = error "Type does not support sqlInsertInto."
 
--- | You may return an insertion of some PersistEntity
-instance PersistEntity a => SqlSelect (SqlExpr (Insertion a)) (Insertion a) where
-  sqlSelectCols info (EInsert _ f) = f info
-  sqlSelectColCount = const 0
+
+-- | @INSERT INTO@ hack.
+instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
+  sqlInsertInto info (EInsertFinal (EInsert p _)) =
+    let fields = uncommas $
+                 map (fromDBName info . fieldDB) $
+                 entityFields $
+                 entityDef p
+        table  = fromDBName info . entityDB . entityDef $ p
+    in ("INSERT INTO " <> table <> parens fields <> "\n", [])
+  sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
+  sqlSelectColCount   = const 0
   sqlSelectProcessRow = const (Right (error msg))
     where
-      msg = "sqlSelectProcessRow/SqlSelect (SqlExpr (Insertion a)) (Insertion a): never here"
+      msg = "sqlSelectProcessRow/SqlSelect/InsertionFinal: never here"
 
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
@@ -1470,22 +1504,3 @@ from16P = const Proxy
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
-
-
--- | Insert a 'PersistField' for every selected value.
-insertSelect :: (MonadLogger m, MonadResourceBase m, SqlSelect (SqlExpr (Insertion a)) r, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertSelect = insertGeneralSelect SELECT
-
-
--- | Insert a 'PersistField' for every unique selected value.
-insertSelectDistinct :: (MonadLogger m, MonadResourceBase m, SqlSelect (SqlExpr (Insertion a)) r, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertSelectDistinct = insertGeneralSelect SELECT_DISTINCT
-
-
-insertGeneralSelect :: (MonadLogger m, MonadResourceBase m, SqlSelect (SqlExpr (Insertion a)) r, PersistEntity a) =>
-  Mode -> SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertGeneralSelect mode query = do
-  conn <- SqlPersistT R.ask
-  uncurry rawExecute $ first builderToText $ toRawSql mode insertQuery (conn, initialIdentState) query
