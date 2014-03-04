@@ -20,7 +20,6 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Database.Esqueleto
-import Database.Persist.Sqlite (withSqliteConn)
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
 #elif defined (WITH_MYSQL)
@@ -30,6 +29,8 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectUser
                               , connectPassword
                               , defaultConnectInfo)
+#else
+import Database.Persist.Sqlite (withSqliteConn)
 #endif
 import Database.Persist.TH
 import Test.Hspec
