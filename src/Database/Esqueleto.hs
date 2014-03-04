@@ -237,7 +237,7 @@ import qualified Database.Persist
 --
 -- Since @age@ is an optional @Person@ field, we use 'just' lift
 -- @val 18 :: SqlExpr (Value Int)@ into @just (val 18) ::
--- SqlExpr (Value (Just Int))@.
+-- SqlExpr (Value (Maybe Int))@.
 --
 -- Implicit joins are represented by tuples.  For example, to get
 -- the list of all blog posts and their authors, we could write:
