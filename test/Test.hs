@@ -323,7 +323,13 @@ main = do
           ret <- select $
                  from $ \p->
                  return $ joinV $ sum_ (p ^. PersonAge)
+#if   defined(WITH_POSTGRESQL)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
+#elif defined(WITH_MYSQL)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Double ) ]
+#else
           liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
+#endif
 
       it "works with avg_" $
         run $ do
