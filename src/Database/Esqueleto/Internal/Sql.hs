@@ -51,7 +51,7 @@ import Control.Monad ((>=>), ap, void, MonadPlus(..))
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger (MonadLogger)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Resource (MonadResourceBase)
+import Control.Monad.Trans.Resource (runResourceT, ResourceT, MonadResourceBase)
 import Data.Int (Int64)
 import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
@@ -543,7 +543,7 @@ rawSelectSource :: ( SqlSelect a r
                    , MonadResourceBase m )
                  => Mode
                  -> SqlQuery a
-                 -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
+                 -> SqlPersistT m (C.Source (ResourceT (SqlPersistT m)) r)
 rawSelectSource mode query = src
     where
       src = do
@@ -571,7 +571,7 @@ selectSource :: ( SqlSelect a r
                 , MonadLogger m
                 , MonadResourceBase m )
              => SqlQuery a
-             -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
+             -> SqlPersistT m (C.Source (ResourceT (SqlPersistT m)) r)
 selectSource = rawSelectSource SELECT
 
 
@@ -631,7 +631,7 @@ selectDistinctSource
      , MonadLogger m
      , MonadResourceBase m )
   => SqlQuery a
-  -> SqlPersistT m (C.Source (C.ResourceT (SqlPersistT m)) r)
+  -> SqlPersistT m (C.Source (ResourceT (SqlPersistT m)) r)
 selectDistinctSource = rawSelectSource SELECT_DISTINCT
 
 
@@ -646,9 +646,9 @@ selectDistinct = selectDistinctSource >=> runSource
 
 -- | (Internal) Run a 'C.Source' of rows.
 runSource :: MonadResourceBase m =>
-             C.Source (C.ResourceT (SqlPersistT m)) r
+             C.Source (ResourceT (SqlPersistT m)) r
           -> SqlPersistT m [r]
-runSource src = C.runResourceT $ src C.$$ CL.consume
+runSource src = runResourceT $ src C.$$ CL.consume
 
 
 ----------------------------------------------------------------------
