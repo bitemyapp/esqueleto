@@ -482,6 +482,8 @@ unsafeSqlFunction name arg =
 
 -- | (Internal) An unsafe SQL function to extract a subfield from a compound
 -- field, e.g. datetime. See 'unsafeSqlBinOp' for warnings.
+--
+-- Since: 1.3.6.
 unsafeSqlExtractSubField :: UnsafeSqlFunctionArgument a =>
                      TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlExtractSubField subField arg =
