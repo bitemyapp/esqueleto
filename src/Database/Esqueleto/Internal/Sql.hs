@@ -30,6 +30,7 @@ module Database.Esqueleto.Internal.Sql
   , unsafeSqlBinOp
   , unsafeSqlValue
   , unsafeSqlFunction
+  , unsafeSqlExtractSubField
   , UnsafeSqlFunctionArgument
   , rawSelectSource
   , runSource
@@ -479,6 +480,17 @@ unsafeSqlFunction name arg =
           uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
     in (name <> parens argsTLB, argsVals)
 
+-- | (Internal) An unsafe SQL function to extract a subfield from a compound
+-- field, e.g. datetime. See 'unsafeSqlBinOp' for warnings.
+unsafeSqlExtractSubField :: UnsafeSqlFunctionArgument a =>
+                     TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlExtractSubField subField arg =
+  ERaw Never $ \info ->
+    let (argsTLB, argsVals) =
+          uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
+    in ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
+
+
 class UnsafeSqlFunctionArgument a where
   toArgList :: a -> [SqlExpr (Value ())]
 instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
@@ -501,6 +513,7 @@ instance ( UnsafeSqlFunctionArgument a
          , UnsafeSqlFunctionArgument d
          ) => UnsafeSqlFunctionArgument (a, b, c, d) where
   toArgList = toArgList . from4
+
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
