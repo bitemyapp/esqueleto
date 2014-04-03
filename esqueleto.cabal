@@ -84,13 +84,14 @@ test-suite test
   build-depends:
       -- Library dependencies used on the tests.  No need to
       -- specify versions since they'll use the same as above.
-      base, persistent, transformers, conduit, text
+      base, persistent, transformers, resourcet, text
 
       -- Test-only dependencies
+    , conduit             >= 1.1
     , containers
     , HUnit
     , QuickCheck
-    , hspec               >= 1.3 && < 1.9
+    , hspec               >= 1.9
     , persistent-sqlite   >= 1.2 && < 1.4
     , persistent-template >= 1.2 && < 1.4
     , monad-control

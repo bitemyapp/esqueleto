@@ -35,7 +35,7 @@ import Database.Persist.Sqlite (withSqliteConn)
 import Database.Persist.TH
 import Test.Hspec
 
-import qualified Data.Conduit as C
+import qualified Control.Monad.Trans.Resource as R
 import qualified Data.Set as S
 import qualified Data.List as L
 
@@ -808,7 +808,7 @@ insert' v = flip Entity v <$> insert v
 
 
 type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
-                    , C.MonadUnsafeIO m, C.MonadThrow m )
+                    , R.MonadThrow m )
 
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
 -- With SQLite and in-memory databases, a separate connection implies a
@@ -817,7 +817,7 @@ type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
 -- TODO: there is certainly a better way...
 cleanDB
   :: (forall m. RunDbMonad m
-  => SqlPersistT (C.ResourceT m) ())
+  => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
   delete $ from $ \(blogpost :: SqlExpr (Entity BlogPost))-> return ()
   delete $ from $ \(follow   :: SqlExpr (Entity Follow))  -> return ()
@@ -825,7 +825,7 @@ cleanDB = do
 #endif
 
 
-run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (C.ResourceT m) a) -> IO a
+run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
 run =
@@ -838,9 +838,9 @@ verbose :: Bool
 verbose = True
 
 
-run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
+run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act =
-  C.runResourceT .
+  R.runResourceT .
 #if defined(WITH_POSTGRESQL)
   withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
 #elif defined (WITH_MYSQL)
