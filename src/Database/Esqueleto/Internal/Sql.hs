@@ -256,6 +256,7 @@ data SqlExpr a where
 
   -- A 'SqlExpr' accepted only by 'orderBy'.
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
+  EOrderRandom :: SqlExpr OrderBy
 
   -- A 'SqlExpr' accepted only by 'set'.
   ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
@@ -321,6 +322,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
   desc = EOrderBy DESC
+
+  rand = EOrderRandom
 
   limit  n = Q $ W.tell mempty { sdLimitClause = Limit (Just n) Nothing  }
   offset n = Q $ W.tell mempty { sdLimitClause = Limit Nothing  (Just n) }
@@ -903,7 +906,9 @@ makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
 makeOrderBy info os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
   where
+    mk :: OrderByClause -> (TLB.Builder, [PersistValue])
     mk (EOrderBy t (ERaw p f)) = first ((<> orderByType t) . parensM p) (f info)
+    mk EOrderRandom = first ((<> "RANDOM()")) mempty
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 
