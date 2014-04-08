@@ -175,6 +175,8 @@ class (Functor query, Applicative query, Monad query) =>
   offset :: Int64 -> query ()
 
   -- | @ORDER BY random()@ clause.
+  --
+  -- /Since: 1.3.10/
   rand :: expr OrderBy
 
   -- | @HAVING@.
