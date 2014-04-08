@@ -174,6 +174,9 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @OFFSET@.  Usually used with 'limit'.
   offset :: Int64 -> query ()
 
+  -- | @ORDER BY random()@ clause.
+  rand :: expr OrderBy
+
   -- | @HAVING@.
   --
   -- /Since: 1.2.2/
