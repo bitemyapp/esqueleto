@@ -795,6 +795,21 @@ main = do
           ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
           liftIO $ ret `shouldBe` [Value (3::Int)]
 
+    describe "rand works" $ do
+      it "returns result in random order" $
+        run $ do
+          _ <- insert p1
+          _ <- insert p2
+          _ <- insert p3
+          _ <- insert p4
+          ret1 <- fmap (map unValue) $ select $ from $ \p -> do
+                    orderBy [rand]
+                    return (p ^. PersonId)
+          ret2 <- fmap (map unValue) $ select $ from $ \p -> do
+                    orderBy [rand]
+                    return (p ^. PersonId)
+
+          liftIO $ (ret1 == ret2) `shouldBe` False
 
 ----------------------------------------------------------------------
 
@@ -859,3 +874,6 @@ run_worker act =
 #else
   (runMigrationSilent migrateAll >>) $ act
 #endif
+
+unValue :: Value a -> a
+unValue (Value a) = a
