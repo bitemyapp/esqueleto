@@ -802,6 +802,10 @@ main = do
           _ <- insert p2
           _ <- insert p3
           _ <- insert p4
+          _ <- insert $ Person "Jane"  Nothing
+          _ <- insert $ Person "Mark"  Nothing
+          _ <- insert $ Person "Sarah" Nothing
+          _ <- insert $ Person "Paul"  Nothing
           ret1 <- fmap (map unValue) $ select $ from $ \p -> do
                     orderBy [rand]
                     return (p ^. PersonId)
