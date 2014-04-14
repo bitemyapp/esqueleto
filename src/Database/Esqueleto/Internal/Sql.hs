@@ -42,6 +42,7 @@ module Database.Esqueleto.Internal.Sql
   , IdentInfo
   , SqlSelect(..)
   , veryUnsafeCoerceSqlExprValue
+  , veryUnsafeCoerceSqlExprValueList
   ) where
 
 import Control.Applicative (Applicative(..), (<$>), (<$))
