@@ -798,14 +798,15 @@ main = do
     describe "rand works" $ do
       it "returns result in random order" $
         run $ do
-          _ <- insert p1
-          _ <- insert p2
-          _ <- insert p3
-          _ <- insert p4
-          _ <- insert $ Person "Jane"  Nothing
-          _ <- insert $ Person "Mark"  Nothing
-          _ <- insert $ Person "Sarah" Nothing
-          _ <- insert $ Person "Paul"  Nothing
+          replicateM_ 20 $ do
+            _ <- insert p1
+            _ <- insert p2
+            _ <- insert p3
+            _ <- insert p4
+            _ <- insert $ Person "Jane"  Nothing
+            _ <- insert $ Person "Mark"  Nothing
+            _ <- insert $ Person "Sarah" Nothing
+            insert $ Person "Paul"  Nothing
           ret1 <- fmap (map unValue) $ select $ from $ \p -> do
                     orderBy [rand]
                     return (p ^. PersonId)
