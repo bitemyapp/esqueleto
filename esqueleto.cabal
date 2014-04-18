@@ -72,7 +72,7 @@ library
 
     , monad-logger
     , conduit
-    , resourcet
+    , resourcet            >= 1.1
   hs-source-dirs: src/
   ghc-options: -Wall
 

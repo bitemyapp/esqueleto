@@ -64,6 +64,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Lazy.Builder.Int as TLBI
+import Data.Acquire (with, allocateAcquire, Acquire)
+import Control.Monad.Trans.Resource (MonadResource)
 
 import Database.Esqueleto.Internal.Language
 
@@ -523,7 +525,7 @@ rawSelectSource :: ( SqlSelect a r
                    , MonadIO m2 )
                  => Mode
                  -> SqlQuery a
-                 -> SqlPersistT m1 (Res.Resource (C.Source m2 r))
+                 -> SqlPersistT m1 (Acquire (C.Source m2 r))
 rawSelectSource mode query =
       do
         conn <- R.ask
@@ -549,13 +551,13 @@ rawSelectSource mode query =
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a 'C.Source' of rows.
 selectSource :: ( SqlSelect a r
-                , C.MonadResource m )
+                , MonadResource m )
              => SqlQuery a
              -> C.Source (SqlPersistT m) r
 selectSource query = do
     src <- lift $ do
         res <- rawSelectSource SELECT query
-        fmap snd $ Res.allocateResource res
+        fmap snd $ allocateAcquire res
     src
 
 
@@ -606,7 +608,7 @@ select :: ( SqlSelect a r
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
-    liftIO $ Res.with res $ flip R.runReaderT conn . runSource
+    liftIO $ with res $ flip R.runReaderT conn . runSource
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
@@ -614,13 +616,13 @@ select query = do
 -- rows.
 selectDistinctSource
   :: ( SqlSelect a r
-     , C.MonadResource m )
+     , MonadResource m )
   => SqlQuery a
   -> C.Source (SqlPersistT m) r
 selectDistinctSource query = do
     src <- lift $ do
         res <- rawSelectSource SELECT_DISTINCT query
-        fmap snd $ Res.allocateResource res
+        fmap snd $ allocateAcquire res
     src
 
 
@@ -632,7 +634,7 @@ selectDistinct :: ( SqlSelect a r
 selectDistinct query = do
     res <- rawSelectSource SELECT_DISTINCT query
     conn <- R.ask
-    liftIO $ Res.with res $ flip R.runReaderT conn . runSource
+    liftIO $ with res $ flip R.runReaderT conn . runSource
 
 
 -- | (Internal) Run a 'C.Source' of rows.
