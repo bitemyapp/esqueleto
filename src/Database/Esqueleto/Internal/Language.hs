@@ -16,6 +16,7 @@ module Database.Esqueleto.Internal.Language
     Esqueleto(..)
   , from
   , Value(..)
+  , unValue
   , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
@@ -335,6 +336,13 @@ infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `Full
 data Value a = Value a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
 -- <https://ghc.haskell.org/trac/ghc/ticket/6124>
+
+
+-- | Unwrap a 'Value'.
+--
+-- /Since: 1.4.1/
+unValue :: Value a -> a
+unValue (Value a) = a
 
 
 -- | A list of single values.  There's a limited set of functions

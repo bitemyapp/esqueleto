@@ -879,6 +879,3 @@ run_worker act =
 #else
   (runMigrationSilent migrateAll >>) $ act
 #endif
-
-unValue :: Value a -> a
-unValue (Value a) = a

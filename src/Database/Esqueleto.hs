@@ -51,6 +51,7 @@ module Database.Esqueleto
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , Value(..)
+  , unValue
   , ValueList(..)
   , OrderBy
     -- ** Joins
