@@ -334,13 +334,15 @@ infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `Full
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 data Value a = Value a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+-- <https://ghc.haskell.org/trac/ghc/ticket/6124>
 
 
--- | A list of single values.  There's a limited set of funcitons
+-- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
 data ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+-- <https://ghc.haskell.org/trac/ghc/ticket/6124>
 
 
 -- | A wrapper type for for any @expr (Value a)@ for all a.
