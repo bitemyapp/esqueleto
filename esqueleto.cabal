@@ -1,6 +1,6 @@
 name:                esqueleto
 version:             1.4.1
-synopsis:            Bare bones, type-safe EDSL for SQL queries on persistent backends.
+synopsis:            Type-safe EDSL for SQL queries on persistent backends.
 homepage:            https://github.com/meteficha/esqueleto
 license:             BSD3
 license-file:        LICENSE
@@ -11,27 +11,26 @@ category:            Database
 build-type:          Simple
 cabal-version:       >=1.8
 description:
-  @persistent@ is a library for type-safe data serialization.  It
-  has many kinds of backends, such as SQL backends
-  (@persistent-mysql@, @persistent-postgresql@,
-  @persistent-sqlite@) and NoSQL backends (@persistent-mongoDB@).
-  .
-  While @persistent@ is a nice library for storing and retrieving
-  records, currently it has a poor interface for SQL backends
-  compared to SQL itself.  For example, it's extremely hard to do
-  a type-safe @JOIN@ on a many-to-one relation, and simply
-  impossible to do any other kinds of @JOIN@s (including for the
-  very common many-to-many relations).  Users have the option of
-  writing raw SQL, but that's error prone and not type-checked.
-  .
   @esqueleto@ is a bare bones, type-safe EDSL for SQL queries
   that works with unmodified @persistent@ SQL backends.  Its
-  language closely resembles SQL, so (a) you don't have to learn
-  new concepts, just new syntax, and (b) it's fairly easy to
+  language closely resembles SQL, so you don't have to learn
+  new concepts, just new syntax, and it's fairly easy to
   predict the generated SQL and optimize it for your backend.
   Most kinds of errors committed when writing SQL are caught as
   compile-time errors---although it is possible to write
   type-checked @esqueleto@ queries that fail at runtime.
+  .
+  @persistent@ is a library for type-safe data serialization.  It
+  has many kinds of backends, such as SQL backends
+  (@persistent-mysql@, @persistent-postgresql@,
+  @persistent-sqlite@) and NoSQL backends (@persistent-mongoDB@).
+  While @persistent@ is a nice library for storing and retrieving
+  records, including with filters, it does not try to support
+  some of the features that are specific to SQL backends.  In
+  particular, @esqueleto@ is the recommended library for
+  type-safe @JOIN@s on @persistent@ SQL backends.  (The
+  alternative is using raw SQL, but that's error prone and does
+  not offer any composability.)
   .
   Currently, @SELECT@s, @UPDATE@s, @INSERT@s and @DELETE@s are supported.
   Not all SQL features are available, but most of them can be easily added
