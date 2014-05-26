@@ -38,7 +38,7 @@ module Database.Esqueleto
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    Esqueleto( where_, on, groupBy, orderBy, asc, desc, limit, offset, having
+    Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset, having
              , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, joinV, countRows, count, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
@@ -51,6 +51,7 @@ module Database.Esqueleto
              , set, (=.), (+=.), (-=.), (*=.), (/=.) )
   , from
   , Value(..)
+  , unValue
   , ValueList(..)
   , OrderBy
     -- ** Joins
@@ -239,7 +240,7 @@ import qualified Database.Persist
 --
 -- Since @age@ is an optional @Person@ field, we use 'just' lift
 -- @val 18 :: SqlExpr (Value Int)@ into @just (val 18) ::
--- SqlExpr (Value (Just Int))@.
+-- SqlExpr (Value (Maybe Int))@.
 --
 -- Implicit joins are represented by tuples.  For example, to get
 -- the list of all blog posts and their authors, we could write:

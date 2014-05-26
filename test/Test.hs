@@ -21,7 +21,6 @@ import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Database.Esqueleto
-import Database.Persist.Sqlite (withSqliteConn)
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
 #elif defined (WITH_MYSQL)
@@ -31,11 +30,13 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectUser
                               , connectPassword
                               , defaultConnectInfo)
+#else
+import Database.Persist.Sqlite (withSqliteConn)
 #endif
 import Database.Persist.TH
 import Test.Hspec
 
-import qualified Data.Conduit as C
+import qualified Control.Monad.Trans.Resource as R
 import qualified Data.Set as S
 import qualified Data.List as L
 
@@ -122,8 +123,8 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          f1k <- insert (Follow p1k p2k)
-          f2k <- insert (Follow p2k p1k)
+          _f1k <- insert (Follow p1k p2k)
+          _f2k <- insert (Follow p2k p1k)
           ret <- select $
                  from $ \followA -> do
                  let subquery =
@@ -138,8 +139,8 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          f1k <- insert (Follow p1k p2k)
-          f2k <- insert (Follow p2k p1k)
+          _f1k <- insert (Follow p1k p2k)
+          _f2k <- insert (Follow p2k p1k)
           ret <- select $
                  from $ \followA -> do
                  where_ $ exists $
@@ -324,7 +325,13 @@ main = do
           ret <- select $
                  from $ \p->
                  return $ joinV $ sum_ (p ^. PersonAge)
+#if   defined(WITH_POSTGRESQL)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
+#elif defined(WITH_MYSQL)
+          liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Double ) ]
+#else
           liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
+#endif
 
       it "works with avg_" $
         run $ do
@@ -362,9 +369,9 @@ main = do
       it "works with random_" $
         run $ do
 #if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
-          ret <- select $ return (random_ :: SqlExpr (Value Double))
+          _ <- select $ return (random_ :: SqlExpr (Value Double))
 #else
-          ret <- select $ return (random_ :: SqlExpr (Value Int))
+          _ <- select $ return (random_ :: SqlExpr (Value Int))
 #endif
           return ()
 
@@ -524,10 +531,10 @@ main = do
 
       it "works with asc random_" $
         run $ do
-          p1e <- insert' p1
-          p2e <- insert' p2
-          p3e <- insert' p3
-          p4e <- insert' p4
+          _p1e <- insert' p1
+          _p2e <- insert' p2
+          _p3e <- insert' p3
+          _p4e <- insert' p4
           rets <-
             fmap S.fromList $
             replicateM 11 $
@@ -674,7 +681,7 @@ main = do
       it "GROUP BY works with HAVING" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           replicateM_ 3 (insert $ BlogPost "" p1k)
           replicateM_ 7 (insert $ BlogPost "" p3k)
@@ -694,7 +701,7 @@ main = do
         run $ do
           p1k <- insert p1
           p2k <- insert p2
-          p3k <- insert p3
+          _p3k <- insert p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName `in_` valList (personName <$> [p1, p2]))
@@ -704,9 +711,9 @@ main = do
 
       it "IN works for valList (null list)" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
+          _p1k <- insert p1
+          _p2k <- insert p2
+          _p3k <- insert p3
           ret <- select $
                  from $ \p -> do
                  where_ (p ^. PersonName `in_` valList [])
@@ -716,7 +723,7 @@ main = do
       it "IN works for subList_select" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           _ <- insert (BlogPost "" p1k)
           _ <- insert (BlogPost "" p3k)
@@ -750,7 +757,7 @@ main = do
       it "EXISTS works for subList_select" $
         run $ do
           p1k <- insert p1
-          p2k <- insert p2
+          _p2k <- insert p2
           p3k <- insert p3
           _ <- insert (BlogPost "" p1k)
           _ <- insert (BlogPost "" p3k)
@@ -786,9 +793,29 @@ main = do
           _ <- insert p3
           insertSelect $ from $ \p -> do
             return $ BlogPost <# val "FakePost" <&> (p ^. PersonId)
-          ret <- select $ from (\(b::(SqlExpr (Entity BlogPost))) -> return countRows)
+          ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
           liftIO $ ret `shouldBe` [Value (3::Int)]
 
+    describe "rand works" $ do
+      it "returns result in random order" $
+        run $ do
+          replicateM_ 20 $ do
+            _ <- insert p1
+            _ <- insert p2
+            _ <- insert p3
+            _ <- insert p4
+            _ <- insert $ Person "Jane"  Nothing
+            _ <- insert $ Person "Mark"  Nothing
+            _ <- insert $ Person "Sarah" Nothing
+            insert $ Person "Paul"  Nothing
+          ret1 <- fmap (map unValue) $ select $ from $ \p -> do
+                    orderBy [rand]
+                    return (p ^. PersonId)
+          ret2 <- fmap (map unValue) $ select $ from $ \p -> do
+                    orderBy [rand]
+                    return (p ^. PersonId)
+
+          liftIO $ (ret1 == ret2) `shouldBe` False
 
 ----------------------------------------------------------------------
 
@@ -802,7 +829,7 @@ insert' v = flip Entity v <$> insert v
 
 
 type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
-                    , C.MonadUnsafeIO m, C.MonadThrow m )
+                    , R.MonadThrow m )
 
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
 -- With SQLite and in-memory databases, a separate connection implies a
@@ -811,7 +838,7 @@ type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
 -- TODO: there is certainly a better way...
 cleanDB
   :: (forall m. RunDbMonad m
-  => SqlPersistT (C.ResourceT m) ())
+  => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
   delete $ from $ \(blogpost :: SqlExpr (Entity BlogPost))-> return ()
   delete $ from $ \(follow   :: SqlExpr (Entity Follow))  -> return ()
@@ -819,7 +846,7 @@ cleanDB = do
 #endif
 
 
-run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (C.ResourceT m) a) -> IO a
+run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
 run =
@@ -832,9 +859,9 @@ verbose :: Bool
 verbose = True
 
 
-run_worker :: RunDbMonad m => SqlPersistT (C.ResourceT m) a -> m a
+run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act =
-  C.runResourceT .
+  R.runResourceT .
 #if defined(WITH_POSTGRESQL)
   withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
 #elif defined (WITH_MYSQL)

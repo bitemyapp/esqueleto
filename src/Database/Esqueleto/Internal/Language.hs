@@ -16,6 +16,7 @@ module Database.Esqueleto.Internal.Language
     Esqueleto(..)
   , from
   , Value(..)
+  , unValue
   , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
@@ -174,6 +175,11 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @OFFSET@.  Usually used with 'limit'.
   offset :: Int64 -> query ()
 
+  -- | @ORDER BY random()@ clause.
+  --
+  -- /Since: 1.3.10/
+  rand :: expr OrderBy
+
   -- | @HAVING@.
   --
   -- /Since: 1.2.2/
@@ -237,12 +243,12 @@ class (Functor query, Applicative query, Monad query) =>
   (*.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
 
 
-  random_  :: PersistField a => expr (Value a)
-  round_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
-  ceiling_ :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
-  floor_   :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value b)
+  random_  :: (PersistField a, Num a) => expr (Value a)
+  round_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
+  ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
+  floor_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
 
-  sum_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
+  sum_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value (Maybe b))
   min_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   max_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value (Maybe b))
@@ -329,13 +335,22 @@ infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `Full
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 data Value a = Value a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+-- <https://ghc.haskell.org/trac/ghc/ticket/6124>
 
 
--- | A list of single values.  There's a limited set of funcitons
+-- | Unwrap a 'Value'.
+--
+-- /Since: 1.4.1/
+unValue :: Value a -> a
+unValue (Value a) = a
+
+
+-- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
 data ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 -- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
+-- <https://ghc.haskell.org/trac/ghc/ticket/6124>
 
 
 -- | A wrapper type for for any @expr (Value a)@ for all a.
