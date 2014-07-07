@@ -81,7 +81,7 @@ module Database.Esqueleto
 
     -- * Helpers
   , valkey
-  , keyE
+  , valJ
 
     -- * Re-exports
     -- $reexports
@@ -377,14 +377,16 @@ valkey :: Esqueleto query expr backend =>
 valkey = val . Key . PersistInt64
 
 
--- | Given a value, lift the Key for that value into the query expression.
-keyE :: Esqueleto query expr backend =>
+-- | @valJ@ is like @val@ but for something that is already a @Value@. The use
+-- case it was written for was, given a @Value@ lift the @Key@ for that @Value@
+-- into the query expression in a type safe way. However, the implementation is
+-- more generic than that so we call it @valJ@.
+-- Its important to note that the input entity and the output entity are
+-- constrained to be the same by the type signature on the function.
+-- (<https://github.com/prowdsponsor/esqueleto/pull/69>)
+valJ :: Esqueleto query expr backend =>
         Value (Key entity) -> expr (Value (Key entity))
-keyE v =
-  valkey $
-    case (unKey . unValue) v of
-      PersistInt64 x -> x
-      _ -> error "Esqueleto.keyE: Impossible!"
+valJ = val . unValue
 
 
 ----------------------------------------------------------------------
