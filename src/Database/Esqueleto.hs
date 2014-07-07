@@ -81,6 +81,7 @@ module Database.Esqueleto
 
     -- * Helpers
   , valkey
+  , keyE
 
     -- * Re-exports
     -- $reexports
@@ -374,6 +375,16 @@ import qualified Database.Persist
 valkey :: Esqueleto query expr backend =>
           Int64 -> expr (Value (Key entity))
 valkey = val . Key . PersistInt64
+
+
+-- | Given a value, lift the Key for that value into the query expression.
+keyE :: Esqueleto query expr backend =>
+        Value (Key entity) -> expr (Value (Key entity))
+keyE v =
+  valkey $
+    case (unKey . unValue) v of
+      PersistInt64 x -> x
+      _ -> error "Esqueleto.keyE: Impossible!"
 
 
 ----------------------------------------------------------------------
