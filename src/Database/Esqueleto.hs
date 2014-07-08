@@ -381,9 +381,12 @@ valkey = val . Key . PersistInt64
 -- case it was written for was, given a @Value@ lift the @Key@ for that @Value@
 -- into the query expression in a type safe way. However, the implementation is
 -- more generic than that so we call it @valJ@.
+--
 -- Its important to note that the input entity and the output entity are
--- constrained to be the same by the type signature on the function.
--- (<https://github.com/prowdsponsor/esqueleto/pull/69>)
+-- constrained to be the same by the type signature on the function
+-- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
+--
+-- /Since: 1.4.2/
 valJ :: Esqueleto query expr backend =>
         Value (Key entity) -> expr (Value (Key entity))
 valJ = val . unValue
