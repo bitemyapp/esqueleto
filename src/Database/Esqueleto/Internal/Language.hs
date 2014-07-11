@@ -253,6 +253,18 @@ class (Functor query, Applicative query, Monad query) =>
   max_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value (Maybe b))
 
+  -- | @COALESCE@ function. Evaluates the arguments in order and
+  -- returns the value of the first non-NULL expression, or NULL
+  -- (Nothing) otherwise. Some RDBMSs (such as SQLite) require
+  -- at least two arguments; please refer to the appropriate
+  -- documentation.
+  coalesce :: PersistField a => [expr (Value (Maybe a))] -> expr (Value (Maybe a))
+
+  -- | Like @coalesce@, but takes a non-nullable expression
+  -- placed at the end of the expression list, which guarantees
+  -- a non-NULL result.
+  coalesceDefault :: PersistField a => expr (Value a) -> [expr (Value (Maybe a))] -> expr (Value a)
+
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
