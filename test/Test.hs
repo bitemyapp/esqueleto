@@ -15,6 +15,7 @@
 module Main (main) where
 
 import Control.Applicative ((<$>))
+import Control.Exception (IOException)
 import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
@@ -45,6 +46,8 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Person
     name String
     age Int Maybe
+    weight Int Maybe
+    favNum Int
     deriving Eq Show
   BlogPost
     title String
@@ -63,10 +66,11 @@ sameElementsAs l1 l2 = null (l1 L.\\ l2)
 
 main :: IO ()
 main = do
-  let p1 = Person "John"  (Just 36)
-      p2 = Person "Rachel" Nothing
-      p3 = Person "Mike"  (Just 17)
-      p4 = Person "Livia" (Just 17)
+  let p1 = Person "John"   (Just 36) Nothing   1
+      p2 = Person "Rachel" Nothing   (Just 37) 2
+      p3 = Person "Mike"   (Just 17) Nothing   3
+      p4 = Person "Livia"  (Just 17) (Just 18) 4
+      p5 = Person "Mitch"  Nothing   Nothing   5
   hspec $ do
     describe "select" $ do
       it "works for a single value" $
@@ -560,6 +564,47 @@ main = do
                  return title
           liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
+    describe "coalesce/coalesceDefault" $ do
+      it "works on a simple example" $
+        run $ do
+          mapM_ insert' [p1, p2, p3, p4, p5]
+          ret1 <- select $
+                  from $ \p -> do
+                  orderBy [asc (p ^. PersonId)]
+                  return (coalesce [p ^. PersonAge, p ^. PersonWeight])
+          liftIO $ ret1 `shouldBe` [ Value (Just (36 :: Int))
+                                   , Value (Just 37)
+                                   , Value (Just 17)
+                                   , Value (Just 17)
+                                   , Value Nothing
+                                   ]
+
+          ret2 <- select $
+                  from $ \p -> do
+                  orderBy [asc (p ^. PersonId)]
+                  return (coalesceDefault [p ^. PersonAge, p ^. PersonWeight] (p ^. PersonFavNum))
+          liftIO $ ret2 `shouldBe` [ Value (36 :: Int)
+                                   , Value 37
+                                   , Value 17
+                                   , Value 17
+                                   , Value 5
+                                   ]
+
+#if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
+      it "works on PostgreSQL and MySQL with <2 arguments" $
+        run $ do
+          _ :: [Value (Maybe Int)] <- select $
+               from $ \p -> do
+               return (coalesce [p ^. PersonAge])
+          return True
+#else
+      it "throws an exception on SQLite with <2 arguments" $
+        run (select $
+             from $ \p -> do
+             return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
+        ) `shouldThrow` (\(_ :: IOException) -> True)
+#endif
+
     describe "text functions" $
       it "like, (%) and (++.) work on a simple example" $
          run $ do
@@ -620,21 +665,21 @@ main = do
           --             matched rows, not actually changed rows.
 #if   defined(WITH_POSTGRESQL)
           liftIO $ n `shouldBe` 2
-          liftIO $ ret `shouldBe` [ Entity p1k (Person anon (Just 73))
-                                  , Entity p2k (Person anon Nothing)
+          liftIO $ ret `shouldBe` [ Entity p1k (Person anon (Just 73) Nothing 1)
+                                  , Entity p2k (Person anon Nothing (Just 37) 2)
                                   , Entity p3k p3 ]
           -- MySQL: nulls appear first, and update returns actual number
           --        of changed rows
 #elif defined(WITH_MYSQL)
           liftIO $ n `shouldBe` 1
-          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
-                                  , Entity p1k (Person anon (Just 73))
+          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing (Just 37) 2)
+                                  , Entity p1k (Person anon (Just 73) Nothing 1)
                                   , Entity p3k p3 ]
 #else
           -- SQLite: nulls appear first, update returns matched rows.
           liftIO $ n `shouldBe` 2
-          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing)
-                                  , Entity p1k (Person anon (Just 73))
+          liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing (Just 37) 2)
+                                  , Entity p1k (Person anon (Just 73) Nothing 1)
                                   , Entity p3k p3 ]
 #endif
 
@@ -803,10 +848,10 @@ main = do
             _ <- insert p2
             _ <- insert p3
             _ <- insert p4
-            _ <- insert $ Person "Jane"  Nothing
-            _ <- insert $ Person "Mark"  Nothing
-            _ <- insert $ Person "Sarah" Nothing
-            insert $ Person "Paul"  Nothing
+            _ <- insert $ Person "Jane"  Nothing Nothing 0
+            _ <- insert $ Person "Mark"  Nothing Nothing 0
+            _ <- insert $ Person "Sarah" Nothing Nothing 0
+            insert $ Person "Paul"  Nothing Nothing 0
           ret1 <- fmap (map unValue) $ select $ from $ \p -> do
                     orderBy [rand]
                     return (p ^. PersonId)
