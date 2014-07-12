@@ -258,11 +258,15 @@ class (Functor query, Applicative query, Monad query) =>
   -- (Nothing) otherwise. Some RDBMSs (such as SQLite) require
   -- at least two arguments; please refer to the appropriate
   -- documentation.
+  --
+  -- /Since: 1.4.3/
   coalesce :: PersistField a => [expr (Value (Maybe a))] -> expr (Value (Maybe a))
 
   -- | Like @coalesce@, but takes a non-nullable expression
   -- placed at the end of the expression list, which guarantees
   -- a non-NULL result.
+  --
+  -- /Since: 1.4.3/
   coalesceDefault :: PersistField a => [expr (Value (Maybe a))] -> expr (Value a) -> expr (Value a)
 
   -- | @LIKE@ operator.
