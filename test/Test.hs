@@ -582,7 +582,7 @@ main = do
           ret2 <- select $
                   from $ \p -> do
                   orderBy [asc (p ^. PersonId)]
-                  return (coalesceDefault (p ^. PersonFavNum) [p ^. PersonAge, p ^. PersonWeight])
+                  return (coalesceDefault [p ^. PersonAge, p ^. PersonWeight] (p ^. PersonFavNum))
           liftIO $ ret2 `shouldBe` [ Value (36 :: Int)
                                    , Value 37
                                    , Value 17

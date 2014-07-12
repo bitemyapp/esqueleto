@@ -263,7 +263,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Like @coalesce@, but takes a non-nullable expression
   -- placed at the end of the expression list, which guarantees
   -- a non-NULL result.
-  coalesceDefault :: PersistField a => expr (Value a) -> [expr (Value (Maybe a))] -> expr (Value a)
+  coalesceDefault :: PersistField a => [expr (Value (Maybe a))] -> expr (Value a) -> expr (Value a)
 
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
