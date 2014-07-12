@@ -354,6 +354,11 @@ data Value a = Value a deriving (Eq, Ord, Show, Typeable)
 -- <https://ghc.haskell.org/trac/ghc/ticket/6124>
 
 
+-- | /Since: 1.4.4/
+instance Functor Value where
+  fmap f (Value a) = Value (f a)
+
+
 -- | Unwrap a 'Value'.
 --
 -- /Since: 1.4.1/
