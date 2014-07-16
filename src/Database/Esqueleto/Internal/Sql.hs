@@ -721,7 +721,7 @@ deleteCount = rawEsqueleto DELETE
 -- @
 -- update $ \p -> do
 -- set p [ PersonAge =. just (val thisYear) -. p ^. PersonBorn ]
--- where_ $ isNull (p ^. PersonAge)
+-- where_ $ isNothing (p ^. PersonAge)
 -- @
 update :: ( MonadResource m
           , MonadSqlPersist m
