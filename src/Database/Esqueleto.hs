@@ -79,9 +79,6 @@ module Database.Esqueleto
   , (<#)
   , (<&>)
 
-    -- * Helpers
-  , valkey
-
     -- * Re-exports
     -- $reexports
   , deleteKey
@@ -366,16 +363,6 @@ import qualified Database.Persist
 --
 --  * Everything from "Database.Persist.Sql" except for
 --    @deleteWhereCount@ and @updateWhereCount@.
-
-
-----------------------------------------------------------------------
-
-
--- | @valkey i = val (Key (PersistInt64 i))@
--- (<https://github.com/meteficha/esqueleto/issues/9>).
-valkey :: Esqueleto query expr backend =>
-          Int64 -> expr (Value (Key entity))
-valkey = val . Key . PersistInt64
 
 
 ----------------------------------------------------------------------

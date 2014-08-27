@@ -113,7 +113,7 @@ instance Monoid SideData where
 
 -- | A part of a @FROM@ clause.
 data FromClause =
-    FromStart Ident (EntityDef SqlType)
+    FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
 
