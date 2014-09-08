@@ -20,6 +20,7 @@ import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
+import Control.Monad.Trans.Reader (ReaderT)
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
@@ -865,10 +866,10 @@ main = do
 
 
 insert' :: ( Functor m
-           , PersistStore m
-           , PersistMonadBackend m ~ PersistEntityBackend val
+           , PersistStore (PersistEntityBackend val)
+           , MonadIO m
            , PersistEntity val )
-        => val -> m (Entity val)
+        => val -> ReaderT (PersistEntityBackend val) m (Entity val)
 insert' v = flip Entity v <$> insert v
 
 

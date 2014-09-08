@@ -9,4 +9,5 @@ import Database.Persist.Sql hiding
   , Update(..), delete, deleteWhereCount, updateWhereCount, selectList
   , selectKeysList, deleteCascadeWhere, (=.), (+=.), (-=.), (*=.), (/=.)
   , (==.), (!=.), (<.), (>.), (<=.), (>=.), (<-.), (/<-.), (||.)
-  , listToJSON, mapToJSON, getPersistMap, limitOffsetOrder )
+  , listToJSON, mapToJSON, getPersistMap, limitOffsetOrder, selectSource
+  , update )

@@ -90,6 +90,8 @@ module Database.Esqueleto
   , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Trans.Reader (ReaderT)
 import Data.Int (Int64)
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
@@ -373,9 +375,9 @@ import qualified Database.Persist
 
 -- | @valkey i = val (Key (PersistInt64 i))@
 -- (<https://github.com/meteficha/esqueleto/issues/9>).
-valkey :: Esqueleto query expr backend =>
+valkey :: (Esqueleto query expr backend, IsSqlKey (Key entity), PersistField (Key entity)) =>
           Int64 -> expr (Value (Key entity))
-valkey = val . Key . PersistInt64
+valkey = val . toSqlKey
 
 
 -- | @valJ@ is like @val@ but for something that is already a @Value@. The use
@@ -388,7 +390,7 @@ valkey = val . Key . PersistInt64
 -- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
 --
 -- /Since: 1.4.2/
-valJ :: Esqueleto query expr backend =>
+valJ :: (Esqueleto query expr backend, PersistField (Key entity)) =>
         Value (Key entity) -> expr (Value (Key entity))
 valJ = val . unValue
 
@@ -398,8 +400,8 @@ valJ = val . unValue
 
 -- | Synonym for 'Database.Persist.Store.delete' that does not
 -- clash with @esqueleto@'s 'delete'.
-deleteKey :: ( PersistStore m
-             , PersistMonadBackend m ~ PersistEntityBackend val
+deleteKey :: ( PersistStore (PersistEntityBackend val)
+             , MonadIO m
              , PersistEntity val )
-          => Key val -> m ()
+          => Key val -> ReaderT (PersistEntityBackend val) m ()
 deleteKey = Database.Persist.delete
