@@ -48,10 +48,10 @@ module Database.Esqueleto.Internal.Sql
 import Control.Applicative (Applicative(..), (<$>), (<$))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad ((>=>), ap, void, MonadPlus(..))
+import Control.Monad (ap, MonadPlus(..), liftM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Resource (MonadResource)
+import qualified Control.Monad.Trans.Reader as R
 import Data.Int (Int64)
 import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
@@ -65,6 +65,8 @@ import qualified Data.HashSet as HS
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
+import Data.Acquire (with, allocateAcquire, Acquire)
+import Control.Monad.Trans.Resource (MonadResource)
 
 import Database.Esqueleto.Internal.Language
 
@@ -111,7 +113,7 @@ instance Monoid SideData where
 
 -- | A part of a @FROM@ clause.
 data FromClause =
-    FromStart Ident (EntityDef SqlType)
+    FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
 
@@ -544,19 +546,20 @@ veryUnsafeCoerceSqlExprValueList EEmptyList =
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
-                   , MonadResource m
-                   , MonadSqlPersist m )
+                   , MonadIO m1
+                   , MonadIO m2 )
                  => Mode
                  -> SqlQuery a
-                 -> m (C.Source m r)
-rawSelectSource mode query = src
+                 -> SqlPersistT m1 (Acquire (C.Source m2 r))
+rawSelectSource mode query =
+      do
+        conn <- R.ask
+        res <- run conn
+        return $ (C.$= massage) `fmap` res
     where
-      src = do
-        conn <- askSqlConn
-        return $ run conn C.$= massage
 
       run conn =
-        uncurry rawQuery $
+        uncurry rawQueryRes $
         first builderToText $
         toRawSql mode (conn, initialIdentState) query
 
@@ -573,11 +576,14 @@ rawSelectSource mode query = src
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a 'C.Source' of rows.
 selectSource :: ( SqlSelect a r
-                , MonadResource m
-                , MonadSqlPersist m )
+                , MonadResource m )
              => SqlQuery a
-             -> m (C.Source m r)
-selectSource = rawSelectSource SELECT
+             -> C.Source (SqlPersistT m) r
+selectSource query = do
+    src <- lift $ do
+        res <- rawSelectSource SELECT query
+        fmap snd $ allocateAcquire res
+    src
 
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
@@ -622,10 +628,12 @@ selectSource = rawSelectSource SELECT
 -- function composition that the @p@ inside the query is of type
 -- @SqlExpr (Entity Person)@.
 select :: ( SqlSelect a r
-          , MonadResource m
-          , MonadSqlPersist m )
-       => SqlQuery a -> m [r]
-select = selectSource >=> runSource
+          , MonadIO m )
+       => SqlQuery a -> SqlPersistT m [r]
+select query = do
+    res <- rawSelectSource SELECT query
+    conn <- R.ask
+    liftIO $ with res $ flip R.runReaderT conn . runSource
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
@@ -633,26 +641,31 @@ select = selectSource >=> runSource
 -- rows.
 selectDistinctSource
   :: ( SqlSelect a r
-     , MonadResource m
-     , MonadSqlPersist m )
+     , MonadResource m )
   => SqlQuery a
-  -> m (C.Source m r)
-selectDistinctSource = rawSelectSource SELECT_DISTINCT
+  -> C.Source (SqlPersistT m) r
+selectDistinctSource query = do
+    src <- lift $ do
+        res <- rawSelectSource SELECT_DISTINCT query
+        fmap snd $ allocateAcquire res
+    src
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
 -- @persistent@'s 'SqlPersistT' monad and return a list of rows.
 selectDistinct :: ( SqlSelect a r
-                  , MonadResource m
-                  , MonadSqlPersist m )
-               => SqlQuery a -> m [r]
-selectDistinct = selectDistinctSource >=> runSource
+                  , MonadIO m )
+               => SqlQuery a -> SqlPersistT m [r]
+selectDistinct query = do
+    res <- rawSelectSource SELECT_DISTINCT query
+    conn <- R.ask
+    liftIO $ with res $ flip R.runReaderT conn . runSource
 
 
 -- | (Internal) Run a 'C.Source' of rows.
-runSource :: MonadResource m =>
-             C.Source m r
-          -> m [r]
+runSource :: Monad m =>
+             C.Source (SqlPersistT m) r
+          -> SqlPersistT m [r]
 runSource src = src C.$$ CL.consume
 
 
@@ -661,14 +674,12 @@ runSource src = src C.$$ CL.consume
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadResource m
-                , MonadSqlPersist m
-                , SqlSelect a r )
+rawEsqueleto :: ( MonadIO m, SqlSelect a r )
            => Mode
            -> SqlQuery a
-           -> m Int64
+           -> SqlPersistT m Int64
 rawEsqueleto mode query = do
-  conn <- askSqlConn
+  conn <- R.ask
   uncurry rawExecuteCount $
     first builderToText $
     toRawSql mode (conn, initialIdentState) query
@@ -696,18 +707,16 @@ rawEsqueleto mode query = do
 -- from $ \\(appointment :: SqlExpr (Entity Appointment)) ->
 -- return ()
 -- @
-delete :: ( MonadResource m
-          , MonadSqlPersist m )
+delete :: ( MonadIO m )
        => SqlQuery ()
-       -> m ()
-delete = void . deleteCount
+       -> SqlPersistT m ()
+delete = liftM (const ()) . deleteCount
 
 
 -- | Same as 'delete', but returns the number of rows affected.
-deleteCount :: ( MonadResource m
-               , MonadSqlPersist m )
+deleteCount :: ( MonadIO m )
             => SqlQuery ()
-            -> m Int64
+            -> SqlPersistT m Int64
 deleteCount = rawEsqueleto DELETE
 
 
@@ -723,40 +732,19 @@ deleteCount = rawEsqueleto DELETE
 -- set p [ PersonAge =. just (val thisYear) -. p ^. PersonBorn ]
 -- where_ $ isNothing (p ^. PersonAge)
 -- @
-update :: ( MonadResource m
-          , MonadSqlPersist m
+update :: ( MonadIO m
           , SqlEntity val )
        => (SqlExpr (Entity val) -> SqlQuery ())
-       -> m ()
-update = void . updateCount
+       -> SqlPersistT m ()
+update = liftM (const ()) . updateCount
 
 
 -- | Same as 'update', but returns the number of rows affected.
-updateCount :: ( MonadResource m
-               , MonadSqlPersist m
+updateCount :: ( MonadIO m
                , SqlEntity val )
             => (SqlExpr (Entity val) -> SqlQuery ())
-            -> m Int64
+            -> SqlPersistT m Int64
 updateCount = rawEsqueleto UPDATE . from
-
-
--- | Insert a 'PersistField' for every selected value.
-insertSelect :: ( MonadResource m
-                , MonadSqlPersist m
-                , PersistEntity a )
-             => SqlQuery (SqlExpr (Insertion a)) -> m ()
-insertSelect =
-  void . rawEsqueleto (INSERT_INTO SELECT) . fmap EInsertFinal
-
-
--- | Insert a 'PersistField' for every unique selected value.
-insertSelectDistinct
-  :: ( MonadResource m
-     , MonadSqlPersist m
-     , PersistEntity a )
-  => SqlQuery (SqlExpr (Insertion a)) -> m ()
-insertSelectDistinct =
-  void . rawEsqueleto (INSERT_INTO SELECT_DISTINCT) . fmap EInsertFinal
 
 
 ----------------------------------------------------------------------
@@ -1515,3 +1503,21 @@ from16P = const Proxy
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
+
+
+-- | Insert a 'PersistField' for every selected value.
+insertSelect :: (MonadIO m, PersistEntity a) =>
+  SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
+insertSelect = insertGeneralSelect SELECT
+
+
+-- | Insert a 'PersistField' for every unique selected value.
+insertSelectDistinct :: (MonadIO m, PersistEntity a) =>
+  SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
+insertSelectDistinct = insertGeneralSelect SELECT_DISTINCT
+
+
+insertGeneralSelect :: (MonadIO m, PersistEntity a) =>
+  Mode -> SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
+insertGeneralSelect mode =
+  liftM (const ()) . rawEsqueleto (INSERT_INTO mode) . fmap EInsertFinal
