@@ -970,8 +970,8 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
       where
         process ed = uncommas $
                      map ((name <>) . fromDBName info) $
-                     (sqlIdName ed:) $
                      map fieldDB $
+                     entityId ed :
                      entityFields ed
         -- 'name' is the biggest difference between 'RawSql' and
         -- 'SqlSelect'.  We automatically create names for tables
