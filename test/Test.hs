@@ -11,6 +11,7 @@
            , TypeFamilies
            , ScopedTypeVariables
            , CPP
+           , TypeSynonymInstances
  #-}
 module Main (main) where
 

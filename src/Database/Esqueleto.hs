@@ -375,7 +375,7 @@ import qualified Database.Persist
 
 -- | @valkey i = val (Key (PersistInt64 i))@
 -- (<https://github.com/meteficha/esqueleto/issues/9>).
-valkey :: (Esqueleto query expr backend, IsSqlKey (Key entity), PersistField (Key entity)) =>
+valkey :: (Esqueleto query expr backend, ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
           Int64 -> expr (Value (Key entity))
 valkey = val . toSqlKey
 
