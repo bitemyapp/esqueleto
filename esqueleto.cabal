@@ -1,5 +1,5 @@
 name:                esqueleto
-version:             2.1.0
+version:             2.1.1
 synopsis:            Type-safe EDSL for SQL queries on persistent backends.
 homepage:            https://github.com/prowdsponsor/esqueleto
 license:             BSD3
