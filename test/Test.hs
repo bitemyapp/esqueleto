@@ -864,25 +864,51 @@ main = do
           liftIO $ (ret1 == ret2) `shouldBe` False
 
     describe "case" $ do
-      it "works for a single when" $
+      it "Works for a simple value based when - False" $
         run $ do
+          ret <- select $
+            return $
+              case_
+                [ when_ (val False) then_ (val (1 :: Int)) ]
+                (else_ (val 2))
+
+          liftIO $ ret `shouldBe` [ Value 2 ]
+
+      it "Works for a simple value based when - True" $
+        run $ do
+          ret <- select $
+            return $
+              case_
+                [ when_ (val True) then_ (val (1 :: Int)) ]
+                (else_ (val 2))
+
+          liftIO $ ret `shouldBe` [ Value 1 ]
+
+      it "works for a semi-complicated query" $
+        run $ do
+          _ <- insert p1
+          _ <- insert p2
+          _ <- insert p3
+          _ <- insert p4
+          _ <- insert p5
           ret <- select $
             return $
               case_
                 [ when_
                     (exists $ from $ \p -> do
-                        where_ (p ^. PersonName ==. val "Paul"))
+                        where_ (p ^. PersonName ==. val "Mike"))
                   then_
                     (sub_select $ from $ \v -> do
                         let sub =
                                 from $ \c -> do
-                                where_ (c ^. PersonName ==. val "Paul")
-                                return (c ^. PersonId)
-                        where_ (v ^. PersonId >. sub_select sub)
+                                where_ (c ^. PersonName ==. val "Mike")
+                                return (c ^. PersonFavNum)
+                        where_ (v ^. PersonFavNum >. sub_select sub)
                         return $ count (v ^. PersonName) +. val (1 :: Int)) ]
                 (else_ $ val (-1))
 
-          liftIO $ ret `shouldBe` [ Value (-1) ]
+          liftIO $ ret `shouldBe` [ Value (3) ]
+
 
 ----------------------------------------------------------------------
 
