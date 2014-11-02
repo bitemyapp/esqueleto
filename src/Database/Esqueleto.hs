@@ -49,7 +49,11 @@ module Database.Esqueleto
              , like, (%), concat_, (++.)
              , subList_select, subList_selectDistinct, valList
              , in_, notIn, exists, notExists
-             , set, (=.), (+=.), (-=.), (*=.), (/=.) )
+             , set, (=.), (+=.), (-=.), (*=.), (/=.)
+             , case_ )
+  , when_
+  , then_
+  , else_
   , from
   , Value(..)
   , unValue

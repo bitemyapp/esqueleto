@@ -35,6 +35,9 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , From
   , FromPreprocess
+  , when_
+  , then_
+  , else_
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -336,6 +339,8 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Apply extra @expr Value@ arguments to a 'PersistField' constructor
   (<&>) :: expr (Insertion (a -> b)) -> expr (Value a) -> expr (Insertion b)
 
+  case_ :: PersistField a => [(expr (Value Bool), expr (Value a))] -> expr (Value a) -> expr (Value a)
+
 
 -- Fixity declarations
 infixl 9 ^.
@@ -346,6 +351,15 @@ infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
 
+-- Syntax Sugar for Case
+when_ :: expr (Value Bool) -> () -> expr a -> (expr (Value Bool), expr a)
+when_ cond _ expr = (cond, expr)
+
+then_ :: ()
+then_ = ()
+
+else_ :: expr a -> expr a
+else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.

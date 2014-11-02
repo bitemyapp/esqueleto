@@ -413,6 +413,29 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
         (gb, gv) = g x
     in (fb <> ", " <> gb, fv ++ gv)
 
+  case_ when_ else_ = unsafeSqlCase when_ else_
+
+--
+-- TODO: this is not 100% compat with sqlite as defined, looks like postgres also supports the extended version
+unsafeSqlCase :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+unsafeSqlCase when_ (ERaw p1 f1) = ERaw Never buildCase
+  where
+    buildCase :: IdentInfo -> (TLB.Builder, [PersistValue])
+    buildCase info =
+        let (b1, vals1) = f1 info
+            (b2, vals2) = mapWhen when_ info
+        in ( "CASE" <> b2 <> " ELSE " <> parensM p1 b1 <> " END", vals2 <> vals1)
+
+    mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mapWhen []    _    = error "unsafeSqlCase: empty when_ list."
+    mapWhen when_ info = foldl (foldHelp info) (mempty, mempty) when_
+
+    foldHelp :: IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
+    foldHelp info (b0, vals0) (ERaw p1 f1, ERaw p2 f2) =
+        let (b1, vals1) = f1 info
+            (b2, vals2) = f2 info
+        in ( b0 <> " WHEN " <> parensM p1 b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
+
 
 instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
