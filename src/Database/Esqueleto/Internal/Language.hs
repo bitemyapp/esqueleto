@@ -391,15 +391,15 @@ infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
 
--- | Syntax Sugar for 'case_'
+-- | Syntax sugar for 'case_'.
 when_ :: expr (Value Bool) -> () -> expr a -> (expr (Value Bool), expr a)
 when_ cond _ expr = (cond, expr)
 
--- | Syntax Sugar for 'case_'
+-- | Syntax sugar for 'case_'.
 then_ :: ()
 then_ = ()
 
--- | Syntax Sugar for 'case_'
+-- | Syntax sugar for 'case_'.
 else_ :: expr a -> expr a
 else_ = id
 
