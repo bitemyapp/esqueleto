@@ -35,6 +35,9 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , From
   , FromPreprocess
+  , when_
+  , then_
+  , else_
   ) where
 
 import Control.Applicative (Applicative(..), (<$>))
@@ -336,6 +339,48 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Apply extra @expr Value@ arguments to a 'PersistField' constructor
   (<&>) :: expr (Insertion (a -> b)) -> expr (Value a) -> expr (Insertion b)
 
+  -- | @CASE@ statement.  For example:
+  --
+  -- @
+  -- select $
+  -- return $
+  -- case_
+  --    [ when_
+  --        (exists $
+  --        from $ \\p -> do
+  --        where_ (p ^. PersonName ==. val "Mike"))
+  --      then_
+  --        (sub_select $
+  --        from $ \\v -> do
+  --        let sub =
+  --                from $ \\c -> do
+  --                where_ (c ^. PersonName ==. val "Mike")
+  --                return (c ^. PersonFavNum)
+  --        where_ (v ^. PersonFavNum >. sub_select sub)
+  --        return $ count (v ^. PersonName) +. val (1 :: Int)) ]
+  --    (else_ $ val (-1))
+  -- @
+  --
+  -- This query is a bit complicated, but basically it checks if a person
+  -- named "Mike" exists, and if that person does, run the subquery to find
+  -- out how many people have a ranking (by Fav Num) higher than "Mike".
+  --
+  -- __NOTE:__ There are a few things to be aware about this statement.
+  --
+  --    * This only implements the full CASE statement, it does not
+  --      implement the "simple" CASE statement.
+  --
+  --
+  --    * At least one 'when_' and 'then_' is mandatory otherwise it will
+  --      emit an error.
+  --
+  --
+  --    * The 'else_' is also mandatory, unlike the SQL statement in which
+  --      if the @ELSE@ is omitted it will return a @NULL@. You can
+  --      reproduce this via 'nothing'.
+  --
+  -- Since: 2.1.1
+  case_ :: PersistField a => [(expr (Value Bool), expr (Value a))] -> expr (Value a) -> expr (Value a)
 
 -- Fixity declarations
 infixl 9 ^.
@@ -346,6 +391,17 @@ infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
 
+-- | Syntax Sugar for 'case_'
+when_ :: expr (Value Bool) -> () -> expr a -> (expr (Value Bool), expr a)
+when_ cond _ expr = (cond, expr)
+
+-- | Syntax Sugar for 'case_'
+then_ :: ()
+then_ = ()
+
+-- | Syntax Sugar for 'case_'
+else_ :: expr a -> expr a
+else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.

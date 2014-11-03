@@ -27,6 +27,7 @@ module Database.Esqueleto.Internal.Sql
   , insertSelectDistinct
   , insertSelect
     -- * The guts
+  , unsafeSqlCase
   , unsafeSqlBinOp
   , unsafeSqlValue
   , unsafeSqlFunction
@@ -413,6 +414,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
         (gb, gv) = g x
     in (fb <> ", " <> gb, fv ++ gv)
 
+  case_ = unsafeSqlCase
 
 instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
@@ -446,6 +448,29 @@ ifNotEmptyList (EList _)  _ x = x
 
 
 ----------------------------------------------------------------------
+
+
+-- | (Internal) Create a case statement.
+--
+-- Since: 2.1.1
+unsafeSqlCase :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+unsafeSqlCase when_ (ERaw p1 f1) = ERaw Never buildCase
+  where
+    buildCase :: IdentInfo -> (TLB.Builder, [PersistValue])
+    buildCase info =
+        let (b1, vals1) = f1 info
+            (b2, vals2) = mapWhen when_ info
+        in ( "CASE" <> b2 <> " ELSE " <> parensM p1 b1 <> " END", vals2 <> vals1)
+
+    mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mapWhen []    _    = error "unsafeSqlCase: empty when_ list."
+    mapWhen when_ info = foldl (foldHelp info) (mempty, mempty) when_
+
+    foldHelp :: IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
+    foldHelp info (b0, vals0) (ERaw p1 f1, ERaw p2 f2) =
+        let (b1, vals1) = f1 info
+            (b2, vals2) = f2 info
+        in ( b0 <> " WHEN " <> parensM p1 b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
 
 
 -- | (Internal) Create a custom binary operator.  You /should/
