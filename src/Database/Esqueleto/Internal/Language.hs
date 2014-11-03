@@ -379,7 +379,7 @@ class (Functor query, Applicative query, Monad query) =>
   --      if the @ELSE@ is omitted it will return a @NULL@. You can
   --      reproduce this via 'nothing'.
   --
-  -- Since: 2.1.1
+  -- /Since: 2.1.2/
   case_ :: PersistField a => [(expr (Value Bool), expr (Value a))] -> expr (Value a) -> expr (Value a)
 
 -- Fixity declarations
@@ -392,14 +392,20 @@ infixr 3 &&., =., +=., -=., *=., /=.
 infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
 
 -- | Syntax sugar for 'case_'.
+--
+-- /Since: 2.1.2/
 when_ :: expr (Value Bool) -> () -> expr a -> (expr (Value Bool), expr a)
 when_ cond _ expr = (cond, expr)
 
 -- | Syntax sugar for 'case_'.
+--
+-- /Since: 2.1.2/
 then_ :: ()
 then_ = ()
 
 -- | Syntax sugar for 'case_'.
+--
+-- /Since: 2.1.2/
 else_ :: expr a -> expr a
 else_ = id
 
