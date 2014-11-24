@@ -347,7 +347,7 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- insertSelect $ from $ \p->
+-- insertSelect $ from $ \\p->
 --  return $ BlogPost \<# \"Group Blog Post\" \<&\> (p ^. PersonId)
 -- @
 --
