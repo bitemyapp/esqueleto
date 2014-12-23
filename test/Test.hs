@@ -945,7 +945,9 @@ main = do
               Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
                                           , PersistInt64 $ fromIntegral y]
           pPk <- insert p
-          [Entity _ ret] <- select $ from $ return
+          [Entity _ ret] <- select $ from $ \p' -> do
+            where_ (p'^.PointId ==. val pPk)
+            return p'
           liftIO $ do
             ret `shouldBe` p
             pPk `shouldBe` thePk
