@@ -8,7 +8,6 @@
            , OverloadedStrings
            , UndecidableInstances
            , ScopedTypeVariables
-           , InstanceSigs
  #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -61,8 +60,7 @@ import Data.Monoid (Monoid(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (
-    entityColumnNames, entityColumnCount, parseEntityValues, isIdField
-  , hasCompositeKey)
+    entityColumnNames, entityColumnCount, parseEntityValues)
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.Conduit as C
@@ -338,16 +336,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   sub_select         = sub SELECT
   sub_selectDistinct = sub SELECT_DISTINCT
 
-  (^.) :: forall val typ. (PersistEntity val, PersistField typ) =>
-          SqlExpr (Entity val) -> EntityField val typ -> SqlExpr (Value typ)
-  EEntity ident ^. field
-    | isIdField field && hasCompositeKey ed
-    = ERaw Parens $
-      \info@(conn,_) -> (uncommas (map (\a -> useIdent info ident <> "." <> TLB.fromText (connEscapeName conn (fieldDB a))) (compositeFields pdef)), [])
-    | otherwise = ERaw Never $ \info -> (useIdent info ident <> ("." <> fieldName info field), [])
-    where
-      ed = entityDef $ getEntityVal $ (Proxy :: Proxy (SqlExpr (Entity val)))
-      Just pdef = entityPrimary ed
+  EEntity ident ^. field =
+    ERaw Never $ \info -> (useIdent info ident <> ("." <> fieldName info field), [])
 
   EMaybe r ?. field = maybelize (r ^. field)
     where
