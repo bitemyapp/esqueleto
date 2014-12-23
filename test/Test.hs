@@ -66,6 +66,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     title String
     Primary number
     deriving Eq Show
+  Article
+    title String
+    frontcoverId FrontcoverId
+    deriving Eq Show
   Point
     x Int
     y Int
@@ -945,6 +949,24 @@ main = do
           liftIO $ do
             ret `shouldBe` p
             pPk `shouldBe` thePk
+
+      it "can join with a custom primary key" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article "Esqueleto supports composite pks!" thePk
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [(Entity _ retFc, Entity _ retArt)] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverId ==. a^.ArticleFrontcoverId)
+              return (f, a)
+          liftIO $ do
+            retFc `shouldBe` fc
+            retArt `shouldBe` article
+            fcPk `shouldBe` thePk
+            articleFrontcoverId retArt `shouldBe` thePk
 ----------------------------------------------------------------------
 
 
