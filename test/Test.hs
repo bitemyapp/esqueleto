@@ -63,11 +63,13 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     deriving Eq Show
   Frontcover
     number Int
+    title String
     Primary number
     deriving Eq Show
   Point
     x Int
     y Int
+    name String
     Primary x y
     deriving Eq Show
 |]
@@ -922,7 +924,7 @@ main = do
 
       it "works with custom primary key" $
         run $ do
-          let fc = Frontcover number
+          let fc = Frontcover number ""
               number = 101
               Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
           fcPk <- insert fc
@@ -933,7 +935,7 @@ main = do
 
       it "works with composite primary key" $
         run $ do
-          let p = Point x y
+          let p = Point x y ""
               x = 10
               y = 15
               Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
