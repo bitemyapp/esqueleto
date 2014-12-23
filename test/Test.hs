@@ -950,7 +950,23 @@ main = do
             ret `shouldBe` p
             pPk `shouldBe` thePk
 
-      it "can join with a custom primary key" $
+      it "can join with a custom primary key and return one entity" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article "Esqueleto supports composite pks!" thePk
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [Entity _ retFc] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverId ==. a^.ArticleFrontcoverId)
+              return f
+          liftIO $ do
+            retFc `shouldBe` fc
+            fcPk `shouldBe` thePk
+
+      it "can join with a custom primary key and return both entities" $
         run $ do
           let fc = Frontcover number ""
               article = Article "Esqueleto supports composite pks!" thePk
