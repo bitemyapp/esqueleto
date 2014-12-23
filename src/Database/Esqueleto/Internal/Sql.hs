@@ -7,6 +7,7 @@
            , MultiParamTypeClasses
            , OverloadedStrings
            , UndecidableInstances
+           , ScopedTypeVariables
  #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -58,6 +59,8 @@ import Data.List (intersperse)
 import Data.Monoid (Monoid(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
+import Database.Persist.Sql.Util (
+    entityColumnNames, entityColumnCount, parseEntityValues)
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.Conduit as C
@@ -993,11 +996,9 @@ instance SqlSelect () () where
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
   sqlSelectCols info expr@(EEntity ident) = ret
       where
-        process ed = uncommas $
-                     map ((name <>) . fromDBName info) $
-                     map fieldDB $
-                     entityId ed :
-                     entityFields ed
+        conn = fst info
+        process ed = uncommas . map ((name <>) . TLB.fromText) $
+                     entityColumnNames ed conn
         -- 'name' is the biggest difference between 'RawSql' and
         -- 'SqlSelect'.  We automatically create names for tables
         -- (since it's not the user who's writing the FROM
@@ -1007,11 +1008,10 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         name = useIdent info ident <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
-  sqlSelectColCount = (+1) . length . entityFields . entityDef . getEntityVal
-  sqlSelectProcessRow (idCol:ent) =
-    Entity <$> fromPersistValue idCol
-           <*> fromPersistValues ent
-  sqlSelectProcessRow _ = Left "SqlSelect (Entity a): wrong number of columns."
+  sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
+  sqlSelectProcessRow = parseEntityValues ed
+    where ed = entityDef $ getEntityVal $ (Proxy :: Proxy (SqlExpr (Entity a)))
+
 
 getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
 getEntityVal = const Proxy

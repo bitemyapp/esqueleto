@@ -1,6 +1,8 @@
 {-# LANGUAGE ConstraintKinds
            , EmptyDataDecls
            , FlexibleContexts
+           , FlexibleInstances
+           , DeriveGeneric
            , GADTs
            , GeneralizedNewtypeDeriving
            , MultiParamTypeClasses
@@ -62,6 +64,11 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Frontcover
     number Int
     Primary number
+    deriving Eq Show
+  Point
+    x Int
+    y Int
+    Primary x y
     deriving Eq Show
 |]
 
@@ -924,6 +931,18 @@ main = do
             ret `shouldBe` fc
             fcPk `shouldBe` thePk
 
+      it "works with composite primary key" $
+        run $ do
+          let p = Point x y
+              x = 10
+              y = 15
+              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
+                                          , PersistInt64 $ fromIntegral y]
+          pPk <- insert p
+          [Entity _ ret] <- select $ from $ return
+          liftIO $ do
+            ret `shouldBe` p
+            pPk `shouldBe` thePk
 ----------------------------------------------------------------------
 
 
