@@ -59,6 +59,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     follower PersonId
     followed PersonId
     deriving Eq Show
+  Frontcover
+    number Int
+    Primary number
+    deriving Eq Show
 |]
 
 -- | this could be achieved with S.fromList, but not all lists
@@ -909,6 +913,16 @@ main = do
 
           liftIO $ ret `shouldBe` [ Value (3) ]
 
+      it "works with custom primary key" $
+        run $ do
+          let fc = Frontcover number
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          [Entity _ ret] <- select $ from $ return
+          liftIO $ do
+            ret `shouldBe` fc
+            fcPk `shouldBe` thePk
 
 ----------------------------------------------------------------------
 
