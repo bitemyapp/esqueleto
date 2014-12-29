@@ -71,6 +71,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     frontcoverNumber Int
     Foreign Frontcover fkfrontcover frontcoverNumber
     deriving Eq Show
+  Article2
+    title String
+    frontcoverId FrontcoverId
+    deriving Eq Show
   Point
     x Int
     y Int
@@ -979,7 +983,7 @@ main = do
             pPk `shouldBe` thePk
       -}
 
-      it "can join with a non-id primary key and return one entity" $
+      it "can join a ForeignKey with a non-id primary key and return one entity" $
         run $ do
           let fc = Frontcover number ""
               article = Article "Esqueleto supports composite pks!" number
@@ -995,7 +999,7 @@ main = do
             retFc `shouldBe` fc
             fcPk `shouldBe` thePk
 
-      it "can join with a non-id primary key and return both entities" $
+      it "can join a ForeignKey with a non-id primary key and return both entities" $
         run $ do
           let fc = Frontcover number ""
               article = Article "Esqueleto supports composite pks!" number
@@ -1012,6 +1016,22 @@ main = do
             retArt `shouldBe` article
             fcPk `shouldBe` thePk
             articleFkfrontcover retArt `shouldBe` thePk
+
+      it "can join with a non-id primary key and return one entity" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article2 "Esqueleto supports composite pks!" thePk
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [Entity _ retFc] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverId ==. a^.Article2FrontcoverId)
+              return f
+          liftIO $ do
+            retFc `shouldBe` fc
+            fcPk `shouldBe` thePk
 ----------------------------------------------------------------------
 
 

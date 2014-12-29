@@ -522,7 +522,12 @@ unsafeSqlBinOpList op sep (ERawList f1) (ERawList f2) = ERaw Never f
                   zip b1 b2
                 , vals1 <> vals2 )
 unsafeSqlBinOpList op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
-unsafeSqlBinOpList _ _ _ _ = error "unsafeSqlBinOpList: must operate against another composite key"
+unsafeSqlBinOpList op sep (ERaw p1 f1) b@(ERawList _) = unsafeSqlBinOpList op sep a b
+  where a = ERawList $ \info -> let (b1, vals1) = f1 info
+                                in ([parensM p1  b1], vals1)
+unsafeSqlBinOpList op sep a@(ERawList _) (ERaw p2 f2) = unsafeSqlBinOpList op sep a b
+  where b = ERawList $ \info -> let (b2, vals2) = f2 info
+                                in ([parensM p2  b2], vals2)
 {-# INLINE unsafeSqlBinOpList #-}
 
 -- | (Internal) A raw SQL value.  The same warning from
