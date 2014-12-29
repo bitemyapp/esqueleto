@@ -257,6 +257,8 @@ data SqlExpr a where
   -- interpolated by the SQL backend.
   ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
 
+  ERawList :: (IdentInfo -> ([TLB.Builder], [PersistValue])) -> SqlExpr (Value a)
+
   -- 'EList' and 'EEmptyList' are used by list operators.
   EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
   EEmptyList :: SqlExpr (ValueList a)
@@ -342,8 +344,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
           SqlExpr (Entity val) -> EntityField val typ -> SqlExpr (Value typ)
   EEntity ident ^. field
     | isIdField field && hasCompositeKey ed
-    = ERaw Parens $
-      \info@(conn,_) -> (uncommas (map (\a -> useIdent info ident <> "." <> TLB.fromText (connEscapeName conn (fieldDB a))) (compositeFields pdef)), [])
+    = ERawList $
+      \info@(conn,_) -> (map (\a -> useIdent info ident <> "." <> TLB.fromText (connEscapeName conn (fieldDB a))) (compositeFields pdef), [])
     | otherwise = ERaw Never $ \info -> (useIdent info ident <> ("." <> fieldName info field), [])
     where
       ed = entityDef $ getEntityVal $ (Proxy :: Proxy (SqlExpr (Entity val)))
@@ -354,7 +356,11 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
       maybelize :: SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
       maybelize (ERaw p f) = ERaw p f
 
-  val = ERaw Never . const . (,) "?" . return . toPersistValue
+  val v = case v' of
+            PersistList vs -> ERawList $ const (replicate (length vs) "?", vs)
+            _              -> ERaw Never . const . (,) "?" . return $ v'
+    where v' = toPersistValue v
+    
 
   isNothing (ERaw p f) = ERaw Parens $ first ((<> " IS NULL") . parensM p) . f
   just (ERaw p f) = ERaw p f
@@ -367,12 +373,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                           in ("NOT " <> parensM p b, vals)
 
-  (==.) = unsafeSqlBinOp " = "
+  (==.) = unsafeSqlBinOpList " = " " AND "
   (>=.) = unsafeSqlBinOp " >= "
   (>.)  = unsafeSqlBinOp " > "
   (<=.) = unsafeSqlBinOp " <= "
   (<.)  = unsafeSqlBinOp " < "
-  (!=.) = unsafeSqlBinOp " != "
+  (!=.) = unsafeSqlBinOpList " != " " OR "
   (&&.) = unsafeSqlBinOp " AND "
   (||.) = unsafeSqlBinOp " OR "
   (+.)  = unsafeSqlBinOp " + "
@@ -507,6 +513,17 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 , vals1 <> vals2 )
 {-# INLINE unsafeSqlBinOp #-}
 
+unsafeSqlBinOpList :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOpList op sep (ERawList f1) (ERawList f2) = ERaw Never f
+  where
+    f info = let (b1, vals1) = f1 info
+                 (b2, vals2) = f2 info
+             in ( intersperseB sep . map (\(a,b) -> a <> op <> b) $
+                  zip b1 b2
+                , vals1 <> vals2 )
+unsafeSqlBinOpList op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
+unsafeSqlBinOpList _ _ _ _ = error "unsafeSqlBinOpList: must operate against another composite key"
+{-# INLINE unsafeSqlBinOpList #-}
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
@@ -842,7 +859,10 @@ data Mode =
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
-uncommas = mconcat . intersperse ", " . filter (/= mempty)
+uncommas = intersperseB ", "
+
+intersperseB :: TLB.Builder -> [TLB.Builder] -> TLB.Builder
+intersperseB a = mconcat . intersperse a . filter (/= mempty)
 
 uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip

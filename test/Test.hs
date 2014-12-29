@@ -68,13 +68,20 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     deriving Eq Show
   Article
     title String
-    frontcoverId FrontcoverId
+    frontcoverNumber Int
+    Foreign Frontcover fkfrontcover frontcoverNumber
     deriving Eq Show
   Point
     x Int
     y Int
     name String
     Primary x y
+    deriving Eq Show
+  Circle
+    centerX Int
+    centerY Int
+    name String
+    Foreign Point fkpoint centerX centerY
     deriving Eq Show
 |]
 
@@ -952,39 +959,59 @@ main = do
             ret `shouldBe` p
             pPk `shouldBe` thePk
 
-      it "can join with a custom primary key and return one entity" $
+      {- FIXME: Persistent does not create the CircleFkPoint constructor.
+       - Should it?
+      it "can join on a composite primary key" $
+        run $ do
+          let p = Point x y ""
+              c = Circle x y ""
+              x = 10
+              y = 15
+              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
+                                          , PersistInt64 $ fromIntegral y]
+          pPk <- insert p
+          insert_ c
+          [Entity _ ret] <- select $ from $ \(c' `InnerJoin` p') -> do
+            on (p'^.PointId ==. c'^.CircleFkpoint)
+            return p'
+          liftIO $ do
+            ret `shouldBe` p
+            pPk `shouldBe` thePk
+      -}
+
+      it "can join with a non-id primary key and return one entity" $
         run $ do
           let fc = Frontcover number ""
-              article = Article "Esqueleto supports composite pks!" thePk
+              article = Article "Esqueleto supports composite pks!" number
               number = 101
               Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
           fcPk <- insert fc
           insert_ article
           [Entity _ retFc] <- select $
             from $ \(a `InnerJoin` f) -> do
-              on (f^.FrontcoverId ==. a^.ArticleFrontcoverId)
+              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
               return f
           liftIO $ do
             retFc `shouldBe` fc
             fcPk `shouldBe` thePk
 
-      it "can join with a custom primary key and return both entities" $
+      it "can join with a non-id primary key and return both entities" $
         run $ do
           let fc = Frontcover number ""
-              article = Article "Esqueleto supports composite pks!" thePk
+              article = Article "Esqueleto supports composite pks!" number
               number = 101
               Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
           fcPk <- insert fc
           insert_ article
           [(Entity _ retFc, Entity _ retArt)] <- select $
             from $ \(a `InnerJoin` f) -> do
-              on (f^.FrontcoverId ==. a^.ArticleFrontcoverId)
+              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
               return (f, a)
           liftIO $ do
             retFc `shouldBe` fc
             retArt `shouldBe` article
             fcPk `shouldBe` thePk
-            articleFrontcoverId retArt `shouldBe` thePk
+            articleFkfrontcover retArt `shouldBe` thePk
 ----------------------------------------------------------------------
 
 
