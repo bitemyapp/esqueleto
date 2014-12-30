@@ -964,7 +964,7 @@ main = do
             pPk `shouldBe` thePk
 
       {- FIXME: Persistent does not create the CircleFkPoint constructor.
-       - Should it?
+       - See: https://github.com/yesodweb/persistent/issues/341
       it "can join on a composite primary key" $
         run $ do
           let p = Point x y ""
@@ -1032,6 +1032,24 @@ main = do
           liftIO $ do
             retFc `shouldBe` fc
             fcPk `shouldBe` thePk
+
+      it "can orderBy composite primary key" $
+        run $ do
+          let ps = [Point 2 1 "", Point 1 2 ""]
+          mapM_ insert ps
+          eps <- select $
+            from $ \p' -> do
+              orderBy [asc (p'^.PointId)]
+              return p'
+          liftIO $ map entityVal eps `shouldBe` reverse ps
+
+      it "can return a composite primary key from a query" $
+        run $ do
+          let p = Point 10 20 ""
+          thePk <- insert p
+          [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
+          liftIO $ ppk `shouldBe` thePk
+
 ----------------------------------------------------------------------
 
 

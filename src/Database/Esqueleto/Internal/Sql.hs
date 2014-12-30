@@ -378,7 +378,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
 
   not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                           in ("NOT " <> parensM p b, vals)
-  not_ (ERawList f) = ERaw Parens $ first (intersperseB " AND " .  map ("NOT " <>)) . f
+  not_ (ERawList _) = unexpectedCompositeKeyError
 
   (==.) = unsafeSqlBinOpList " = " " AND "
   (>=.) = unsafeSqlBinOp " >= "
@@ -434,13 +434,13 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
   (<#) _ (ERaw _ f) = EInsert Proxy f
-  (<#) _ (ERawList _) = error "<# not supported on composite"
+  (<#) _ (ERawList _) = unexpectedCompositeKeyError
 
   (EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x ->
     let (fb, fv) = f x
         (gb, gv) = g x
     in (fb <> ", " <> gb, fv ++ gv)
-  (EInsert _ _) <&> (ERawList _) = error "<&> not supported on composite"
+  (EInsert _ _) <&> (ERawList _) = unexpectedCompositeKeyError
 
   case_ = unsafeSqlCase
 
@@ -451,6 +451,7 @@ fieldName :: (PersistEntity val, PersistField typ)
           => IdentInfo -> EntityField val typ -> TLB.Builder
 fieldName info = fromDBName info . fieldDB . persistFieldDef
 
+-- FIXME: Composite/non-id pKS not supported on set
 setAux :: (PersistEntity val, PersistField typ)
        => EntityField val typ
        -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
@@ -499,8 +500,8 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
         let (b1, vals1) = f1' info
             (b2, vals2) = f2 info
         in ( b0 <> " WHEN " <> parensM p1' b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
-    foldHelp _ _ _ = error "non-id/composite PKs not supported on cae constructs"
-unsafeSqlCase _ (ERawList _) = error "non-id/composite PKs not supported on cae constructs"
+    foldHelp _ _ _ = unexpectedCompositeKeyError
+unsafeSqlCase _ (ERawList _) = unexpectedCompositeKeyError
 
 
 -- | (Internal) Create a custom binary operator.  You /should/
@@ -940,23 +941,29 @@ makeFrom info mode fs = ret
     fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
 
     makeOnClause (ERaw _ f) = first (" ON " <>) (f info)
+    makeOnClause (ERawList _) = unexpectedCompositeKeyError
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f info)
+    mkExc (ERawList _) = unexpectedCompositeKeyError
+
+unexpectedCompositeKeyError :: a
+unexpectedCompositeKeyError = error "non-id/composite keys not expected here"
 
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
-makeSet info os = first ("\nSET " <>) $ uncommas' (map mk os)
+makeSet info os = first ("\nSET " <>) . uncommas' . concat . map mk $ os
   where
-    mk (SetClause (ERaw _ f)) = f info
-
+    mk (SetClause (ERaw _ f))   = [f info]
+    mk (SetClause (ERawList _)) = undefined --FIXME
 
 makeWhere :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _    NoWhere            = mempty
 makeWhere info (Where (ERaw _ f)) = first ("\nWHERE " <>) (f info)
+makeWhere _ (Where (ERawList _))  = unexpectedCompositeKeyError
 
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
@@ -968,14 +975,18 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere            = mempty
 makeHaving info (Where (ERaw _ f)) = first ("\nHAVING " <>) (f info)
+makeHaving _ (Where (ERawList _ )) = unexpectedCompositeKeyError
 
 makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
-makeOrderBy info os = first ("\nORDER BY " <>) $ uncommas' (map mk os)
+makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' . concat . map mk $ os
   where
-    mk :: OrderByClause -> (TLB.Builder, [PersistValue])
-    mk (EOrderBy t (ERaw p f)) = first ((<> orderByType t) . parensM p) (f info)
-    mk EOrderRandom = first ((<> "RANDOM()")) mempty
+    mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
+    mk (EOrderBy t (ERaw p f)) = [first ((<> orderByType t) . parensM p) (f info)]
+    mk (EOrderBy t (ERawList f)) = let fs = fst $ f info
+                                       vals = repeat []
+                                   in zip (map (<> orderByType t) fs) vals
+    mk EOrderRandom = [first ((<> "RANDOM()")) mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 
