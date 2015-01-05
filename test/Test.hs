@@ -249,6 +249,27 @@ main = do
                   return p
           liftIO $ ret5 `shouldBe` [ p1e, p4e, p3e, p2e ]
 
+      it "works with non-id primary key" $
+        run $ do
+          let fc = Frontcover number ""
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          [Entity _ ret] <- select $ from $ return
+          liftIO $ do
+            ret `shouldBe` fc
+            fcPk `shouldBe` thePk
+
+      it "works when returning a composite primary key from a query" $
+        pendingWith "Need to refactor 'Value a's SqlQuery instance"
+        {-
+        run $ do
+          let p = Point 10 20 ""
+          thePk <- insert p
+          [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
+          liftIO $ ppk `shouldBe` thePk
+        -}
+
 
     describe "select/JOIN" $ do
       it "works with a LEFT OUTER JOIN" $
@@ -303,6 +324,76 @@ main = do
              orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
              return (p, mb)
         ) `shouldThrow` (\(OnClauseWithoutMatchingJoinException _) -> True)
+
+      it "works with ForeignKey to a non-id primary key returning one entity" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article "Esqueleto supports composite pks!" number
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [Entity _ retFc] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
+              return f
+          liftIO $ do
+            retFc `shouldBe` fc
+            fcPk `shouldBe` thePk
+
+      it "works with a ForeignKey to a non-id primary key returning both entities" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article "Esqueleto supports composite pks!" number
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [(Entity _ retFc, Entity _ retArt)] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
+              return (f, a)
+          liftIO $ do
+            retFc `shouldBe` fc
+            retArt `shouldBe` article
+            fcPk `shouldBe` thePk
+            articleFkfrontcover retArt `shouldBe` thePk
+
+      it "works with a non-id primary key returning one entity" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article2 "Esqueleto supports composite pks!" thePk
+              number = 101
+              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+          fcPk <- insert fc
+          insert_ article
+          [Entity _ retFc] <- select $
+            from $ \(a `InnerJoin` f) -> do
+              on (f^.FrontcoverId ==. a^.Article2FrontcoverId)
+              return f
+          liftIO $ do
+            retFc `shouldBe` fc
+            fcPk `shouldBe` thePk
+
+      it "works with a composite primary key" $
+        pendingWith "Persistent does not create the CircleFkPoint constructor. See: https://github.com/yesodweb/persistent/issues/341"
+        {-
+        run $ do
+          let p = Point x y ""
+              c = Circle x y ""
+              x = 10
+              y = 15
+              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
+                                          , PersistInt64 $ fromIntegral y]
+          pPk <- insert p
+          insert_ c
+          [Entity _ ret] <- select $ from $ \(c' `InnerJoin` p') -> do
+            on (p'^.PointId ==. c'^.CircleFkpoint)
+            return p'
+          liftIO $ do
+            ret `shouldBe` p
+            pPk `shouldBe` thePk
+       -}
 
     describe "select/where_" $ do
       it "works for a simple example with (==.)" $
@@ -501,6 +592,21 @@ main = do
                                   , (p3e, Nothing,  Nothing)
                                   , (p2e, Just f21, Just p1e) ]
 
+      it "works with a composite primary key" $
+        run $ do
+          let p = Point x y ""
+              x = 10
+              y = 15
+              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
+                                          , PersistInt64 $ fromIntegral y]
+          pPk <- insert p
+          [Entity _ ret] <- select $ from $ \p' -> do
+            where_ (p'^.PointId ==. val pPk)
+            return p'
+          liftIO $ do
+            ret `shouldBe` p
+            pPk `shouldBe` thePk
+
 
     describe "select/orderBy" $ do
       it "works with a single ASC field" $
@@ -579,6 +685,16 @@ main = do
           -- of 11 random samplings returning the same ordering
           -- is 1/2^40, so this test should pass almost everytime.
           liftIO $ S.size rets `shouldSatisfy` (>2)
+
+      it "works on a composite primary key" $
+        run $ do
+          let ps = [Point 2 1 "", Point 1 2 ""]
+          mapM_ insert ps
+          eps <- select $
+            from $ \p' -> do
+              orderBy [asc (p'^.PointId)]
+              return p'
+          liftIO $ map entityVal eps `shouldBe` reverse ps
 
 
     describe "selectDistinct" $
@@ -733,6 +849,25 @@ main = do
           liftIO $ ret `shouldBe` [ Entity p1k p1 { personAge = Just 3 }
                                   , Entity p3k p3 { personAge = Just 7 }
                                   , Entity p2k p2 { personAge = Just 0 } ]
+
+      it "works with a composite primary key" $
+        pendingWith "Need refactor to support composite pks on ESet"
+        {-
+        run $ do
+          let p = Point x y ""
+              x = 10
+              y = 15
+              newX = 20
+              newY = 25
+              Right newPk = keyFromValues [ PersistInt64 $ fromIntegral newX
+                                          , PersistInt64 $ fromIntegral newY]
+          insert_ p
+          () <- update $ \p' -> do
+                set p' [PointId =. val newPk]
+          [Entity _ ret] <- select $ from $ return
+          liftIO $ do
+            ret `shouldBe` Point newX newY []
+        -}
 
       it "GROUP BY works with COUNT" $
         run $ do
@@ -937,118 +1072,6 @@ main = do
 
           liftIO $ ret `shouldBe` [ Value (3) ]
 
-      it "works with custom primary key" $
-        run $ do
-          let fc = Frontcover number ""
-              number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
-          fcPk <- insert fc
-          [Entity _ ret] <- select $ from $ return
-          liftIO $ do
-            ret `shouldBe` fc
-            fcPk `shouldBe` thePk
-
-      it "works with composite primary key" $
-        run $ do
-          let p = Point x y ""
-              x = 10
-              y = 15
-              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
-                                          , PersistInt64 $ fromIntegral y]
-          pPk <- insert p
-          [Entity _ ret] <- select $ from $ \p' -> do
-            where_ (p'^.PointId ==. val pPk)
-            return p'
-          liftIO $ do
-            ret `shouldBe` p
-            pPk `shouldBe` thePk
-
-      {- FIXME: Persistent does not create the CircleFkPoint constructor.
-       - See: https://github.com/yesodweb/persistent/issues/341
-      it "can join on a composite primary key" $
-        run $ do
-          let p = Point x y ""
-              c = Circle x y ""
-              x = 10
-              y = 15
-              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
-                                          , PersistInt64 $ fromIntegral y]
-          pPk <- insert p
-          insert_ c
-          [Entity _ ret] <- select $ from $ \(c' `InnerJoin` p') -> do
-            on (p'^.PointId ==. c'^.CircleFkpoint)
-            return p'
-          liftIO $ do
-            ret `shouldBe` p
-            pPk `shouldBe` thePk
-      -}
-
-      it "can join a ForeignKey with a non-id primary key and return one entity" $
-        run $ do
-          let fc = Frontcover number ""
-              article = Article "Esqueleto supports composite pks!" number
-              number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
-          fcPk <- insert fc
-          insert_ article
-          [Entity _ retFc] <- select $
-            from $ \(a `InnerJoin` f) -> do
-              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
-              return f
-          liftIO $ do
-            retFc `shouldBe` fc
-            fcPk `shouldBe` thePk
-
-      it "can join a ForeignKey with a non-id primary key and return both entities" $
-        run $ do
-          let fc = Frontcover number ""
-              article = Article "Esqueleto supports composite pks!" number
-              number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
-          fcPk <- insert fc
-          insert_ article
-          [(Entity _ retFc, Entity _ retArt)] <- select $
-            from $ \(a `InnerJoin` f) -> do
-              on (f^.FrontcoverNumber ==. a^.ArticleFrontcoverNumber)
-              return (f, a)
-          liftIO $ do
-            retFc `shouldBe` fc
-            retArt `shouldBe` article
-            fcPk `shouldBe` thePk
-            articleFkfrontcover retArt `shouldBe` thePk
-
-      it "can join with a non-id primary key and return one entity" $
-        run $ do
-          let fc = Frontcover number ""
-              article = Article2 "Esqueleto supports composite pks!" thePk
-              number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
-          fcPk <- insert fc
-          insert_ article
-          [Entity _ retFc] <- select $
-            from $ \(a `InnerJoin` f) -> do
-              on (f^.FrontcoverId ==. a^.Article2FrontcoverId)
-              return f
-          liftIO $ do
-            retFc `shouldBe` fc
-            fcPk `shouldBe` thePk
-
-      it "can orderBy composite primary key" $
-        run $ do
-          let ps = [Point 2 1 "", Point 1 2 ""]
-          mapM_ insert ps
-          eps <- select $
-            from $ \p' -> do
-              orderBy [asc (p'^.PointId)]
-              return p'
-          liftIO $ map entityVal eps `shouldBe` reverse ps
-
-      it "can return a composite primary key from a query" $
-        run $ do
-          let p = Point 10 20 ""
-          thePk <- insert p
-          [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
-          liftIO $ ppk `shouldBe` thePk
 
 ----------------------------------------------------------------------
 

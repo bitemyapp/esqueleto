@@ -523,8 +523,7 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp op _ _ = error . TL.unpack . TLB.toLazyText $
-                          "Operator '" <> op <> "' not supported on non-id/composite primary keys"
+unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError
 {-# INLINE unsafeSqlBinOp #-}
 
 unsafeSqlBinOpList :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
@@ -1094,6 +1093,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
 instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
   sqlSelectCols info (ERaw p f) = let (b, vals) = f info
                                   in (parensM p b, vals)
+  sqlSelectCols _ (ERawList _) = unexpectedCompositeKeyError
   sqlSelectColCount = const 1
   sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
   sqlSelectProcessRow _    = Left "SqlSelect (Value a): wrong number of columns."
