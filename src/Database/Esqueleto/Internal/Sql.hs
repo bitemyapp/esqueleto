@@ -376,8 +376,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   min_     = unsafeSqlFunction "MIN"
   max_     = unsafeSqlFunction "MAX"
 
-  coalesce              = unsafeSqlFunction "COALESCE"
-  coalesceDefault exprs = unsafeSqlFunction "COALESCE" . (exprs ++) . return . just
+  coalesce              = unsafeSqlFunctionParens "COALESCE"
+  coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
   like    = unsafeSqlBinOp    " LIKE "
   (%)     = unsafeSqlValue    "'%'"
@@ -523,6 +523,16 @@ unsafeSqlExtractSubField subField arg =
     let (argsTLB, argsVals) =
           uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
     in ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
+
+-- | (Internal) A raw SQL function. Preserves parentheses around arguments.
+-- See 'unsafeSqlBinOp' for warnings.
+unsafeSqlFunctionParens :: UnsafeSqlFunctionArgument a =>
+                           TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlFunctionParens name arg =
+  ERaw Never $ \info ->
+    let (argsTLB, argsVals) =
+          uncommas' $ map (\(ERaw p f) -> first (parensM p) (f info)) $ toArgList arg
+    in (name <> parens argsTLB, argsVals)
 
 
 class UnsafeSqlFunctionArgument a where
