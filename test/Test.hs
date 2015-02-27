@@ -592,6 +592,28 @@ main = do
                                    , Value 5
                                    ]
 
+      it "works with sub-queries" $
+        run $ do
+          p1id <- insert p1
+          p2id <- insert p2
+          p3id <- insert p3
+          _    <- insert p4
+          _    <- insert p5
+          _ <- insert $ BlogPost "a" p1id
+          _ <- insert $ BlogPost "b" p2id
+          _ <- insert $ BlogPost "c" p3id
+          ret <- select $
+                 from $ \b -> do
+                   let sub =
+                           from $ \p -> do
+                           where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                           return $ p ^. PersonAge
+                   return $ coalesceDefault [sub_select sub] (val (42 :: Int))
+          liftIO $ ret `shouldBe` [ Value (36 :: Int)
+                                  , Value 42
+                                  , Value 17
+                                  ]
+
 #if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
       it "works on PostgreSQL and MySQL with <2 arguments" $
         run $ do
