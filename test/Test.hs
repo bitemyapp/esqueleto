@@ -34,6 +34,9 @@ import Database.Persist.MySQL ( withMySQLConn
                               , defaultConnectInfo)
 #else
 import Database.Persist.Sqlite (withSqliteConn)
+#if MIN_VERSION_persistent_sqlite(2,1,3)
+import Database.Sqlite (SqliteException)
+#endif
 #endif
 import Database.Persist.TH
 import Test.Hspec
@@ -604,7 +607,11 @@ main = do
         run (select $
              from $ \p -> do
              return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
+#if MIN_VERSION_persistent_sqlite(2,1,3)
+        ) `shouldThrow` (\(_ :: SqliteException) -> True)
+#else
         ) `shouldThrow` (\(_ :: IOException) -> True)
+#endif
 #endif
 
     describe "text functions" $
