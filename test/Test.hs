@@ -348,7 +348,7 @@ main = do
           let fc = Frontcover number ""
               article = Article "Esqueleto supports composite pks!" number
               number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+              Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
           insert_ article
           [Entity _ retFc] <- select $
@@ -364,7 +364,7 @@ main = do
           let fc = Frontcover number ""
               article = Article "Esqueleto supports composite pks!" number
               number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+              Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
           insert_ article
           [(Entity _ retFc, Entity _ retArt)] <- select $
@@ -382,7 +382,7 @@ main = do
           let fc = Frontcover number ""
               article = Article2 "Esqueleto supports composite pks!" thePk
               number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+              Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
           insert_ article
           [Entity _ retFc] <- select $
@@ -401,8 +401,7 @@ main = do
               c = Circle x y ""
               x = 10
               y = 15
-              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
-                                          , PersistInt64 $ fromIntegral y]
+              Right thePk = keyFromValues [toPersistValue x, toPersistValue y]
           pPk <- insert p
           insert_ c
           [Entity _ ret] <- select $ from $ \(c' `InnerJoin` p') -> do
@@ -615,8 +614,7 @@ main = do
           let p = Point x y ""
               x = 10
               y = 15
-              Right thePk = keyFromValues [ PersistInt64 $ fromIntegral x
-                                          , PersistInt64 $ fromIntegral y]
+              Right thePk = keyFromValues [toPersistValue x, toPersistValue y]
           pPk <- insert p
           [Entity _ ret] <- select $ from $ \p' -> do
             where_ (p'^.PointId ==. val pPk)
@@ -881,8 +879,7 @@ main = do
               y = 15
               newX = 20
               newY = 25
-              Right newPk = keyFromValues [ PersistInt64 $ fromIntegral newX
-                                          , PersistInt64 $ fromIntegral newY]
+              Right newPk = keyFromValues [toPersistValue newX, toPersistValue newY]
           insert_ p
           () <- update $ \p' -> do
                 set p' [PointId =. val newPk]
