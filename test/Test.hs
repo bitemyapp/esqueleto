@@ -78,6 +78,11 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     name String
     Primary name
     deriving Eq Show
+  ArticleTag
+    articleId ArticleId
+    tagId     TagId
+    Primary   articleId tagId
+    deriving Eq Show
   Article2
     title String
     frontcoverId FrontcoverId
@@ -411,6 +416,27 @@ main = do
             ret `shouldBe` p
             pPk `shouldBe` thePk
        -}
+
+      it "works when joining via a non-id primary key" $
+        run $ do
+          let fc = Frontcover number ""
+              article = Article "Esqueleto supports composite pks!" number
+              tag = Tag "foo"
+              otherTag = Tag "ignored"
+              number = 101
+          insert_ fc
+          insert_ otherTag
+          artId <- insert article
+          tagId <- insert tag
+          insert_ $ ArticleTag artId tagId
+          [(Entity _ retArt, Entity _ retTag)] <- select $
+            from $ \(a `InnerJoin` at `InnerJoin` t) -> do
+              on (t^.TagId ==. at^.ArticleTagTagId)
+              on (a^.ArticleId ==. at^.ArticleTagArticleId)
+              return (a, t)
+          liftIO $ do
+            retArt `shouldBe` article
+            retTag `shouldBe` tag
 
     describe "select/where_" $ do
       it "works for a simple example with (==.)" $
