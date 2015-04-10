@@ -74,6 +74,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     frontcoverNumber Int
     Foreign Frontcover fkfrontcover frontcoverNumber
     deriving Eq Show
+  Tag
+    name String
+    Primary name
+    deriving Eq Show
   Article2
     title String
     frontcoverId FrontcoverId
@@ -256,12 +260,23 @@ main = do
         run $ do
           let fc = Frontcover number ""
               number = 101
-              Right thePk = keyFromValues [PersistInt64 $ fromIntegral number]
+              Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
           [Entity _ ret] <- select $ from $ return
           liftIO $ do
             ret `shouldBe` fc
             fcPk `shouldBe` thePk
+
+      it "works when returning a custom non-composite primary key from a query" $
+        run $ do
+          let name = "foo"
+              t = Tag name
+              Right thePk = keyFromValues [toPersistValue name]
+          tagPk <- insert t
+          [Value ret] <- select $ from $ \t' -> return (t'^.TagId)
+          liftIO $ do
+            ret `shouldBe` thePk
+            thePk `shouldBe` tagPk
 
       it "works when returning a composite primary key from a query" $
         pendingWith "Need to refactor 'Value a's SqlQuery instance"
