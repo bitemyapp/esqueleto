@@ -46,6 +46,7 @@ import Test.Hspec
 import qualified Control.Monad.Trans.Resource as R
 import qualified Data.Set as S
 import qualified Data.List as L
+import Data.Char (toLower, toUpper)
 
 
 -- Test schema
@@ -532,6 +533,25 @@ main = do
                  from $ \p->
                  return $ joinV $ max_ (p ^. PersonAge)
           liftIO $ ret `shouldBe` [ Value $ Just (36 :: Int) ]
+
+      it "works with lower_" $
+        run $ do
+          p1e <- insert' p1
+          p2e@(Entity _ bob) <- insert' $ Person "bob" (Just 36) Nothing   1
+
+          -- lower(name) == 'john'
+          ret <- select $
+                 from $ \p-> do
+                 where_ (lower_ (p ^. PersonName) ==. val (map toLower $ personName p1))
+                 return p
+          liftIO $ ret `shouldBe` [ p1e ]
+
+          -- name == lower('BOB')
+          ret <- select $
+                 from $ \p-> do
+                 where_ (p ^. PersonName ==. lower_ (val $ map toUpper $ personName bob))
+                 return p
+          liftIO $ ret `shouldBe` [ p2e ]
 
       it "works with random_" $
         run $ do
