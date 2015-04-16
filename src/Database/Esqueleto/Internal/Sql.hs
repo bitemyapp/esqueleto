@@ -410,6 +410,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
   like    = unsafeSqlBinOp    " LIKE "
+  ilike   = unsafeSqlBinOp    " ILIKE "
   (%)     = unsafeSqlValue    "'%'"
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "

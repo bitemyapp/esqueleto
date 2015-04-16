@@ -853,7 +853,7 @@ main = do
 #endif
 #endif
 
-    describe "text functions" $
+    describe "text functions" $ do
       it "like, (%) and (++.) work on a simple example" $
          run $ do
            [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
@@ -867,6 +867,21 @@ main = do
            nameContains "h"  [p1e, p2e]
            nameContains "i"  [p4e, p3e]
            nameContains "iv" [p4e]
+
+#if defined(WITH_POSTGRESQL)
+      it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
+         run $ do
+           [p1e, p2e, p3e, p4e, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
+           let nameContains t expected = do
+                 ret <- select $
+                        from $ \p -> do
+                        where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
+                        orderBy [asc (p ^. PersonName)]
+                        return p
+                 liftIO $ ret `shouldBe` expected
+           nameContains "mi" [p3e, p5e]
+           nameContains "JOHN" [p1e]
+#endif
 
     describe "delete" $
       it "works on a simple example" $
