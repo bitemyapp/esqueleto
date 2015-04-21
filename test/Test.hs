@@ -439,6 +439,19 @@ main = do
             retArt `shouldBe` article
             retTag `shouldBe` tag
 
+      it "respects the associativity of joins" $
+        run $ do
+            insert' p1
+            ps <- select . from $
+                      \((p :: SqlExpr (Entity Person))
+                       `LeftOuterJoin`
+                        (( q :: SqlExpr (Entity Person))
+                         `InnerJoin` (r :: SqlExpr (Entity Person)))) -> do
+                on (val False) -- Inner join is empty
+                on (val True)
+                return p
+            liftIO $ (entityVal <$> ps) `shouldBe` [p1]
+
     describe "select/where_" $ do
       it "works for a simple example with (==.)" $
         run $ do
