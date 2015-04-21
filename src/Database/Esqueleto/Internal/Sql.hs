@@ -152,7 +152,9 @@ collectOnClauses = go []
           matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
           matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
           matchC = case onClause of
-                     Nothing -> return (FromJoin l k r (Just expr))
+                     Nothing | k /= CrossJoinKind
+                               -> return (FromJoin l k r (Just expr))
+                             | otherwise -> mzero
                      Just _  -> mzero
     tryMatch _ _ = mzero
 

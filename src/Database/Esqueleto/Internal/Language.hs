@@ -550,6 +550,7 @@ data JoinKind =
   | LeftOuterJoinKind  -- ^ @LEFT OUTER JOIN@
   | RightOuterJoinKind -- ^ @RIGHT OUTER JOIN@
   | FullOuterJoinKind  -- ^ @FULL OUTER JOIN@
+    deriving Eq
 
 
 -- | (Internal) Functions that operate on types (that should be)
