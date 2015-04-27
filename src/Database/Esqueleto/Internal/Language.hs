@@ -390,7 +390,8 @@ infixl 6 +., -.
 infixr 5 ++.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
-infixr 2 ||., `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`, `like`
+infixr 2 ||., `like`
+infixl 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
 
 -- | Syntax sugar for 'case_'.
 --

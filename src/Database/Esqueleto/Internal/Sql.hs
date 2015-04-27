@@ -936,19 +936,20 @@ makeFrom info mode fs = ret
   where
     ret = case collectOnClauses fs of
             Left expr -> throw $ mkExc expr
-            Right fs' -> keyword $ uncommas' (map (mk Never mempty) fs')
+            Right fs' -> keyword $ uncommas' (map (mk Never) fs')
     keyword = case mode of
                 UPDATE -> id
                 _      -> first ("\nFROM " <>)
 
-    mk _     onClause (FromStart i def) = base i def <> onClause
-    mk paren onClause (FromJoin lhs kind rhs monClause) =
+    mk _     (FromStart i def) = base i def
+    mk paren (FromJoin lhs kind rhs monClause) =
       first (parensM paren) $
-      mconcat [ mk Parens onClause lhs
+      mconcat [ mk Never lhs
               , (fromKind kind, mempty)
-              , mk Never (maybe mempty makeOnClause monClause) rhs
+              , mk Parens rhs
+              , maybe mempty makeOnClause monClause
               ]
-    mk _ _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
+    mk _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def
