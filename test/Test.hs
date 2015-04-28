@@ -1242,7 +1242,7 @@ run_worker act =
 #endif
   runSqlConn .
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
-  (runMigration migrateAll >>) $ (cleanDB >> act)
+  (runMigrationSilent migrateAll >>) $ (cleanDB >> act)
 #else
   (runMigrationSilent migrateAll >>) $ act
 #endif
