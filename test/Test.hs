@@ -836,10 +836,11 @@ main = do
 #if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
       it "works on PostgreSQL and MySQL with <2 arguments" $
         run $ do
-          _ :: [Value (Maybe Int)] <- select $
-               from $ \p -> do
-               return (coalesce [p ^. PersonAge])
-          return True
+          _ :: [Value (Maybe Int)] <-
+            select $
+            from $ \p -> do
+            return (coalesce [p ^. PersonAge])
+          return ()
 #else
       it "throws an exception on SQLite with <2 arguments" $
         run (select $
