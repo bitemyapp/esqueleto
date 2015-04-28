@@ -1197,9 +1197,18 @@ cleanDB
   :: (forall m. RunDbMonad m
   => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
-  delete $ from $ \(blogpost :: SqlExpr (Entity BlogPost))-> return ()
-  delete $ from $ \(follow   :: SqlExpr (Entity Follow))  -> return ()
-  delete $ from $ \(person   :: SqlExpr (Entity Person))  -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+
+  delete $ from $ \(_ :: SqlExpr (Entity ArticleTag)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Article))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Article2))   -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Tag))        -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Frontcover)) -> return ()
+
+  delete $ from $ \(_ :: SqlExpr (Entity Circle))     -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
 #endif
 
 
@@ -1233,7 +1242,7 @@ run_worker act =
 #endif
   runSqlConn .
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
-  (runMigrationSilent migrateAll >>) $ (cleanDB >> act)
+  (runMigration migrateAll >>) $ (cleanDB >> act)
 #else
   (runMigrationSilent migrateAll >>) $ act
 #endif
