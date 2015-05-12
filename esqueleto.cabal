@@ -11,8 +11,6 @@ category:            Database
 build-type:          Simple
 cabal-version:       >=1.8
 description:
-  This version is a beta release that works with the persistent-2.0 beta.
-  .
   @esqueleto@ is a bare bones, type-safe EDSL for SQL queries
   that works with unmodified @persistent@ SQL backends.  Its
   language closely resembles SQL, so you don't have to learn
