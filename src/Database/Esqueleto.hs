@@ -129,7 +129,7 @@ import qualified Database.Persist
 --   * Support the mostly used SQL features.  We'd like you to be
 --   able to use @esqueleto@ for all of your queries, no
 --   exceptions.  Send a pull request or open an issue on our
---   project page (<https://github.com/meteficha/esqueleto>) if
+--   project page (<https://github.com/prowdsponsor/esqueleto>) if
 --   there's anything missing that you'd like to see.
 --
 --   * Be as type-safe as possible.  We strive to provide as many
@@ -378,7 +378,7 @@ import qualified Database.Persist
 
 
 -- | @valkey i = 'val' . 'toSqlKey'@
--- (<https://github.com/meteficha/esqueleto/issues/9>).
+-- (<https://github.com/prowdsponsor/esqueleto/issues/9>).
 valkey :: (Esqueleto query expr backend, ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
           Int64 -> expr (Value (Key entity))
 valkey = val . toSqlKey
