@@ -622,7 +622,7 @@ data Insertion a
 --  * A @JOIN@ of any other two types allowed by the innermost
 --  magic, where a @JOIN@ may be an 'InnerJoin', a 'CrossJoin', a
 --  'LeftOuterJoin', a 'RightOuterJoin', or a 'FullOuterJoin'.
---  The @JOINs@ have right fixity, the same as in SQL.
+--  The @JOINs@ have left fixity.
 --
 -- The outermost magic allows you to use @from@ on any tuples of
 -- types supported by innermost magic (and also tuples of tuples,
