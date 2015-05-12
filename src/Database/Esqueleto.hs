@@ -282,7 +282,7 @@ import qualified Database.Persist
 --
 -- @
 -- select $
--- from $ \\(p ``LeftOuterJoin`` mb) -> do
+-- from $ \\(p `'LeftOuterJoin`` mb) -> do
 -- 'on' (just (p ^. PersonId) ==. mb '?.' BlogPostAuthorId)
 -- orderBy [asc (p ^. PersonName), asc (mb '?.' BlogPostTitle)]
 -- return (p, mb)
@@ -311,7 +311,7 @@ import qualified Database.Persist
 --
 -- @
 -- select $
--- from $ \\(p1 ``InnerJoin`` f ``InnerJoin`` p2) -> do
+-- from $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> do
 -- on (p2 ^. PersonId ==. f ^. FollowFollowed)
 -- on (p1 ^. PersonId ==. f ^. FollowFollower)
 -- return (p1, f, p2)

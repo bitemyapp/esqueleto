@@ -99,7 +99,7 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \\(foo ``InnerJoin`` bar) -> do
+  -- from $ \\(foo `'InnerJoin`` bar) -> do
   --   on (foo ^. FooId ==. bar ^. BarFooId)
   --   ...
   -- @
@@ -111,7 +111,7 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \\(foo ``InnerJoin`` bar ``InnerJoin`` baz) -> do
+  -- from $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
   --   on (baz ^. BazId ==. bar ^. BarBazId)
   --   on (foo ^. FooId ==. bar ^. BarFooId)
   --   ...
@@ -122,10 +122,10 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- let query1 =
-  --       from $ \\(foo ``InnerJoin`` bar) -> do
+  --       from $ \\(foo `'InnerJoin`` bar) -> do
   --         on (foo ^. FooId ==. bar ^. BarFooId)
   --     query2 =
-  --       from $ \\(mbaz ``LeftOuterJoin`` quux) -> do
+  --       from $ \\(mbaz `'LeftOuterJoin`` quux) -> do
   --         return (mbaz ?. BazName, quux)
   --     test1 =      (,) \<$\> query1 \<*\> query2
   --     test2 = flip (,) \<$\> query2 \<*\> query1
@@ -140,7 +140,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- in a tuple.
   --
   -- @
-  -- select $ from \\(foo ``InnerJoin`` bar) -> do
+  -- select $ from \\(foo `'InnerJoin`` bar) -> do
   --   on (foo ^. FooBarId ==. bar ^. BarId)
   --   groupBy (bar ^. BarId, bar ^. BarName)
   --   return (bar ^. BarId, bar ^. BarName, countRows)
@@ -151,7 +151,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- @SqlExpr (Value Int)@ to avoid ambiguity):
   --
   -- @
-  -- r \<- select $ from \\(foo ``InnerJoin`` bar) -> do
+  -- r \<- select $ from \\(foo `'InnerJoin`` bar) -> do
   --   on (foo ^. FooBarId ==. bar ^. BarId)
   --   groupBy $ bar ^. BarName
   --   let countRows' = countRows
@@ -281,7 +281,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- for example:
   --
   -- @
-  -- name ``'like'`` (%) ++. val "John" ++. (%)
+  -- name `'like`` (%) ++. val \"John\" ++. (%)
   -- @
   (%) :: (PersistField s, IsString s) => expr (Value s)
   -- | The @CONCAT@ function with a variable number of
@@ -349,13 +349,13 @@ class (Functor query, Applicative query, Monad query) =>
   --    [ when_
   --        (exists $
   --        from $ \\p -> do
-  --        where_ (p ^. PersonName ==. val "Mike"))
+  --        where_ (p ^. PersonName ==. val \"Mike\"))
   --      then_
   --        (sub_select $
   --        from $ \\v -> do
   --        let sub =
   --                from $ \\c -> do
-  --                where_ (c ^. PersonName ==. val "Mike")
+  --                where_ (c ^. PersonName ==. val \"Mike\")
   --                return (c ^. PersonFavNum)
   --        where_ (v ^. PersonFavNum >. sub_select sub)
   --        return $ count (v ^. PersonName) +. val (1 :: Int)) ]
@@ -363,13 +363,13 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   --
   -- This query is a bit complicated, but basically it checks if a person
-  -- named "Mike" exists, and if that person does, run the subquery to find
-  -- out how many people have a ranking (by Fav Num) higher than "Mike".
+  -- named @\"Mike\"@ exists, and if that person does, run the subquery to find
+  -- out how many people have a ranking (by Fav Num) higher than @\"Mike\"@.
   --
   -- __NOTE:__ There are a few things to be aware about this statement.
   --
   --    * This only implements the full CASE statement, it does not
-  --      implement the "simple" CASE statement.
+  --      implement the \"simple\" CASE statement.
   --
   --
   --    * At least one 'when_' and 'then_' is mandatory otherwise it will
@@ -522,7 +522,7 @@ data CrossJoin a b = a `CrossJoin` b
 --
 -- @
 -- select $
--- from $ \\(person ``LeftOuterJoin`` pet) ->
+-- from $ \\(person `'LeftOuterJoin`` pet) ->
 --   ...
 -- @
 --
@@ -638,9 +638,9 @@ data Insertion a
 -- @
 -- from $ \\person -> ...
 -- from $ \\(person, blogPost) -> ...
--- from $ \\(p ``LeftOuterJoin`` mb) -> ...
--- from $ \\(p1 ``InnerJoin`` f ``InnerJoin`` p2) -> ...
--- from $ \\((p1 ``InnerJoin`` f) ``InnerJoin`` p2) -> ...
+-- from $ \\(p `'LeftOuterJoin`` mb) -> ...
+-- from $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> ...
+-- from $ \\((p1 `'InnerJoin`` f) `'InnerJoin`` p2) -> ...
 -- @
 --
 -- The types of the arguments to the lambdas above are,
@@ -654,14 +654,14 @@ data Insertion a
 --      ) => expr (Entity Person)
 -- (person, blogPost)
 --   :: (...) => (expr (Entity Person), expr (Entity BlogPost))
--- (p ``LeftOuterJoin`` mb)
+-- (p `'LeftOuterJoin`` mb)
 --   :: (...) => InnerJoin (expr (Entity Person)) (expr (Maybe (Entity BlogPost)))
--- (p1 ``InnerJoin`` f ``InnerJoin`` p2)
+-- (p1 `'InnerJoin`` f `'InnerJoin`` p2)
 --   :: (...) => InnerJoin
 --                 (expr (Entity Person))
 --                 (InnerJoin (expr (Entity Follow))
 --                            (expr (Entity Person)))
--- ((p1 ``InnerJoin`` f) ``InnerJoin`` p2) ::
+-- ((p1 `'InnerJoin`` f) `'InnerJoin`` p2) ::
 --   :: (...) => InnerJoin
 --                 (InnerJoin (expr (Entity Person))
 --                            (expr (Entity Follow)))
