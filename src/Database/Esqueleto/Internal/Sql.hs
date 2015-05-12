@@ -712,12 +712,12 @@ selectSource query = do
 -- allow type information to flow both from @a@ to @r@ and
 -- vice-versa.  This means that you'll almost never have to give
 -- any type signatures for @esqueleto@ queries.  For example, the
--- query @select $ from $ \\p -> return p@ alone is ambiguous, but
+-- query @'select' $ from $ \\p -> return p@ alone is ambiguous, but
 -- in the context of
 --
 -- @
--- do ps <- select $
---          from $ \\p ->
+-- do ps <- 'select' $
+--          'from' $ \\p ->
 --          return p
 --    liftIO $ mapM_ (putStrLn . personName . entityVal) ps
 -- @
@@ -791,9 +791,9 @@ rawEsqueleto mode query = do
 -- Example of usage:
 --
 -- @
--- delete $
--- from $ \\appointment ->
--- where_ (appointment ^. AppointmentDate <. val now)
+-- 'delete' $
+-- 'from' $ \\appointment ->
+-- 'where_' (appointment '^.' AppointmentDate '<.' 'val' now)
 -- @
 --
 -- Unlike 'select', there is a useful way of using 'delete' that
@@ -801,8 +801,8 @@ rawEsqueleto mode query = do
 -- (i.e., no 'where_' clause), you'll have to use a type signature:
 --
 -- @
--- delete $
--- from $ \\(appointment :: SqlExpr (Entity Appointment)) ->
+-- 'delete' $
+-- 'from' $ \\(appointment :: 'SqlExpr' ('Entity' Appointment)) ->
 -- return ()
 -- @
 delete :: ( MonadIO m )
@@ -826,9 +826,9 @@ deleteCount = rawEsqueleto DELETE
 -- Example of usage:
 --
 -- @
--- update $ \p -> do
--- set p [ PersonAge =. just (val thisYear) -. p ^. PersonBorn ]
--- where_ $ isNothing (p ^. PersonAge)
+-- 'update' $ \p -> do
+-- 'set' p [ PersonAge '=.' 'just' ('val' thisYear) -. p '^.' PersonBorn ]
+-- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
 update :: ( MonadIO m
           , SqlEntity val )

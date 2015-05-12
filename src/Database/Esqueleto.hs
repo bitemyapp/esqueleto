@@ -214,8 +214,8 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- select $
--- from $ \\p -> do
+-- 'select' $
+-- 'from' $ \\p -> do
 -- 'where_' (p '^.' PersonName '==.' 'val' \"John\")
 -- return p
 -- @
@@ -238,14 +238,14 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- select $
--- from $ \\p -> do
--- where_ (p ^. PersonAge '>=.' 'just' (val 18))
+-- 'select' $
+-- 'from' $ \\p -> do
+-- 'where_' (p '^.' PersonAge '>=.' 'just' ('val' 18))
 -- return p
 -- @
 --
 -- Since @age@ is an optional @Person@ field, we use 'just' lift
--- @val 18 :: SqlExpr (Value Int)@ into @just (val 18) ::
+-- @'val' 18 :: SqlExpr (Value Int)@ into @just ('val' 18) ::
 -- SqlExpr (Value (Maybe Int))@.
 --
 -- Implicit joins are represented by tuples.  For example, to get
@@ -261,10 +261,10 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- select $
--- from $ \\(b, p) -> do
--- where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
--- 'orderBy' ['asc' (b ^. BlogPostTitle)]
+-- 'select' $
+-- 'from' $ \\(b, p) -> do
+-- 'where_' (b '^.' BlogPostAuthorId '==.' p '^.' PersonId)
+-- 'orderBy' ['asc' (b '^.' BlogPostTitle)]
 -- return (b, p)
 -- @
 --
@@ -281,10 +281,10 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- select $
--- from $ \\(p `'LeftOuterJoin`` mb) -> do
--- 'on' (just (p ^. PersonId) ==. mb '?.' BlogPostAuthorId)
--- orderBy [asc (p ^. PersonName), asc (mb '?.' BlogPostTitle)]
+-- 'select' $
+-- 'from' $ \\(p `'LeftOuterJoin`` mb) -> do
+-- 'on' ('just' (p '^.' PersonId) '==.' mb '?.' BlogPostAuthorId)
+-- 'orderBy' ['asc' (p '^.' PersonName), 'asc' (mb '?.' BlogPostTitle)]
 -- return (p, mb)
 -- @
 --
@@ -310,10 +310,10 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- select $
--- from $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> do
--- on (p2 ^. PersonId ==. f ^. FollowFollowed)
--- on (p1 ^. PersonId ==. f ^. FollowFollower)
+-- 'select' $
+-- 'from' $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> do
+-- 'on' (p2 '^.' PersonId '==.' f '^.' FollowFollowed)
+-- 'on' (p1 '^.' PersonId '==.' f '^.' FollowFollower)
 -- return (p1, f, p2)
 -- @
 --
@@ -327,11 +327,11 @@ import qualified Database.Persist
 --
 -- @
 -- do 'update' $ \\p -> do
---      'set' p [ PersonName '=.' val \"João\" ]
---      where_ (p ^. PersonName ==. val \"Joao\")
+--      'set' p [ PersonName '=.' 'val' \"João\" ]
+--      'where_' (p '^.' PersonName '==.' 'val' \"Joao\")
 --    'delete' $
---      from $ \\p -> do
---      where_ (p ^. PersonAge <. just (val 14))
+--      'from' $ \\p -> do
+--      'where_' (p '^.' PersonAge '<.' 'just' ('val' 14))
 -- @
 --
 -- The results of queries can also be used for insertions.
@@ -347,8 +347,8 @@ import qualified Database.Persist
 -- In @esqueleto@, we may write the same query above as:
 --
 -- @
--- insertSelect $ from $ \\p->
---  return $ BlogPost \<# \"Group Blog Post\" \<&\> (p ^. PersonId)
+--  'insertSelect' $ 'from' $ \\p->
+--  return $ BlogPost '<#' \"Group Blog Post\" '<&>' (p '^.' PersonId)
 -- @
 --
 -- Individual insertions can be performed through Persistent's

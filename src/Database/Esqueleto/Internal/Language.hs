@@ -99,8 +99,8 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \\(foo `'InnerJoin`` bar) -> do
-  --   on (foo ^. FooId ==. bar ^. BarFooId)
+  -- 'from' $ \\(foo `'InnerJoin`` bar) -> do
+  --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
   --   ...
   -- @
   --
@@ -111,9 +111,9 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
-  --   on (baz ^. BazId ==. bar ^. BarBazId)
-  --   on (foo ^. FooId ==. bar ^. BarFooId)
+  -- 'from' $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
+  --   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
+  --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
   --   ...
   -- @
   --
@@ -122,11 +122,11 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- let query1 =
-  --       from $ \\(foo `'InnerJoin`` bar) -> do
-  --         on (foo ^. FooId ==. bar ^. BarFooId)
+  --       'from' $ \\(foo `'InnerJoin`` bar) -> do
+  --         'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
   --     query2 =
-  --       from $ \\(mbaz `'LeftOuterJoin`` quux) -> do
-  --         return (mbaz ?. BazName, quux)
+  --       'from' $ \\(mbaz `'LeftOuterJoin`` quux) -> do
+  --         return (mbaz '?.' BazName, quux)
   --     test1 =      (,) \<$\> query1 \<*\> query2
   --     test2 = flip (,) \<$\> query2 \<*\> query1
   -- @
@@ -140,10 +140,10 @@ class (Functor query, Applicative query, Monad query) =>
   -- in a tuple.
   --
   -- @
-  -- select $ from \\(foo `'InnerJoin`` bar) -> do
-  --   on (foo ^. FooBarId ==. bar ^. BarId)
-  --   groupBy (bar ^. BarId, bar ^. BarName)
-  --   return (bar ^. BarId, bar ^. BarName, countRows)
+  -- select $ 'from' \\(foo `'InnerJoin`` bar) -> do
+  --   'on' (foo '^.' FooBarId '==.' bar '^.' BarId)
+  --   'groupBy' (bar '^.' BarId, bar '^.' BarName)
+  --   return (bar '^.' BarId, bar '^.' BarName, countRows)
   -- @
   --
   -- With groupBy you can sort by aggregate functions, like so
@@ -152,13 +152,13 @@ class (Functor query, Applicative query, Monad query) =>
   -- 'countRows' has its type restricted by the @:: Int@ below):
   --
   -- @
-  -- r \<- select $ from \\(foo `'InnerJoin`` bar) -> do
-  --   on (foo ^. FooBarId ==. bar ^. BarId)
-  --   groupBy $ bar ^. BarName
-  --   let countRows' = countRows
-  --   orderBy [asc countRows']
-  --   return (bar ^. BarName, countRows')
-  -- forM_ r $ \\((Value name), (Value count)) -> do
+  -- r \<- select $ 'from' \\(foo `'InnerJoin`` bar) -> do
+  --   'on' (foo '^.' FooBarId '==.' bar '^.' BarId)
+  --   'groupBy' $ bar '^.' BarName
+  --   let countRows' = 'countRows'
+  --   'orderBy' ['asc' countRows']
+  --   return (bar '^.' BarName, countRows')
+  -- forM_ r $ \\('Value' name, 'Value' count) -> do
   --   print name
   --   print (count :: Int)
   -- @
@@ -212,8 +212,8 @@ class (Functor query, Applicative query, Monad query) =>
   isNothing :: PersistField typ => expr (Value (Maybe typ)) -> expr (Value Bool)
 
   -- | Analogous to 'Just', promotes a value of type @typ@ into
-  -- one of type @Maybe typ@.  It should hold that @val . Just
-  -- === just . val@.
+  -- one of type @Maybe typ@.  It should hold that @'val' . Just
+  -- === just . 'val'@.
   just :: expr (Value typ) -> expr (Value (Maybe typ))
 
   -- | @NULL@ value.
@@ -282,7 +282,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- for example:
   --
   -- @
-  -- name `'like`` (%) ++. val \"John\" ++. (%)
+  -- name `'like`` (%) ++. 'val' \"John\" ++. (%)
   -- @
   (%) :: (PersistField s, IsString s) => expr (Value s)
   -- | The @CONCAT@ function with a variable number of
@@ -313,10 +313,10 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- @
   -- select $
-  -- from $ \\person -> do
-  -- where_ $ exists $
-  --          from $ \\post -> do
-  --          where_ (post ^. BlogPostAuthorId ==. person ^. PersonId)
+  -- 'from' $ \\person -> do
+  -- 'where_' $ 'exists' $
+  --          'from' $ \\post -> do
+  --          'where_' (post '^.' BlogPostAuthorId '==.' person '^.' PersonId)
   -- return person
   -- @
   exists :: query () -> expr (Value Bool)
@@ -346,21 +346,21 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   -- select $
   -- return $
-  -- case_
-  --    [ when_
-  --        (exists $
-  --        from $ \\p -> do
-  --        where_ (p ^. PersonName ==. val \"Mike\"))
-  --      then_
-  --        (sub_select $
-  --        from $ \\v -> do
+  -- 'case_'
+  --    [ 'when_'
+  --        ('exists' $
+  --        'from' $ \\p -> do
+  --        'where_' (p '^.' PersonName '==.' 'val' \"Mike\"))
+  --      'then_'
+  --        ('sub_select' $
+  --        'from' $ \\v -> do
   --        let sub =
-  --                from $ \\c -> do
-  --                where_ (c ^. PersonName ==. val \"Mike\")
-  --                return (c ^. PersonFavNum)
-  --        where_ (v ^. PersonFavNum >. sub_select sub)
-  --        return $ count (v ^. PersonName) +. val (1 :: Int)) ]
-  --    (else_ $ val (-1))
+  --                'from' $ \\c -> do
+  --                'where_' (c '^.' PersonName '==.' 'val' \"Mike\")
+  --                return (c '^.' PersonFavNum)
+  --        'where_' (v '^.' PersonFavNum >. 'sub_select' sub)
+  --        return $ 'count' (v '^.' PersonName) +. 'val' (1 :: Int)) ]
+  --    ('else_' $ 'val' (-1))
   -- @
   --
   -- This query is a bit complicated, but basically it checks if a person
@@ -444,8 +444,8 @@ data SomeValue expr where
   SomeValue :: Esqueleto query expr backend => expr (Value a) -> SomeValue expr
 
 -- | A class of things that can be converted into a list of SomeValue. It has
--- instances for tuples and is the reason why groupBy can take tuples, like
--- @groupBy (foo ^. FooId, foo ^. FooName, foo ^. FooType)@.
+-- instances for tuples and is the reason why 'groupBy' can take tuples, like
+-- @'groupBy' (foo '^.' FooId, foo '^.' FooName, foo '^.' FooType)@.
 class ToSomeValues expr a where
   toSomeValues :: a -> [SomeValue expr]
 
@@ -523,7 +523,7 @@ data CrossJoin a b = a `CrossJoin` b
 --
 -- @
 -- select $
--- from $ \\(person `'LeftOuterJoin`` pet) ->
+-- 'from' $ \\(person `'LeftOuterJoin`` pet) ->
 --   ...
 -- @
 --
@@ -637,11 +637,11 @@ data Insertion a
 -- of the arguments of the lambda are inside square brackets):
 --
 -- @
--- from $ \\person -> ...
--- from $ \\(person, blogPost) -> ...
--- from $ \\(p `'LeftOuterJoin`` mb) -> ...
--- from $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> ...
--- from $ \\((p1 `'InnerJoin`` f) `'InnerJoin`` p2) -> ...
+-- 'from' $ \\person -> ...
+-- 'from' $ \\(person, blogPost) -> ...
+-- 'from' $ \\(p `'LeftOuterJoin`` mb) -> ...
+-- 'from' $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> ...
+-- 'from' $ \\((p1 `'InnerJoin`` f) `'InnerJoin`` p2) -> ...
 -- @
 --
 -- The types of the arguments to the lambdas above are,
