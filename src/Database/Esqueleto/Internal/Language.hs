@@ -146,9 +146,10 @@ class (Functor query, Applicative query, Monad query) =>
   --   return (bar ^. BarId, bar ^. BarName, countRows)
   -- @
   --
-  -- With groupBy you can sort by aggregate functions, like so (we
-  -- used @let@ to restrict the more general `countRows` to
-  -- @SqlExpr (Value Int)@ to avoid ambiguity):
+  -- With groupBy you can sort by aggregate functions, like so
+  -- (we used @let@ to restrict the more general 'countRows' to
+  -- @SqlExpr (Value Int)@ to avoid ambiguity---the second use of
+  -- 'countRows' has its type restricted by the @:: Int@ below):
   --
   -- @
   -- r \<- select $ from \\(foo `'InnerJoin`` bar) -> do
