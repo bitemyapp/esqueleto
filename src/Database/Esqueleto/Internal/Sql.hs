@@ -31,7 +31,7 @@ module Database.Esqueleto.Internal.Sql
     -- * The guts
   , unsafeSqlCase
   , unsafeSqlBinOp
-  , unsafeSqlBinOpList
+  , unsafeSqlBinOpComposite
   , unsafeSqlValue
   , unsafeSqlFunction
   , unsafeSqlExtractSubField
@@ -246,6 +246,9 @@ useIdent info (I ident) = fromDBName info $ DBName ident
 
 
 -- | An expression on the SQL backend.
+--
+-- There are many comments describing the constructors of this
+-- data type.  However, Haddock doesn't like GADTs, so you'll have to read them by hitting \"Source\".
 data SqlExpr a where
   -- An entity, created by 'from' (cf. 'fromStart').
   EEntity  :: Ident -> SqlExpr (Entity val)
@@ -260,8 +263,47 @@ data SqlExpr a where
   -- interpolated by the SQL backend.
   ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
 
-  -- Used to support non-id/composite primary keys
-  ERawList :: (IdentInfo -> ([TLB.Builder], [PersistValue])) -> SqlExpr (Value a)
+  -- A composite key.
+  --
+  -- Persistent uses the same 'PersistList' constructor for both
+  -- fields which are (homogeneous) lists of values and the
+  -- (probably heterogeneous) values of a composite primary key.
+  --
+  -- We need to treat composite keys as fields.  For example, we
+  -- have to support using ==., otherwise you wouldn't be able to
+  -- join.  OTOH, lists of values should be treated exactly the
+  -- same as any other scalar value.
+  --
+  -- In particular, this is valid for persistent via rawSql for
+  -- an F field that is a list:
+  --
+  --   A.F in ?    -- [PersistList [foo, bar]]
+  --
+  -- However, this is not for a composite key entity:
+  --
+  --   A.ID = ?    -- [PersistList [foo, bar]]
+  --
+  -- The ID field doesn't exist on the DB for a composite key
+  -- table, it exists only on the Haskell side.  Those variations
+  -- also don't work:
+  --
+  --   (A.KeyA, A.KeyB) = ?    -- [PersistList [foo, bar]]
+  --   [A.KeyA, A.KeyB] = ?    -- [PersistList [foo, bar]]
+  --
+  -- We have to generate:
+  --
+  --   A.KeyA = ? AND A.KeyB = ?      -- [foo, bar]
+  --
+  -- Note that the PersistList had to be deconstructed into its
+  -- components.
+  --
+  -- In order to disambiguate behaviors, this constructor is used
+  -- /only/ to represent a composite field access.  It does not
+  -- represent a 'PersistList', not even if the 'PersistList' is
+  -- used in the context of a composite key.  That's because it's
+  -- impossible, e.g., for 'val' to disambiguate between these
+  -- uses.
+  ECompositeKey :: (IdentInfo -> [TLB.Builder]) -> SqlExpr (Value a)
 
   -- 'EList' and 'EEmptyList' are used by list operators.
   EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
@@ -347,43 +389,36 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (^.) :: forall val typ. (PersistEntity val, PersistField typ)
        => SqlExpr (Entity val) -> EntityField val typ -> SqlExpr (Value typ)
   EEntity ident ^. field
-    | isComposite = ERawList   $ \info -> (dot info <$> compositeFields pdef,  [])
-    | otherwise   = ERaw Never $ \info -> (dot info  $  persistFieldDef field, [])
+    | isComposite = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
+    | otherwise   = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
     where
       isComposite = isIdField field && hasCompositeKey ed
       dot info x  = useIdent info ident <> "." <> fromDBName info (fieldDB x)
       ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
       Just pdef   = entityPrimary ed
 
-  EMaybe r ?. field = maybelize (r ^. field)
-    where
-      maybelize :: SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
-      maybelize (ERaw p f)   = ERaw p f
-      maybelize (ERawList f) = ERawList f
+  EMaybe r ?. field = just (r ^. field)
 
-  val v =
-    case toPersistValue v of
-      PersistList vs -> ERawList   $ const (replicate (length vs) "?", vs)
-      pv             -> ERaw Never $ const ("?", [pv])
+  val v = ERaw Never $ const ("?", [toPersistValue v])
 
-  isNothing (ERaw p f)   = ERaw Parens $ first ((<> " IS NULL") . parensM p) . f
-  isNothing (ERawList f) = ERaw Parens $ first (intersperseB " AND " . map (<> " IS NULL")) . f
-  just (ERaw p f)   = ERaw p f
-  just (ERawList f) = ERawList f
+  isNothing (ERaw p f)        = ERaw Parens $ first ((<> " IS NULL") . parensM p) . f
+  isNothing (ECompositeKey f) = ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
+  just (ERaw p f)        = ERaw p f
+  just (ECompositeKey f) = ECompositeKey f
   nothing = unsafeSqlValue "NULL"
-  joinV (ERaw p f)   = ERaw p f
-  joinV (ERawList f) = ERawList f
+  joinV (ERaw p f)        = ERaw p f
+  joinV (ECompositeKey f) = ECompositeKey f
   countRows = unsafeSqlValue "COUNT(*)"
   count (ERaw _ f) = ERaw Never $ \info -> let (b, vals) = f info
                                            in ("COUNT" <> parens b, vals)
-  count (ERawList _) = unsafeSqlValue "COUNT(*)" -- Assumes no NULLs on a PK
+  count (ECompositeKey _) = unsafeSqlValue "COUNT(*)" -- Assumes no NULLs on a PK
 
   not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                           in ("NOT " <> parensM p b, vals)
-  not_ (ERawList _) = unexpectedCompositeKeyError
+  not_ (ECompositeKey _) = unexpectedCompositeKeyError "not_"
 
-  (==.) = unsafeSqlBinOpList " = " " AND "
-  (!=.) = unsafeSqlBinOpList " != " " OR "
+  (==.) = unsafeSqlBinOpComposite " = " " AND "
+  (!=.) = unsafeSqlBinOpComposite " != " " OR "
   (>=.) = unsafeSqlBinOp " >= "
   (>.)  = unsafeSqlBinOp " > "
   (<=.) = unsafeSqlBinOp " <= "
@@ -437,14 +472,14 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   field *=. expr = setAux field (\ent -> ent ^. field *. expr)
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
-  (<#) _ (ERaw _ f)   = EInsert Proxy f
-  (<#) _ (ERawList _) = unexpectedCompositeKeyError
+  (<#) _ (ERaw _ f)        = EInsert Proxy f
+  (<#) _ (ECompositeKey _) = unexpectedCompositeKeyError "(<#)"
 
   (EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x ->
     let (fb, fv) = f x
         (gb, gv) = g x
     in (fb <> ", " <> gb, fv ++ gv)
-  (EInsert _ _) <&> (ERawList _) = unexpectedCompositeKeyError
+  (EInsert _ _) <&> (ECompositeKey _) = unexpectedCompositeKeyError "(<&>)"
 
   case_ = unsafeSqlCase
 
@@ -504,8 +539,8 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
         let (b1, vals1) = f1' info
             (b2, vals2) = f2 info
         in ( b0 <> " WHEN " <> parensM p1' b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
-    foldHelp _ _ _ = unexpectedCompositeKeyError
-unsafeSqlCase _ (ERawList _) = unexpectedCompositeKeyError
+    foldHelp _ _ _ = unexpectedCompositeKeyError "unsafeSqlCase/foldHelp"
+unsafeSqlCase _ (ECompositeKey _) = unexpectedCompositeKeyError "unsafeSqlCase"
 
 
 -- | (Internal) Create a custom binary operator.  You /should/
@@ -527,7 +562,7 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError
+unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError "unsafeSqlBinOp"
 {-# INLINE unsafeSqlBinOp #-}
 
 
@@ -539,23 +574,46 @@ unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError
 --
 -- @
 -- (==.) :: SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value Bool)
--- (==.) = unsafeSqlBinOpList " = " " AND "
+-- (==.) = unsafeSqlBinOpComposite " = " " AND "
 -- @
-unsafeSqlBinOpList :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOpList op _ a@(ERaw _ _)    b@(ERaw _ _)  = unsafeSqlBinOp op a b
-unsafeSqlBinOpList op sep (ERawList f1) (ERawList f2) = ERaw Never f
+--
+-- Persistent has a hack for implementing composite keys (see
+-- 'ECompositeKey' doc for more details), so we're forced to use
+-- a hack here as well.  We deconstruct 'ERaw' values based on
+-- two rules:
+--
+--   - If it is a single placeholder, then it's assumed to be
+--   coming from a 'PersistList' and thus its components are
+--   separated so that they may be applied to a composite key.
+--
+--   - If it is not a single placeholder, then it's assumed to be
+--   a foreign (composite or not) key, so we enforce that it has
+--   no placeholders and split it on the commas.
+unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOpComposite op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
+unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify b)
   where
-    f info = let (b1, vals1) = f1 info
-                 (b2, vals2) = f2 info
-             in ( intersperseB sep . map (\(a,b) -> a <> op <> b) $
-                  zip b1 b2
-                , vals1 <> vals2 )
-unsafeSqlBinOpList op sep a b = unsafeSqlBinOpList op sep (promote a) (promote b)
-  where
-    promote :: SqlExpr (Value d) -> SqlExpr (Value d)
-    promote (ERaw p f)     = ERawList $ first (return . parensM p) . f
-    promote x@(ERawList _) = x
-{-# INLINE unsafeSqlBinOpList #-}
+    listify :: SqlExpr (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
+    listify (ECompositeKey f) = flip (,) [] . f
+    listify (ERaw _ f)        = deconstruct . f
+
+    deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
+    deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
+    deconstruct (b, []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b), [])
+    deconstruct x = err $ "cannot deconstruct " ++ show x ++ "."
+
+    compose f1 f2 info
+      | not (null v1 || null v2) = err' "one side needs to have null placeholders"
+      | length b1 /= length b2   = err' "mismatching lengths"
+      | otherwise                = (bc, vc)
+      where
+        (b1, v1) = f1 info
+        (b2, v2) = f2 info
+        bc = intersperseB sep [x <> op <> y | (x, y) <- zip b1 b2]
+        vc = v1 <> v2
+        err' = err . (++ (", " ++ show ((b1, v1), (b2, v2))))
+
+    err = error . ("unsafeSqlBinOpComposite: " ++)
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
@@ -626,8 +684,8 @@ instance ( UnsafeSqlFunctionArgument a
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue (ERaw p f) = ERaw p f
-veryUnsafeCoerceSqlExprValue (ERawList f) = ERawList f
+veryUnsafeCoerceSqlExprValue (ERaw p f)        = ERaw p f
+veryUnsafeCoerceSqlExprValue (ECompositeKey f) = ECompositeKey f
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
@@ -964,30 +1022,30 @@ makeFrom info mode fs = ret
     fromKind RightOuterJoinKind = " RIGHT OUTER JOIN "
     fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
 
-    makeOnClause (ERaw _ f)   = first (" ON " <>) (f info)
-    makeOnClause (ERawList _) = unexpectedCompositeKeyError
+    makeOnClause (ERaw _ f)        = first (" ON " <>) (f info)
+    makeOnClause (ECompositeKey _) = unexpectedCompositeKeyError "makeFrom/makeOnClause"
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f info)
-    mkExc (ERawList _) = unexpectedCompositeKeyError
+    mkExc (ECompositeKey _) = unexpectedCompositeKeyError "makeFrom/mkExc"
 
-unexpectedCompositeKeyError :: a
-unexpectedCompositeKeyError = error "non-id/composite keys not expected here"
+unexpectedCompositeKeyError :: String -> a
+unexpectedCompositeKeyError w = error $ w ++ ": non-id/composite keys not expected here"
 
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
 makeSet info os = first ("\nSET " <>) . uncommas' $ concatMap mk os
   where
-    mk (SetClause (ERaw _ f))   = [f info]
-    mk (SetClause (ERawList _)) = error "esqueleto/makeSet: FIXME"
+    mk (SetClause (ERaw _ f))        = [f info]
+    mk (SetClause (ECompositeKey _)) = unexpectedCompositeKeyError "makeSet" -- FIXME
 
 makeWhere :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
-makeWhere _    NoWhere              = mempty
-makeWhere info (Where (ERaw _ f))   = first ("\nWHERE " <>) (f info)
-makeWhere _    (Where (ERawList _)) = unexpectedCompositeKeyError
+makeWhere _    NoWhere                   = mempty
+makeWhere info (Where (ERaw _ f))        = first ("\nWHERE " <>) (f info)
+makeWhere _    (Where (ECompositeKey _)) = unexpectedCompositeKeyError "makeWhere"
 
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
@@ -997,19 +1055,20 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
     build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f info) fields
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
-makeHaving _    NoWhere               = mempty
-makeHaving info (Where (ERaw _ f))    = first ("\nHAVING " <>) (f info)
-makeHaving _    (Where (ERawList _ )) = unexpectedCompositeKeyError
+makeHaving _    NoWhere                    = mempty
+makeHaving info (Where (ERaw _ f))         = first ("\nHAVING " <>) (f info)
+makeHaving _    (Where (ECompositeKey _ )) = unexpectedCompositeKeyError "makeHaving"
 
 makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
 makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
   where
     mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
-    mk (EOrderBy t (ERaw p f))   = [first ((<> orderByType t) . parensM p) (f info)]
-    mk (EOrderBy t (ERawList f)) = let fs = fst $ f info
-                                       vals = repeat []
-                                   in zip (map (<> orderByType t) fs) vals
+    mk (EOrderBy t (ERaw p f)) = [first ((<> orderByType t) . parensM p) (f info)]
+    mk (EOrderBy t (ECompositeKey f)) =
+      let fs = f info
+          vals = repeat []
+      in zip (map (<> orderByType t) fs) vals
     mk EOrderRandom = [first ((<> "RANDOM()")) mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
@@ -1116,15 +1175,15 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
 -- | You may return any single value (i.e. a single column) from
 -- a 'select' query.
 instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
-  sqlSelectCols info (ERaw p f) = let (b, vals) = f info
-                                  in (parensM p b, vals)
-  sqlSelectCols info (ERawList f) = let (b, vals) = f info
-                                    in case b of
-                                         [b'] -> (parensM Parens b', vals)
-                                         _    -> unexpectedCompositeKeyError
+  sqlSelectCols info (ERaw p f) =
+    let (b, vals) = f info
+    in (parensM p b, vals)
+  sqlSelectCols info (ECompositeKey f) =
+    let bs = f info
+    in (uncommas $ map (parensM Parens) bs, [])
   sqlSelectColCount = const 1
   sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
-  sqlSelectProcessRow _    = Left "SqlSelect (Value a): wrong number of columns."
+  sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples

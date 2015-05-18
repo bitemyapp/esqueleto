@@ -289,14 +289,11 @@ main = do
             thePk `shouldBe` tagPk
 
       it "works when returning a composite primary key from a query" $
-        pendingWith "Need to refactor 'Value a's SqlQuery instance"
-        {-
         run $ do
           let p = Point 10 20 ""
           thePk <- insert p
           [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
           liftIO $ ppk `shouldBe` thePk
-        -}
 
 
     describe "select/JOIN" $ do
