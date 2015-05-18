@@ -65,6 +65,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     follower PersonId
     followed PersonId
     deriving Eq Show
+
+  CcList
+    names [String]
+
   Frontcover
     number Int
     title String
@@ -1094,6 +1098,16 @@ main = do
                           where_ (bp ^. BlogPostAuthorId ==. p ^. PersonId)
                  return p
           liftIO $ ret `shouldBe` [ Entity p2k p2 ]
+
+
+    describe "list fields" $ do
+      -- <https://github.com/prowdsponsor/esqueleto/issues/100>
+      it "can update list fields" $
+        run $ do
+          cclist <- insert $ CcList []
+          update $ \p -> do
+            set p [ CcListNames =. val ["fred"]]
+            where_ (p ^. CcListId ==. val cclist)
 
     describe "inserts by select" $ do
       it "IN works for insertSelect" $
