@@ -276,6 +276,9 @@ class (Functor query, Applicative query, Monad query) =>
 
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  -- | @ILIKE@ operator (case-insensitive @LIKE@).
+  -- Supported by PostgreSQL only.
+  ilike :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
   -- concatenation ('concat_' or '++.', depending on your
   -- database).  Note that you always to type the parenthesis,
@@ -391,7 +394,7 @@ infixl 6 +., -.
 infixr 5 ++.
 infix  4 ==., >=., >., <=., <., !=.
 infixr 3 &&., =., +=., -=., *=., /=.
-infixr 2 ||., `like`
+infixr 2 ||., `like`, `ilike`
 infixl 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuterJoin`
 
 -- | Syntax sugar for 'case_'.
