@@ -277,7 +277,10 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | @ILIKE@ operator (case-insensitive @LIKE@).
+  --
   -- Supported by PostgreSQL only.
+  --
+  -- /Since: 2.2.3/
   ilike :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
   -- concatenation ('concat_' or '++.', depending on your
