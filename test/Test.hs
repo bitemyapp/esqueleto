@@ -24,6 +24,8 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
+import Data.List (sortBy)
+import Data.Ord (comparing)
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
@@ -51,6 +53,12 @@ import Data.Char (toLower, toUpper)
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
+  Foo
+    name Int
+    Primary name
+  Bar
+    quux FooId
+
   Person
     name String
     age Int Maybe
@@ -773,18 +781,48 @@ main = do
           liftIO $ map entityVal eps `shouldBe` reverse ps
 
 
-    describe "selectDistinct" $
-      it "works on a simple example" $
+    describe "SELECT DISTINCT" $ do
+      let selDistTest
+            :: (   forall m. RunDbMonad m
+                => SqlQuery (SqlExpr (Value String))
+                -> SqlPersistT (R.ResourceT m) [Value String])
+            -> IO ()
+          selDistTest q =
+            run $ do
+              p1k <- insert p1
+              let (t1, t2, t3) = ("a", "b", "c")
+              mapM_ (insert . flip BlogPost p1k) [t1, t3, t2, t2, t1]
+              ret <- q $
+                     from $ \b -> do
+                     let title = b ^. BlogPostTitle
+                     orderBy [asc title]
+                     return title
+              liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
+      it "works on a simple example (selectDistinct)" $
+        selDistTest selectDistinct
+
+      it "works on a simple example (select . distinct)" $
+        selDistTest (select . distinct)
+
+      it "works on a simple example (distinct (return ()))" $
+        selDistTest (\act -> select $ distinct (return ()) >> act)
+
+#if defined(WITH_POSTGRESQL)
+    describe "SELECT DISTINCT ON" $ do
+      it "works on a simple example" $ do
         run $ do
-          p1k <- insert p1
-          let (t1, t2, t3) = ("a", "b", "c")
-          mapM_ (insert . flip BlogPost p1k) [t1, t3, t2, t2, t1]
-          ret <- selectDistinct $
-                 from $ \b -> do
-                 let title = b ^. BlogPostTitle
-                 orderBy [asc title]
-                 return title
-          liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
+          [p1k, p2k, _] <- mapM insert [p1, p2, p3]
+          [bpA, bpB, bpC] <- mapM insert'
+            [ BlogPost "A" p1k
+            , BlogPost "B" p1k
+            , BlogPost "C" p2k ]
+          ret <- select $
+                 from $ \bp ->
+                 distinctOn [bp ^. BlogPostAuthorId] $ do
+                 orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
+                 return bp
+          liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
+#endif
 
     describe "coalesce/coalesceDefault" $ do
       it "works on a simple example" $

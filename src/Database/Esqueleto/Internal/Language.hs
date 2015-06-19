@@ -179,6 +179,61 @@ class (Functor query, Applicative query, Monad query) =>
   -- | @OFFSET@.  Usually used with 'limit'.
   offset :: Int64 -> query ()
 
+  -- | @DISTINCT@.  Change the current @SELECT@ into @SELECT
+  -- DISTINCT@.  For example:
+  --
+  -- @
+  -- select $ distinct $
+  --   'from' \\foo -> do
+  --   ...
+  -- @
+  --
+  -- Note that this also has the same effect:
+  --
+  -- @
+  -- select $
+  --   'from' \\foo -> do
+  --   distinct (return ())
+  --   ...
+  -- @
+  --
+  -- /Since: 2.2.4/
+  distinct :: query a -> query a
+
+  -- | @DISTINCT ON@.  Change the current @SELECT@ into
+  -- @SELECT DISTINCT ON (expressions)@.  For example:
+  --
+  -- @
+  -- select $
+  --   'from' \\foo ->
+  --   distinctOn [foo ^. FooName, foo ^. FooState] $ do
+  --   ...
+  -- @
+  --
+  -- You can also chain different calls to 'distinctOn' whenever
+  -- your fields have different types:
+  --
+  -- @
+  -- select $
+  --   'from' \\foo ->
+  --   distinctOn [foo ^. FooName] $
+  --   distinctOn [foo ^. FooState] $ do
+  --   ...
+  -- @
+  --
+  -- Each call to 'distinctOn' adds more expressions.  Calls to
+  -- 'distinctOn' override any calls to 'distinct'.
+  --
+  -- Note that PostgreSQL requires the expressions on @DISTINCT
+  -- ON@ to be the first ones to appear on a @ORDER BY@.  This is
+  -- not managed automatically by esqueleto, keeping its spirit
+  -- of trying to be close to raw SQL.
+  --
+  -- Supported by PostgreSQL only.
+  --
+  -- /Since: 2.2.4/
+  distinctOn :: [expr (Value b)] -> query a -> query a
+
   -- | @ORDER BY random()@ clause.
   --
   -- /Since: 1.3.10/
@@ -389,6 +444,10 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- /Since: 2.1.2/
   case_ :: PersistField a => [(expr (Value Bool), expr (Value a))] -> expr (Value a) -> expr (Value a)
+
+{-# DEPRECATED sub_selectDistinct "Since 2.2.4: use 'sub_select' and 'distinct'." #-}
+{-# DEPRECATED subList_selectDistinct "Since 2.2.4: use 'subList_select' and 'distinct'." #-}
+
 
 -- Fixity declarations
 infixl 9 ^.

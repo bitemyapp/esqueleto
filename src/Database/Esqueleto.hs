@@ -38,7 +38,8 @@ module Database.Esqueleto
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset, having
+    Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
+             , distinct, distinctOn, having
              , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, joinV, countRows, count, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)

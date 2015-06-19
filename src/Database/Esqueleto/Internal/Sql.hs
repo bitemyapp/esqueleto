@@ -103,19 +103,34 @@ type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlBackend)
 
 
 -- | Side data written by 'SqlQuery'.
-data SideData = SideData { sdFromClause    :: ![FromClause]
-                         , sdSetClause     :: ![SetClause]
-                         , sdWhereClause   :: !WhereClause
-                         , sdGroupByClause :: !GroupByClause
-                         , sdHavingClause  :: !HavingClause
-                         , sdOrderByClause :: ![OrderByClause]
-                         , sdLimitClause   :: !LimitClause
+data SideData = SideData { sdDistinctClause :: !DistinctClause
+                         , sdFromClause     :: ![FromClause]
+                         , sdSetClause      :: ![SetClause]
+                         , sdWhereClause    :: !WhereClause
+                         , sdGroupByClause  :: !GroupByClause
+                         , sdHavingClause   :: !HavingClause
+                         , sdOrderByClause  :: ![OrderByClause]
+                         , sdLimitClause    :: !LimitClause
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty
-  SideData f s w g h o l `mappend` SideData f' s' w' g' h' o' l' =
-    SideData (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l')
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty
+  SideData d f s w g h o l `mappend` SideData d' f' s' w' g' h' o' l' =
+    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l')
+
+
+-- | The @DISTINCT@ "clause".
+data DistinctClause =
+    DistinctAll                     -- ^ The default, everything.
+  | DistinctStandard                -- ^ Only @DISTINCT@, SQL standard.
+  | DistinctOn [SqlExpr (Value ())] -- ^ @DISTINCT ON@, PostgreSQL extension.
+
+instance Monoid DistinctClause where
+  mempty = DistinctAll
+  DistinctOn a     `mappend` DistinctOn b = DistinctOn (a <> b)
+  DistinctOn a     `mappend` _            = DistinctOn a
+  DistinctStandard `mappend` _            = DistinctStandard
+  DistinctAll      `mappend` b            = b
 
 
 -- | A part of a @FROM@ clause.
@@ -383,8 +398,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   limit  n = Q $ W.tell mempty { sdLimitClause = Limit (Just n) Nothing  }
   offset n = Q $ W.tell mempty { sdLimitClause = Limit Nothing  (Just n) }
 
+  distinct         act = Q (W.tell mempty { sdDistinctClause = DistinctStandard  }) >> act
+  distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs' }) >> act
+    where exprs' = map veryUnsafeCoerceSqlExprValue exprs
+
   sub_select         = sub SELECT
-  sub_selectDistinct = sub SELECT_DISTINCT
+  sub_selectDistinct = sub_select . distinct
 
   (^.) :: forall val typ. (PersistEntity val, PersistField typ)
        => SqlExpr (Entity val) -> EntityField val typ -> SqlExpr (Value typ)
@@ -451,7 +470,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (++.)   = unsafeSqlBinOp    " || "
 
   subList_select         = EList . sub_select
-  subList_selectDistinct = EList . sub_selectDistinct
+  subList_selectDistinct = subList_select . distinct
 
   valList []   = EEmptyList
   valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
@@ -801,11 +820,8 @@ selectDistinctSource
      , MonadResource m )
   => SqlQuery a
   -> C.Source (SqlPersistT m) r
-selectDistinctSource query = do
-    src <- lift $ do
-        res <- rawSelectSource SELECT_DISTINCT query
-        fmap snd $ allocateAcquire res
-    src
+selectDistinctSource = selectSource . distinct
+{-# DEPRECATED selectDistinctSource "Since 2.2.4: use 'selectSource' and 'distinct'." #-}
 
 
 -- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
@@ -813,10 +829,8 @@ selectDistinctSource query = do
 selectDistinct :: ( SqlSelect a r
                   , MonadIO m )
                => SqlQuery a -> SqlPersistT m [r]
-selectDistinct query = do
-    res <- rawSelectSource SELECT_DISTINCT query
-    conn <- R.ask
-    liftIO $ with res $ flip R.runReaderT conn . runSource
+selectDistinct = select . distinct
+{-# DEPRECATED selectDistinct "Since 2.2.4: use 'select' and 'distinct'." #-}
 
 
 -- | (Internal) Run a 'C.Source' of rows.
@@ -925,7 +939,8 @@ toRawSql mode (conn, firstIdentState) query =
         flip S.runState firstIdentState $
         W.runWriterT $
         unQ query
-      SideData fromClauses
+      SideData distinctClause
+               fromClauses
                setClauses
                whereClauses
                groupByClause
@@ -939,7 +954,7 @@ toRawSql mode (conn, firstIdentState) query =
       info = (conn, finalIdentState)
   in mconcat
       [ makeInsertInto info mode ret
-      , makeSelect     info mode ret
+      , makeSelect     info mode distinctClause ret
       , makeFrom       info mode fromClauses
       , makeSet        info setClauses
       , makeWhere      info whereClauses
@@ -953,11 +968,9 @@ toRawSql mode (conn, firstIdentState) query =
 -- | (Internal) Mode of query being converted by 'toRawSql'.
 data Mode =
     SELECT
-  | SELECT_DISTINCT
   | DELETE
   | UPDATE
-  | INSERT_INTO Mode
-    -- ^ 'Mode' should be either 'SELECT' or 'SELECT_DISTINCT'.
+  | INSERT_INTO
 
 
 uncommas :: [TLB.Builder] -> TLB.Builder
@@ -971,21 +984,26 @@ uncommas' = (uncommas *** mconcat) . unzip
 
 
 makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeInsertInto info (INSERT_INTO _) ret = sqlInsertInto info ret
-makeInsertInto _    _               _   = mempty
+makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
+makeInsertInto _    _           _   = mempty
 
 
-makeSelect :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
-makeSelect info mode_ ret = process mode_
+makeSelect :: SqlSelect a r => IdentInfo -> Mode -> DistinctClause -> a -> (TLB.Builder, [PersistValue])
+makeSelect info mode_ distinctClause ret = process mode_
   where
     process mode =
       case mode of
-        SELECT            -> withCols "SELECT "
-        SELECT_DISTINCT   -> withCols "SELECT DISTINCT "
-        DELETE            -> plain "DELETE "
-        UPDATE            -> plain "UPDATE "
-        INSERT_INTO mode' -> process mode'
-    withCols v = first (v <>) (sqlSelectCols info ret)
+        SELECT      -> withCols selectKind
+        DELETE      -> plain "DELETE "
+        UPDATE      -> plain "UPDATE "
+        INSERT_INTO -> process SELECT
+    selectKind =
+      case distinctClause of
+        DistinctAll      -> ("SELECT ", [])
+        DistinctStandard -> ("SELECT DISTINCT ", [])
+        DistinctOn exprs -> first (("SELECT DISTINCT ON (" <>) . (<> ") ")) $
+                            uncommas' (materializeExpr info <$> exprs)
+    withCols v = v <> (sqlSelectCols info ret)
     plain    v = (v, [])
 
 
@@ -1176,15 +1194,20 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
 -- | You may return any single value (i.e. a single column) from
 -- a 'select' query.
 instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
-  sqlSelectCols info (ERaw p f) =
-    let (b, vals) = f info
-    in (parensM p b, vals)
-  sqlSelectCols info (ECompositeKey f) =
-    let bs = f info
-    in (uncommas $ map (parensM Parens) bs, [])
+  sqlSelectCols = materializeExpr
   sqlSelectColCount = const 1
   sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
   sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
+
+
+-- | Materialize a @SqlExpr (Value a)@.
+materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
+materializeExpr info (ERaw p f) =
+  let (b, vals) = f info
+  in (parensM p b, vals)
+materializeExpr info (ECompositeKey f) =
+  let bs = f info
+  in (uncommas $ map (parensM Parens) bs, [])
 
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
@@ -1681,16 +1704,11 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 -- | Insert a 'PersistField' for every selected value.
 insertSelect :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertSelect = insertGeneralSelect SELECT
+insertSelect = liftM (const ()) . rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 
 -- | Insert a 'PersistField' for every unique selected value.
 insertSelectDistinct :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertSelectDistinct = insertGeneralSelect SELECT_DISTINCT
-
-
-insertGeneralSelect :: (MonadIO m, PersistEntity a) =>
-  Mode -> SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertGeneralSelect mode =
-  liftM (const ()) . rawEsqueleto (INSERT_INTO mode) . fmap EInsertFinal
+insertSelectDistinct = insertSelect . distinct
+{-# DEPRECATED insertSelectDistinct "Since 2.2.4: use 'insertSelect' and 'distinct'." #-}
