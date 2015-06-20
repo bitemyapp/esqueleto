@@ -1147,6 +1147,7 @@ main = do
                  where_ $ exists $
                           from $ \bp -> do
                           where_ (bp ^. BlogPostAuthorId ==. p ^. PersonId)
+                 orderBy [asc (p ^. PersonName)]
                  return p
           liftIO $ ret `shouldBe` [ Entity p1k p1
                                   , Entity p3k p3 ]
