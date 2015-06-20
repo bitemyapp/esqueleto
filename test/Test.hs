@@ -818,7 +818,7 @@ main = do
             , BlogPost "C" p2k ]
           ret <- select $
                  from $ \bp ->
-                 distinctOn [bp ^. BlogPostAuthorId] $ do
+                 distinctOn [bp ^. BlogPostAuthorId, bp ^. BlogPostTitle] $ do
                  orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
                  return bp
           liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
