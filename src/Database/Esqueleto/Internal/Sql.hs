@@ -123,7 +123,7 @@ instance Monoid SideData where
 data DistinctClause =
     DistinctAll                     -- ^ The default, everything.
   | DistinctStandard                -- ^ Only @DISTINCT@, SQL standard.
-  | DistinctOn [SqlExpr (Value ())] -- ^ @DISTINCT ON@, PostgreSQL extension.
+  | DistinctOn [SqlExpr DistinctOn] -- ^ @DISTINCT ON@, PostgreSQL extension.
 
 instance Monoid DistinctClause where
   mempty = DistinctAll
@@ -328,6 +328,9 @@ data SqlExpr a where
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
   EOrderRandom :: SqlExpr OrderBy
 
+  -- A 'SqlExpr' accepted only by 'distinctOn'.
+  EDistinctOn :: SqlExpr (Value a) -> SqlExpr DistinctOn
+
   -- A 'SqlExpr' accepted only by 'set'.
   ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
 
@@ -398,9 +401,9 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   limit  n = Q $ W.tell mempty { sdLimitClause = Limit (Just n) Nothing  }
   offset n = Q $ W.tell mempty { sdLimitClause = Limit Nothing  (Just n) }
 
-  distinct         act = Q (W.tell mempty { sdDistinctClause = DistinctStandard  }) >> act
-  distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs' }) >> act
-    where exprs' = map veryUnsafeCoerceSqlExprValue exprs
+  distinct         act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
+  distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs }) >> act
+  don = EDistinctOn
 
   sub_select         = sub SELECT
   sub_selectDistinct = sub_select . distinct
@@ -1002,7 +1005,8 @@ makeSelect info mode_ distinctClause ret = process mode_
         DistinctAll      -> ("SELECT ", [])
         DistinctStandard -> ("SELECT DISTINCT ", [])
         DistinctOn exprs -> first (("SELECT DISTINCT ON (" <>) . (<> ") ")) $
-                            uncommas' (materializeExpr info <$> exprs)
+                            uncommas' (processExpr <$> exprs)
+      where processExpr (EDistinctOn f) = materializeExpr info f
     withCols v = v <> (sqlSelectCols info ret)
     plain    v = (v, [])
 

@@ -820,7 +820,7 @@ main = do
             , BlogPost "C" p2k ]
           ret <- select $
                  from $ \bp ->
-                 distinctOn [bp ^. BlogPostAuthorId] $ do
+                 distinctOn [don (bp ^. BlogPostAuthorId)] $ do
                  orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
                  return bp
           liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
@@ -834,8 +834,8 @@ main = do
             , BlogPost "C" p2k ]
           ret <- select $
                  from $ \bp ->
-                 distinctOn [bp ^. BlogPostAuthorId] $
-                 distinctOn [bp ^. BlogPostTitle] $ do
+                 distinctOn [don (bp ^. BlogPostAuthorId)] $
+                 distinctOn [don (bp ^. BlogPostTitle)] $ do
                  orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
                  return bp
           let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal

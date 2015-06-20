@@ -27,6 +27,7 @@ module Database.Esqueleto.Internal.Language
   , FullOuterJoin(..)
   , OnClauseWithoutMatchingJoinException(..)
   , OrderBy
+  , DistinctOn
   , Update
   , Insertion
     -- * The guts
@@ -206,18 +207,18 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   -- select $
   --   'from' \\foo ->
-  --   distinctOn [foo ^. FooName, foo ^. FooState] $ do
+  --   'distinctOn' ['don' (foo ^. FooName), 'don' (foo ^. FooState)] $ do
   --   ...
   -- @
   --
-  -- You can also chain different calls to 'distinctOn' whenever
-  -- your fields have different types:
+  -- You can also chain different calls to 'distinctOn'.  The
+  -- above is equivalent to:
   --
   -- @
   -- select $
   --   'from' \\foo ->
-  --   distinctOn [foo ^. FooName] $
-  --   distinctOn [foo ^. FooState] $ do
+  --   'distinctOn' ['don' (foo ^. FooName)] $
+  --   'distinctOn' ['don' (foo ^. FooState)] $ do
   --   ...
   -- @
   --
@@ -232,7 +233,13 @@ class (Functor query, Applicative query, Monad query) =>
   -- Supported by PostgreSQL only.
   --
   -- /Since: 2.2.4/
-  distinctOn :: [expr (Value b)] -> query a -> query a
+  distinctOn :: [expr DistinctOn] -> query a -> query a
+
+  -- | Erase an expression's type so that it's suitable to
+  -- be used by 'distinctOn'.
+  --
+  -- /Since: 2.2.4/
+  don :: expr (Value a) -> expr DistinctOn
 
   -- | @ORDER BY random()@ clause.
   --
@@ -659,6 +666,10 @@ data PreprocessedFrom a
 
 -- | Phantom type used by 'orderBy', 'asc' and 'desc'.
 data OrderBy
+
+
+-- | Phantom type used by 'distinctOn' and 'don'.
+data DistinctOn
 
 
 -- | Phantom type for a @SET@ operation on an entity of the given
