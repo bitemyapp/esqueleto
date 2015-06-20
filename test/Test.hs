@@ -18,6 +18,7 @@
 module Main (main) where
 
 import Control.Applicative ((<$>))
+import Control.Arrow ((&&&))
 import Control.Exception (IOException)
 import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -812,16 +813,32 @@ main = do
       it "works on a simple example" $ do
         run $ do
           [p1k, p2k, _] <- mapM insert [p1, p2, p3]
+          [_, bpB, bpC] <- mapM insert'
+            [ BlogPost "A" p1k
+            , BlogPost "B" p1k
+            , BlogPost "C" p2k ]
+          ret <- select $
+                 from $ \bp ->
+                 distinctOn [bp ^. BlogPostAuthorId] $ do
+                 orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
+                 return bp
+          liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
+
+      it "works on a slightly less simple example" $ do
+        run $ do
+          [p1k, p2k, _] <- mapM insert [p1, p2, p3]
           [bpA, bpB, bpC] <- mapM insert'
             [ BlogPost "A" p1k
             , BlogPost "B" p1k
             , BlogPost "C" p2k ]
           ret <- select $
                  from $ \bp ->
-                 distinctOn [bp ^. BlogPostAuthorId, bp ^. BlogPostTitle] $ do
-                 orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
+                 distinctOn [bp ^. BlogPostAuthorId] $
+                 distinctOn [bp ^. BlogPostTitle] $ do
+                 orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
                  return bp
-          liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
+          let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
+          liftIO $ ret `shouldBe` sortBy (comparing cmp) [bpA, bpB, bpC]
 #endif
 
     describe "coalesce/coalesceDefault" $ do
