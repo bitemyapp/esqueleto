@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-binds  #-}
 {-# LANGUAGE ConstraintKinds
            , EmptyDataDecls
            , FlexibleContexts
@@ -20,7 +21,7 @@ module Main (main) where
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
 import Control.Exception (IOException)
-import Control.Monad (replicateM, replicateM_)
+import Control.Monad (replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
@@ -451,12 +452,12 @@ main = do
 
       it "respects the associativity of joins" $
         run $ do
-            insert' p1
+            void $ insert p1
             ps <- select . from $
                       \((p :: SqlExpr (Entity Person))
                        `LeftOuterJoin`
-                        (( q :: SqlExpr (Entity Person))
-                         `InnerJoin` (r :: SqlExpr (Entity Person)))) -> do
+                        ((_q :: SqlExpr (Entity Person))
+                         `InnerJoin` (_r :: SqlExpr (Entity Person)))) -> do
                 on (val False) -- Inner join is empty
                 on (val True)
                 return p
@@ -563,18 +564,18 @@ main = do
           p2e@(Entity _ bob) <- insert' $ Person "bob" (Just 36) Nothing   1
 
           -- lower(name) == 'john'
-          ret <- select $
-                 from $ \p-> do
-                 where_ (lower_ (p ^. PersonName) ==. val (map toLower $ personName p1))
-                 return p
-          liftIO $ ret `shouldBe` [ p1e ]
+          ret1 <- select $
+                  from $ \p-> do
+                  where_ (lower_ (p ^. PersonName) ==. val (map toLower $ personName p1))
+                  return p
+          liftIO $ ret1 `shouldBe` [ p1e ]
 
           -- name == lower('BOB')
-          ret <- select $
-                 from $ \p-> do
-                 where_ (p ^. PersonName ==. lower_ (val $ map toUpper $ personName bob))
-                 return p
-          liftIO $ ret `shouldBe` [ p2e ]
+          ret2 <- select $
+                  from $ \p-> do
+                  where_ (p ^. PersonName ==. lower_ (val $ map toUpper $ personName bob))
+                  return p
+          liftIO $ ret2 `shouldBe` [ p2e ]
 
       it "works with random_" $
         run $ do
@@ -927,7 +928,7 @@ main = do
 #if defined(WITH_POSTGRESQL)
       it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
          run $ do
-           [p1e, p2e, p3e, p4e, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
+           [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
            let nameContains t expected = do
                  ret <- select $
                         from $ \p -> do
