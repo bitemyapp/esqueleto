@@ -241,6 +241,25 @@ class (Functor query, Applicative query, Monad query) =>
   -- /Since: 2.2.4/
   don :: expr (Value a) -> expr DistinctOn
 
+  -- | A convenience function that calls both 'distinctOn' and
+  -- 'orderBy'.  In other words,
+  --
+  -- @
+  -- 'distinctOnOrderBy' [asc foo, desc bar, desc quux] $ do
+  --   ...
+  -- @
+  --
+  -- is the same as:
+  --
+  -- @
+  -- 'distinctOn' [don foo, don  bar, don  quux] $ do
+  --   'orderBy'  [asc foo, desc bar, desc quux]
+  --   ...
+  -- @
+  --
+  -- /Since: 2.2.4/
+  distinctOnOrderBy :: [expr OrderBy] -> query a -> query a
+
   -- | @ORDER BY random()@ clause.
   --
   -- /Since: 1.3.10/

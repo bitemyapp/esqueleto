@@ -825,21 +825,32 @@ main = do
                  return bp
           liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
 
-      it "works on a slightly less simple example" $ do
-        run $ do
-          [p1k, p2k, _] <- mapM insert [p1, p2, p3]
-          [bpA, bpB, bpC] <- mapM insert'
-            [ BlogPost "A" p1k
-            , BlogPost "B" p1k
-            , BlogPost "C" p2k ]
-          ret <- select $
-                 from $ \bp ->
-                 distinctOn [don (bp ^. BlogPostAuthorId)] $
-                 distinctOn [don (bp ^. BlogPostTitle)] $ do
-                 orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
-                 return bp
-          let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
-          liftIO $ ret `shouldBe` sortBy (comparing cmp) [bpA, bpB, bpC]
+      let slightlyLessSimpleTest q =
+            run $ do
+              [p1k, p2k, _] <- mapM insert [p1, p2, p3]
+              [bpA, bpB, bpC] <- mapM insert'
+                [ BlogPost "A" p1k
+                , BlogPost "B" p1k
+                , BlogPost "C" p2k ]
+              ret <- select $
+                     from $ \bp ->
+                     q bp $ return bp
+              let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
+              liftIO $ ret `shouldBe` sortBy (comparing cmp) [bpA, bpB, bpC]
+      it "works on a slightly less simple example (two distinctOn calls, orderBy)" $
+        slightlyLessSimpleTest $ \bp act ->
+          distinctOn [don (bp ^. BlogPostAuthorId)] $
+          distinctOn [don (bp ^. BlogPostTitle)] $ do
+            orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
+            act
+      it "works on a slightly less simple example (one distinctOn call, orderBy)" $ do
+        slightlyLessSimpleTest $ \bp act ->
+          distinctOn [don (bp ^. BlogPostAuthorId), don (bp ^. BlogPostTitle)] $ do
+            orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
+            act
+      it "works on a slightly less simple example (distinctOnOrderBy)" $ do
+        slightlyLessSimpleTest $ \bp ->
+          distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
 #endif
 
     describe "coalesce/coalesceDefault" $ do

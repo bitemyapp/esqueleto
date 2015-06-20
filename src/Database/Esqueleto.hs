@@ -39,7 +39,7 @@ module Database.Esqueleto
 
     -- * @esqueleto@'s Language
     Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
-             , distinct, distinctOn, don, having
+             , distinct, distinctOn, don, distinctOnOrderBy, having
              , sub_select, sub_selectDistinct, (^.), (?.)
              , val, isNothing, just, nothing, joinV, countRows, count, not_
              , (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)

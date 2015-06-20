@@ -404,6 +404,13 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   distinct         act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
   distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs }) >> act
   don = EDistinctOn
+  distinctOnOrderBy exprs act =
+    distinctOn (toDistinctOn <$> exprs) $ do
+      orderBy exprs
+      act
+    where
+      toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
+      toDistinctOn (EOrderBy _ f) = EDistinctOn f
 
   sub_select         = sub SELECT
   sub_selectDistinct = sub_select . distinct
