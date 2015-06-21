@@ -706,7 +706,7 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ p1e, p3e, p2e ]
 
-      it "works with two ASC fields" $
+      it "works with two ASC fields (one call)" $
         run $ do
           p1e <- insert' p1
           p2e <- insert' p2
@@ -724,7 +724,7 @@ main = do
           liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
 #endif
 
-      it "works with one ASC and one DESC field" $
+      it "works with one ASC and one DESC field (two calls)" $
         run $ do
           p1e <- insert' p1
           p2e <- insert' p2
@@ -732,7 +732,8 @@ main = do
           p4e <- insert' p4
           ret <- select $
                  from $ \p -> do
-                 orderBy [desc (p ^. PersonAge), asc (p ^. PersonName)]
+                 orderBy [desc (p ^. PersonAge)]
+                 orderBy [asc (p ^. PersonName)]
                  return p
 #ifdef WITH_POSTGRESQL
           liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]

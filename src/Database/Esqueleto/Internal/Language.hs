@@ -166,6 +166,9 @@ class (Functor query, Applicative query, Monad query) =>
   groupBy :: (ToSomeValues expr a) => a -> query ()
 
   -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
+  --
+  -- Multiple calls to 'orderBy' get concatenated on the final
+  -- query, including 'distinctOnOrderBy'.
   orderBy :: [expr OrderBy] -> query ()
 
   -- | Ascending order of this field or expression.
