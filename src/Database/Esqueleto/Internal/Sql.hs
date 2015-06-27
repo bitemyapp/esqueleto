@@ -58,7 +58,7 @@ import Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.Reader as R
 import Data.Int (Int64)
 import Data.List (intersperse)
-import Data.Monoid (Monoid(..), (<>))
+import Data.Monoid (Last(..), Monoid(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (
@@ -111,12 +111,13 @@ data SideData = SideData { sdDistinctClause :: !DistinctClause
                          , sdHavingClause   :: !HavingClause
                          , sdOrderByClause  :: ![OrderByClause]
                          , sdLimitClause    :: !LimitClause
+                         , sdLockingClause  :: !LockingClause
                          }
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty
-  SideData d f s w g h o l `mappend` SideData d' f' s' w' g' h' o' l' =
-    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l')
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  SideData d f s w g h o l k `mappend` SideData d' f' s' w' g' h' o' l' k' =
+    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k')
 
 
 -- | The @DISTINCT@ "clause".
@@ -209,6 +210,10 @@ instance Monoid LimitClause where
     -- More than one 'limit' or 'offset' is issued, we want to
     -- keep the latest one.  That's why we use mplus with
     -- "reversed" arguments.
+
+
+-- | A locking clause.
+type LockingClause = Last LockingKind
 
 
 ----------------------------------------------------------------------
@@ -391,6 +396,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
   having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
+
+  locking kind = Q $ W.tell mempty { sdLockingClause = Last (Just kind) }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -956,7 +963,8 @@ toRawSql mode (conn, firstIdentState) query =
                groupByClause
                havingClause
                orderByClauses
-               limitClause = sd
+               limitClause
+               lockingClause = sd
       -- Pass the finalIdentState (containing all identifiers
       -- that were used) to the subsequent calls.  This ensures
       -- that no name clashes will occur on subqueries that may
@@ -972,6 +980,7 @@ toRawSql mode (conn, firstIdentState) query =
       , makeHaving     info havingClause
       , makeOrderBy    info orderByClauses
       , makeLimit      info limitClause orderByClauses
+      , makeLocking         lockingClause
       ]
 
 
@@ -1110,6 +1119,15 @@ makeLimit (conn, _) (Limit ml mo) orderByClauses =
       hasOrderClause = not (null orderByClauses)
       v = maybe 0 fromIntegral
   in (TLB.fromText limitRaw, mempty)
+
+
+makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
+makeLocking = flip (,) [] . maybe mempty toTLB . getLast
+  where
+    toTLB ForUpdate       = "\nFOR UPDATE"
+    toTLB ForShare        = "\nFOR SHARE"
+    toTLB LockInShareMode = "\nLOCK IN SHARE MODE"
+
 
 
 parens :: TLB.Builder -> TLB.Builder

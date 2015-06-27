@@ -26,7 +26,9 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
+import Data.Char (toLower, toUpper)
 import Data.List (sortBy)
+import Data.Monoid ((<>))
 import Data.Ord (comparing)
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
@@ -48,9 +50,10 @@ import Database.Persist.TH
 import Test.Hspec
 
 import qualified Control.Monad.Trans.Resource as R
-import qualified Data.Set as S
 import qualified Data.List as L
-import Data.Char (toLower, toUpper)
+import qualified Data.Set as S
+import qualified Data.Text.Lazy.Builder as TLB
+import qualified Database.Esqueleto.Internal.Sql as EI
 
 
 -- Test schema
@@ -1268,6 +1271,48 @@ main = do
 
           liftIO $ ret `shouldBe` [ Value (3) ]
 
+    describe "locking" $ do
+      -- The locking clause is the last one, so try to use many
+      -- others to test if it's at the right position.  We don't
+      -- care about the text of the rest, nor with the RDBMS'
+      -- reaction to the clause.
+      let sanityCheck kind syntax = do
+            let complexQuery =
+                  from $ \(p1 `InnerJoin` p2) -> do
+                  on (p1 ^. PersonName ==. p2 ^. PersonName)
+                  where_ (p1 ^. PersonFavNum >. val 2)
+                  orderBy [desc (p2 ^. PersonAge)]
+                  limit 3
+                  offset 9
+                  groupBy (p1 ^. PersonId)
+                  having (countRows <. val (0 :: Int))
+                  return (p1, p2)
+                queryWithClause1 = do
+                  r <- complexQuery
+                  locking kind
+                  return r
+                queryWithClause2 = do
+                  locking ForUpdate
+                  r <- complexQuery
+                  locking ForShare
+                  locking kind
+                  return r
+                queryWithClause3 = do
+                  locking kind
+                  complexQuery
+                toText conn q =
+                  let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+                  in TLB.toLazyText tlb
+            [complex, with1, with2, with3] <-
+              runNoLoggingT $ withConn $ \conn -> return $
+                map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
+            let expected = complex <> "\n" <> syntax
+            (with1, with2, with3) `shouldBe` (expected, expected, expected)
+
+      it "looks sane for ForUpdate"       $ sanityCheck ForUpdate       "FOR UPDATE"
+      it "looks sane for ForShare"        $ sanityCheck ForShare        "FOR SHARE"
+      it "looks sane for LockInShareMode" $ sanityCheck LockInShareMode "LOCK IN SHARE MODE"
+
 
 ----------------------------------------------------------------------
 
@@ -1321,23 +1366,29 @@ verbose = True
 
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act =
+run_worker act = withConn $ runSqlConn (migrateIt >> act)
+
+
+migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
+migrateIt = do
+  void $ runMigrationSilent migrateAll
+#if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
+  cleanDB
+#endif
+
+
+withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+withConn =
   R.runResourceT .
 #if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=test dbname=test" .
+  withPostgresqlConn "host=localhost port=5432 user=test dbname=test"
 #elif defined (WITH_MYSQL)
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
     , connectUser     = "test"
     , connectPassword = "test"
     , connectDatabase = "test"
-    } .
+    }
 #else
-  withSqliteConn ":memory:" .
-#endif
-  runSqlConn .
-#if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
-  (runMigrationSilent migrateAll >>) $ (cleanDB >> act)
-#else
-  (runMigrationSilent migrateAll >>) $ act
+  withSqliteConn ":memory:"
 #endif

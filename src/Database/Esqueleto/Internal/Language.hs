@@ -30,6 +30,7 @@ module Database.Esqueleto.Internal.Language
   , DistinctOn
   , Update
   , Insertion
+  , LockingKind(..)
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
@@ -272,6 +273,15 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- /Since: 1.2.2/
   having :: expr (Value Bool) -> query ()
+
+  -- | Add a locking clause to the query.  Please read
+  -- 'LockingKind' documentation and your RDBMS manual.
+  --
+  -- If multiple calls to 'locking' are made on the same query,
+  -- the last one is used.
+  --
+  -- /Since: 2.2.7/
+  locking :: LockingKind -> query ()
 
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
   -- simple value so should be used only when the @SELECT@ query
@@ -701,6 +711,31 @@ data Update typ
 
 -- | Phantom type used by 'insertSelect'.
 data Insertion a
+
+
+-- | Different kinds of locking clauses supported by 'locking'.
+--
+-- Note that each RDBMS has different locking support.  The
+-- constructors of this datatype specify only the /syntax/ of the
+-- locking mechanism, not its /semantics/.  For example, even
+-- though both MySQL and PostgreSQL support 'ForUpdate', there
+-- are no guarantees that they will behave the same.
+--
+-- /Since: 2.2.7/
+data LockingKind =
+    ForUpdate
+    -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
+    -- PostgreSQL.
+    --
+    -- /Since: 2.2.7/
+  | ForShare
+    -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
+    --
+    -- /Since: 2.2.7/
+  | LockInShareMode
+    -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
+    --
+    -- /Since: 2.2.7/
 
 
 -- | @FROM@ clause: bring entities into scope.
