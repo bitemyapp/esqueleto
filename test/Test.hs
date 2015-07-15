@@ -118,6 +118,9 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     name String
     Foreign Point fkpoint centerX centerY
     deriving Eq Show
+  Numbers
+    int    Int
+    double Double
 |]
 
 -- | this could be achieved with S.fromList, but not all lists
@@ -1205,8 +1208,8 @@ main = do
           ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
           liftIO $ ret `shouldBe` [Value (3::Int)]
 
-    describe "rand works" $ do
-      it "returns result in random order" $
+    describe "Math-related functions" $ do
+      it "rand returns result in random order" $
         run $ do
           replicateM_ 20 $ do
             _ <- insert p1
@@ -1225,6 +1228,17 @@ main = do
                     return (p ^. PersonId)
 
           liftIO $ (ret1 == ret2) `shouldBe` False
+
+      it "castNum works for multiplying Int and Double" $
+        run $ do
+          mapM_ insert [Numbers 2 3.4, Numbers 7 1.1]
+          ret <-
+            select $
+            from $ \n -> do
+            let r = castNum (n ^. NumbersInt) *. n ^. NumbersDouble
+            orderBy [asc r]
+            return r
+          liftIO $ ret `shouldBe` [Value 6.8, Value 7.7]
 
     describe "case" $ do
       it "Works for a simple value based when - False" $

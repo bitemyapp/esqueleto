@@ -476,6 +476,9 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   max_     = unsafeSqlFunction "MAX"
   avg_     = unsafeSqlFunction "AVG"
 
+  castNum  = veryUnsafeCoerceSqlExprValue
+  castNumM = veryUnsafeCoerceSqlExprValue
+
   coalesce              = unsafeSqlFunctionParens "COALESCE"
   coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 

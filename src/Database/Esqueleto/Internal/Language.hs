@@ -351,6 +351,29 @@ class (Functor query, Applicative query, Monad query) =>
   max_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value (Maybe b))
 
+  -- | Allow a number of one type to be used as one of another
+  -- type via an implicit cast.  An explicit cast is not made,
+  -- this function changes only the types on the Haskell side.
+  --
+  -- /Caveat/: Trying to use @castNum@ from @Double@ to @Int@
+  -- will not result in an integer, the original fractional
+  -- number will still be used!  Use 'round_', 'ceiling_' or
+  -- 'floor_' instead.
+  --
+  -- /Safety/: This operation is mostly safe due to the 'Num'
+  -- constraint between the types and the fact that RDBMSs
+  -- usually allow numbers of different types to be used
+  -- interchangeably.  However, there may still be issues with
+  -- the query not being accepted by the RDBMS or @persistent@
+  -- not being able to parse it.
+  --
+  -- /Since: 2.2.9/
+  castNum :: (Num a, Num b) => expr (Value a) -> expr (Value b)
+  -- | Same as 'castNum', but for nullable values.
+  --
+  -- /Since: 2.2.9/
+  castNumM :: (Num a, Num b) => expr (Value (Maybe a)) -> expr (Value (Maybe b))
+
   -- | @COALESCE@ function. Evaluates the arguments in order and
   -- returns the value of the first non-NULL expression, or NULL
   -- (Nothing) otherwise. Some RDBMSs (such as SQLite) require
