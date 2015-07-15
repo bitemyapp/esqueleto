@@ -87,6 +87,9 @@ module Database.Esqueleto
   , (<#)
   , (<&>)
 
+    -- * RDBMS-specific modules
+    -- $rdbmsSpecificModules
+
     -- * Helpers
   , valkey
   , valJ
@@ -375,6 +378,22 @@ import qualified Database.Persist
 --
 --  * Everything from "Database.Persist.Sql" except for
 --    @deleteWhereCount@ and @updateWhereCount@.
+
+
+----------------------------------------------------------------------
+
+
+-- $rdbmsSpecificModules
+--
+-- There are many differences between SQL syntax and functions
+-- supported by different RDBMSs.  Since version 2.2.8,
+-- @esqueleto@ includes modules containing functions that are
+-- specific to a given RDBMS.
+--
+--  * PostgreSQL: "Database.Esqueleto.PostgreSQL".
+--
+-- In order to use these functions, you need to explicitly import
+-- their corresponding modules, they're not re-exported here.
 
 
 ----------------------------------------------------------------------

@@ -53,6 +53,7 @@ import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
+import qualified Database.Esqueleto.PostgreSQL as EP
 import qualified Database.Esqueleto.Internal.Sql as EI
 
 
@@ -1312,6 +1313,24 @@ main = do
       it "looks sane for ForUpdate"       $ sanityCheck ForUpdate       "FOR UPDATE"
       it "looks sane for ForShare"        $ sanityCheck ForShare        "FOR SHARE"
       it "looks sane for LockInShareMode" $ sanityCheck LockInShareMode "LOCK IN SHARE MODE"
+
+    describe "PostgreSQL module" $ do
+      it "should be tested on the PostgreSQL database" $
+#if !defined(WITH_POSTGRESQL)
+        pendingWith "test suite not running under PostgreSQL, skipping"
+#else
+        (return () :: IO ())
+
+      it "arrayAgg looks sane" $
+        run $ do
+          let people = [p1, p2, p3, p4, p5]
+          mapM_ insert people
+          [Value ret] <-
+            select $
+            from $ \p -> do
+            return (EP.arrayAgg (p ^. PersonName))
+          liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+#endif
 
 
 ----------------------------------------------------------------------

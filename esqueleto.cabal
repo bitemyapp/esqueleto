@@ -1,5 +1,5 @@
 name:                esqueleto
-version:             2.2.7
+version:             2.2.8
 synopsis:            Type-safe EDSL for SQL queries on persistent backends.
 homepage:            https://github.com/prowdsponsor/esqueleto
 license:             BSD3
@@ -57,6 +57,7 @@ Flag mysql
 library
   exposed-modules:
     Database.Esqueleto
+    Database.Esqueleto.PostgreSQL
     Database.Esqueleto.Internal.Language
     Database.Esqueleto.Internal.Sql
   other-modules:
