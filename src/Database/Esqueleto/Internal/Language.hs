@@ -350,7 +350,6 @@ class (Functor query, Applicative query, Monad query) =>
   min_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   max_     :: (PersistField a) => expr (Value a) -> expr (Value (Maybe a))
   avg_     :: (PersistField a, PersistField b) => expr (Value a) -> expr (Value (Maybe b))
-  lower_   :: (PersistField a, IsString a) => expr (Value a) -> expr (Value a)
 
   -- | @COALESCE@ function. Evaluates the arguments in order and
   -- returns the value of the first non-NULL expression, or NULL
@@ -368,6 +367,8 @@ class (Functor query, Applicative query, Monad query) =>
   -- /Since: 1.4.3/
   coalesceDefault :: PersistField a => [expr (Value (Maybe a))] -> expr (Value a) -> expr (Value a)
 
+  -- | @LOWER@ function.
+  lower_ :: (PersistField a, IsString a) => expr (Value a) -> expr (Value a)
   -- | @LIKE@ operator.
   like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | @ILIKE@ operator (case-insensitive @LIKE@).

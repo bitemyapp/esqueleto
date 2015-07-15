@@ -475,11 +475,11 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   min_     = unsafeSqlFunction "MIN"
   max_     = unsafeSqlFunction "MAX"
   avg_     = unsafeSqlFunction "AVG"
-  lower_   = unsafeSqlFunction "LOWER"
 
   coalesce              = unsafeSqlFunctionParens "COALESCE"
   coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
+  lower_  = unsafeSqlFunction "LOWER"
   like    = unsafeSqlBinOp    " LIKE "
   ilike   = unsafeSqlBinOp    " ILIKE "
   (%)     = unsafeSqlValue    "'%'"
