@@ -1238,7 +1238,9 @@ main = do
             let r = castNum (n ^. NumbersInt) *. n ^. NumbersDouble
             orderBy [asc r]
             return r
-          liftIO $ ret `shouldBe` [Value 6.8, Value 7.7]
+          liftIO $ length ret `shouldBe` 2
+          let [Value a, Value b] = ret
+          liftIO $ max (abs (a - 6.8)) (abs (b - 7.7)) `shouldSatisfy` (< 0.01)
 
     describe "case" $ do
       it "Works for a simple value based when - False" $
