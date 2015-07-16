@@ -1394,6 +1394,8 @@ cleanDB = do
 
   delete $ from $ \(_ :: SqlExpr (Entity Circle))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
+
+  delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
 #endif
 
 
