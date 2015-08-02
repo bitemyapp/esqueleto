@@ -6,6 +6,7 @@
 module Database.Esqueleto.PostgreSQL
   ( arrayAgg
   , stringAgg
+  , chr
   ) where
 
 import Data.String (IsString)
@@ -32,3 +33,12 @@ stringAgg
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> SqlExpr (Value s) -- ^ Concatenation.
 stringAgg expr delim = unsafeSqlFunction "string_agg" (expr, delim)
+
+
+-- | (@chr@) Translate the given integer to a character. (Note the result will
+-- depend on the character set of your database.)
+--
+-- /Since: 2.2.11/
+chr :: IsString s
+    => SqlExpr (Value Int) -> SqlExpr (Value s)
+chr = unsafeSqlFunction "chr"
