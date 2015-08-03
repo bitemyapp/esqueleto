@@ -1356,8 +1356,12 @@ main = do
             from $ \p -> do
             return (EP.stringAgg (p ^. PersonName) (val " "))
           liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
-#endif
 
+      it "chr looks sane" $
+        run $ do
+          [Value (ret :: String)] <- select $ return (EP.chr (val 65))
+          liftIO $ ret `shouldBe` "A"
+#endif
 
 ----------------------------------------------------------------------
 
