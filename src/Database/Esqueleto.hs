@@ -48,7 +48,7 @@ module Database.Esqueleto
              , min_, max_, sum_, avg_, castNum, castNumM
              , coalesce, coalesceDefault
              , lower_, like, ilike, (%), concat_, (++.)
-             , subList_select, subList_selectDistinct, valList
+             , subList_select, subList_selectDistinct, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
              , case_ )

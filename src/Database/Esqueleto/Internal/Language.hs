@@ -427,6 +427,13 @@ class (Functor query, Applicative query, Monad query) =>
   -- | Lift a list of constant value from Haskell-land to the query.
   valList :: PersistField typ => [typ] -> expr (ValueList typ)
 
+  -- | Same as 'just' but for 'ValueList'.  Most of the time you
+  -- won't need it, though, because you can use 'just' from
+  -- inside 'subList_select' or 'Just' from inside 'valList'.
+  --
+  -- /Since: 2.2.12/
+  justList :: expr (ValueList typ) -> expr (ValueList (Maybe typ))
+
   -- | @IN@ operator.
   in_ :: PersistField typ => expr (Value typ) -> expr (ValueList typ) -> expr (Value Bool)
 

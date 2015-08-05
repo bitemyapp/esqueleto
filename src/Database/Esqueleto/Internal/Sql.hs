@@ -496,6 +496,9 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
                                              , map toPersistValue vals )
 
+  justList EEmptyList = EEmptyList
+  justList (EList v)  = EList (just v)
+
   v `in_`   e = ifNotEmptyList e False $ unsafeSqlBinOp     " IN " v (veryUnsafeCoerceSqlExprValueList e)
   v `notIn` e = ifNotEmptyList e True  $ unsafeSqlBinOp " NOT IN " v (veryUnsafeCoerceSqlExprValueList e)
 
