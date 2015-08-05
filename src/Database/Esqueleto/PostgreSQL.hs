@@ -9,8 +9,6 @@ module Database.Esqueleto.PostgreSQL
   , chr
   ) where
 
-import Data.String (IsString)
-
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
 
@@ -28,7 +26,7 @@ arrayAgg = unsafeSqlFunction "array_agg"
 --
 -- /Since: 2.2.8/
 stringAgg
-  :: IsString s
+  :: SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> SqlExpr (Value s) -- ^ Concatenation.
@@ -39,6 +37,5 @@ stringAgg expr delim = unsafeSqlFunction "string_agg" (expr, delim)
 -- depend on the character set of your database.)
 --
 -- /Since: 2.2.11/
-chr :: IsString s
-    => SqlExpr (Value Int) -> SqlExpr (Value s)
+chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
 chr = unsafeSqlFunction "chr"

@@ -62,6 +62,7 @@ module Database.Esqueleto
   , OrderBy
   , DistinctOn
   , LockingKind(..)
+  , SqlString
     -- ** Joins
   , InnerJoin(..)
   , CrossJoin(..)

@@ -31,6 +31,7 @@ module Database.Esqueleto.Internal.Language
   , Update
   , Insertion
   , LockingKind(..)
+  , SqlString
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
@@ -45,9 +46,14 @@ module Database.Esqueleto.Internal.Language
 import Control.Applicative (Applicative(..), (<$>))
 import Control.Exception (Exception)
 import Data.Int (Int64)
-import Data.String (IsString)
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.PersistentImport
+import Text.Blaze.Html (Html)
+
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
 
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
@@ -391,15 +397,15 @@ class (Functor query, Applicative query, Monad query) =>
   coalesceDefault :: PersistField a => [expr (Value (Maybe a))] -> expr (Value a) -> expr (Value a)
 
   -- | @LOWER@ function.
-  lower_ :: (PersistField a, IsString a) => expr (Value a) -> expr (Value a)
+  lower_ :: (PersistField a, SqlString a) => expr (Value a) -> expr (Value a)
   -- | @LIKE@ operator.
-  like :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  like :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | @ILIKE@ operator (case-insensitive @LIKE@).
   --
   -- Supported by PostgreSQL only.
   --
   -- /Since: 2.2.3/
-  ilike :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  ilike :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
   -- concatenation ('concat_' or '++.', depending on your
   -- database).  Note that you always to type the parenthesis,
@@ -408,14 +414,14 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   -- name `'like`` (%) ++. 'val' \"John\" ++. (%)
   -- @
-  (%) :: (PersistField s, IsString s) => expr (Value s)
+  (%) :: (PersistField s, SqlString s) => expr (Value s)
   -- | The @CONCAT@ function with a variable number of
   -- parameters.  Supported by MySQL and PostgreSQL.
-  concat_ :: (PersistField s, IsString s) => [expr (Value s)] -> expr (Value s)
+  concat_ :: (PersistField s, SqlString s) => [expr (Value s)] -> expr (Value s)
   -- | The @||@ string concatenation operator (named after
   -- Haskell's '++' in order to avoid naming clash with '||.').
   -- Supported by SQLite and PostgreSQL.
-  (++.) :: (PersistField s, IsString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
+  (++.) :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
 
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
   -- list of values.
@@ -767,6 +773,36 @@ data LockingKind =
     -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
     --
     -- /Since: 2.2.7/
+
+
+-- | Phantom class of data types that are treated as strings by the
+-- RDBMS.  It has no methods because it's only used to avoid type
+-- errors such as trying to concatenate integers.
+--
+-- If you have a custom data type or @newtype@, feel free to make
+-- it an instance of this class.
+--
+-- /Since: 2.3.0/
+class SqlString a where
+
+-- | /Since: 2.3.0/
+instance (a ~ Char) => SqlString [a] where
+
+-- | /Since: 2.3.0/
+instance SqlString T.Text where
+
+-- | /Since: 2.3.0/
+instance SqlString TL.Text where
+
+-- | /Since: 2.3.0/
+instance SqlString B.ByteString where
+
+-- | /Since: 2.3.0/
+instance SqlString BL.ByteString where
+
+-- | /Since: 2.3.0/
+instance SqlString Html where
+
 
 
 -- | @FROM@ clause: bring entities into scope.
