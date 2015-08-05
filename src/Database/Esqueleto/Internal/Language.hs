@@ -397,15 +397,15 @@ class (Functor query, Applicative query, Monad query) =>
   coalesceDefault :: PersistField a => [expr (Value (Maybe a))] -> expr (Value a) -> expr (Value a)
 
   -- | @LOWER@ function.
-  lower_ :: (PersistField a, SqlString a) => expr (Value a) -> expr (Value a)
+  lower_ :: SqlString s => expr (Value s) -> expr (Value s)
   -- | @LIKE@ operator.
-  like :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  like :: SqlString s => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | @ILIKE@ operator (case-insensitive @LIKE@).
   --
   -- Supported by PostgreSQL only.
   --
   -- /Since: 2.2.3/
-  ilike :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value Bool)
+  ilike :: SqlString s => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
   -- concatenation ('concat_' or '++.', depending on your
   -- database).  Note that you always to type the parenthesis,
@@ -414,14 +414,14 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   -- name `'like`` (%) ++. 'val' \"John\" ++. (%)
   -- @
-  (%) :: (PersistField s, SqlString s) => expr (Value s)
+  (%) :: SqlString s => expr (Value s)
   -- | The @CONCAT@ function with a variable number of
   -- parameters.  Supported by MySQL and PostgreSQL.
-  concat_ :: (PersistField s, SqlString s) => [expr (Value s)] -> expr (Value s)
+  concat_ :: SqlString s => [expr (Value s)] -> expr (Value s)
   -- | The @||@ string concatenation operator (named after
   -- Haskell's '++' in order to avoid naming clash with '||.').
   -- Supported by SQLite and PostgreSQL.
-  (++.) :: (PersistField s, SqlString s) => expr (Value s) -> expr (Value s) -> expr (Value s)
+  (++.) :: SqlString s => expr (Value s) -> expr (Value s) -> expr (Value s)
 
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
   -- list of values.
@@ -782,8 +782,8 @@ data LockingKind =
 -- If you have a custom data type or @newtype@, feel free to make
 -- it an instance of this class.
 --
--- /Since: 2.3.0/
-class SqlString a where
+-- /Since: 2.4.0/
+class PersistField a => SqlString a where
 
 -- | /Since: 2.3.0/
 instance (a ~ Char) => SqlString [a] where
@@ -796,9 +796,6 @@ instance SqlString TL.Text where
 
 -- | /Since: 2.3.0/
 instance SqlString B.ByteString where
-
--- | /Since: 2.3.0/
-instance SqlString BL.ByteString where
 
 -- | /Since: 2.3.0/
 instance SqlString Html where
