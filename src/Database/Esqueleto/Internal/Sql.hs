@@ -488,6 +488,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (%)     = unsafeSqlValue    "'%'"
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "
+  castString = veryUnsafeCoerceSqlExprValue
 
   subList_select         = EList . sub_select
   subList_selectDistinct = subList_select . distinct

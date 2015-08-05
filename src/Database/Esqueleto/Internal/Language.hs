@@ -422,6 +422,17 @@ class (Functor query, Applicative query, Monad query) =>
   -- Haskell's '++' in order to avoid naming clash with '||.').
   -- Supported by SQLite and PostgreSQL.
   (++.) :: SqlString s => expr (Value s) -> expr (Value s) -> expr (Value s)
+  -- | Cast a string type into 'Text'.  This function
+  -- is very useful if you want to use @newtype@s, or if you want
+  -- to apply functions such as 'like' to strings of different
+  -- types.
+  --
+  -- /Safety:/ This is a slightly unsafe function, especially if
+  -- you have defined your own instances of 'SqlString'.  Also,
+  -- since 'Maybe' is an instance of 'SqlString', it's possible
+  -- to turn a nullable value into a non-nullable one.  Avoid
+  -- using this function if possible.
+  castString :: (SqlString s, SqlString r) => expr (Value s) -> expr (Value r)
 
   -- | Execute a subquery @SELECT@ in an expression.  Returns a
   -- list of values.
@@ -800,6 +811,8 @@ instance SqlString B.ByteString where
 -- | /Since: 2.3.0/
 instance SqlString Html where
 
+-- | /Since: 2.4.0/
+instance SqlString a => SqlString (Maybe a) where
 
 
 -- | @FROM@ clause: bring entities into scope.
