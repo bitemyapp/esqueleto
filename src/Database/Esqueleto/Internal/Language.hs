@@ -327,7 +327,12 @@ class (Functor query, Applicative query, Monad query) =>
   countRows :: Num a => expr (Value a)
 
   -- | @COUNT@.
-  count :: (Num a) => expr (Value typ) -> expr (Value a)
+  count :: Num a => expr (Value typ) -> expr (Value a)
+
+  -- | @COUNT(DISTINCT x)@.
+  --
+  -- /Since: 2.4.1/
+  countDistinct :: Num a => expr (Value typ) -> expr (Value a)
 
   not_ :: expr (Value Bool) -> expr (Value Bool)
 

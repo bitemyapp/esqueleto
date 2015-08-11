@@ -21,7 +21,7 @@ module Main (main) where
 import Control.Applicative ((<$>))
 import Control.Arrow ((&&&))
 import Control.Exception (IOException)
-import Control.Monad (replicateM, replicateM_, void)
+import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
@@ -1329,6 +1329,23 @@ main = do
       it "looks sane for ForUpdate"       $ sanityCheck ForUpdate       "FOR UPDATE"
       it "looks sane for ForShare"        $ sanityCheck ForShare        "FOR SHARE"
       it "looks sane for LockInShareMode" $ sanityCheck LockInShareMode "LOCK IN SHARE MODE"
+
+    describe "counting rows" $ do
+      forM_ [ ("count (test A)",    count . (^. PersonAge),         4)
+            , ("count (test B)",    count . (^. PersonWeight),      5)
+            , ("countRows",         const countRows,                5)
+            , ("countDistinct",     countDistinct . (^. PersonAge), 2) ] $
+        \(title, countKind, expected) ->
+        it (title ++ " works as expected") $
+          run $ do
+            mapM_ insert
+              [ Person "" (Just 1) (Just 1) 1
+              , Person "" (Just 2) (Just 1) 1
+              , Person "" (Just 2) (Just 1) 1
+              , Person "" (Just 2) (Just 2) 1
+              , Person "" Nothing  (Just 3) 1]
+            [Value n] <- select $ from $ return . countKind
+            liftIO $ (n :: Int) `shouldBe` expected
 
     describe "PostgreSQL module" $ do
       it "should be tested on the PostgreSQL database" $

@@ -55,15 +55,15 @@ import Control.Exception (throw, throwIO)
 import Control.Monad (ap, MonadPlus(..), liftM)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
-import qualified Control.Monad.Trans.Reader as R
+import Control.Monad.Trans.Resource (MonadResource)
+import Data.Acquire (with, allocateAcquire, Acquire)
 import Data.Int (Int64)
 import Data.List (intersperse)
 import Data.Monoid (Last(..), Monoid(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist.Sql.Util (
-    entityColumnNames, entityColumnCount, parseEntityValues, isIdField
-  , hasCompositeKey)
+import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
+import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.Conduit as C
@@ -72,8 +72,6 @@ import qualified Data.HashSet as HS
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
-import Data.Acquire (with, allocateAcquire, Acquire)
-import Control.Monad.Trans.Resource (MonadResource)
 
 import Database.Esqueleto.Internal.Language
 
@@ -444,10 +442,9 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   nothing = unsafeSqlValue "NULL"
   joinV (ERaw p f)        = ERaw p f
   joinV (ECompositeKey f) = ECompositeKey f
-  countRows = unsafeSqlValue "COUNT(*)"
-  count (ERaw _ f) = ERaw Never $ \info -> let (b, vals) = f info
-                                           in ("COUNT" <> parens b, vals)
-  count (ECompositeKey _) = unsafeSqlValue "COUNT(*)" -- Assumes no NULLs on a PK
+  countRows     = unsafeSqlValue "COUNT(*)"
+  count         = countHelper ""           ""
+  countDistinct = countHelper "(DISTINCT " ")"
 
   not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                           in ("NOT " <> parensM p b, vals)
@@ -557,6 +554,10 @@ existsHelper = sub SELECT . (>> return true)
 ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 ifNotEmptyList EEmptyList b _ = val b
 ifNotEmptyList (EList _)  _ x = x
+
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a)
+countHelper open close (ERaw _ f) = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . f
+countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
 
 
 ----------------------------------------------------------------------
