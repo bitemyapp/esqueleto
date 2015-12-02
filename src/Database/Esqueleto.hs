@@ -20,7 +20,7 @@
 -- or import @esqueleto@ itself qualified:
 --
 -- @
--- -- For a module uses esqueleto just on some queries.
+-- -- For a module that uses esqueleto just on some queries.
 -- import Database.Persistent
 -- import qualified Database.Esqueleto as E
 -- @
@@ -134,7 +134,7 @@ import qualified Database.Persist
 --   relational algebra EDSL such as HaskellDB, which is
 --   non-trivial to translate into SQL.)
 --
---   * Support the mostly used SQL features.  We'd like you to be
+--   * Support the most widely used SQL features.  We'd like you to be
 --   able to use @esqueleto@ for all of your queries, no
 --   exceptions.  Send a pull request or open an issue on our
 --   project page (<https://github.com/prowdsponsor/esqueleto>) if
@@ -252,7 +252,7 @@ import qualified Database.Persist
 -- return p
 -- @
 --
--- Since @age@ is an optional @Person@ field, we use 'just' lift
+-- Since @age@ is an optional @Person@ field, we use 'just' to lift
 -- @'val' 18 :: SqlExpr (Value Int)@ into @just ('val' 18) ::
 -- SqlExpr (Value (Maybe Int))@.
 --
@@ -276,7 +276,7 @@ import qualified Database.Persist
 -- return (b, p)
 -- @
 --
--- However, we may want your results to include people who don't
+-- However, you may want your results to include people who don't
 -- have any blog posts as well using a @LEFT OUTER JOIN@:
 --
 -- @
@@ -306,7 +306,7 @@ import qualified Database.Persist
 --
 -- We are by no means limited to joins of two tables, nor by
 -- joins of different tables.  For example, we may want a list
--- the @Follow@ entity:
+-- of the @Follow@ entity:
 --
 -- @
 -- SELECT P1.*, Follow.*, P2.*
