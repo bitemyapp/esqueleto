@@ -413,7 +413,7 @@ class (Functor query, Applicative query, Monad query) =>
   ilike :: SqlString s => expr (Value s) -> expr (Value s) -> expr (Value Bool)
   -- | The string @'%'@.  May be useful while using 'like' and
   -- concatenation ('concat_' or '++.', depending on your
-  -- database).  Note that you always to type the parenthesis,
+  -- database).  Note that you always have to type the parenthesis,
   -- for example:
   --
   -- @
