@@ -456,7 +456,25 @@ class (Functor query, Applicative query, Monad query) =>
   -- /Since: 2.2.12/
   justList :: expr (ValueList typ) -> expr (ValueList (Maybe typ))
 
-  -- | @IN@ operator.
+  -- | @IN@ operator. For example if you want to select all @Person@s by a list
+  -- of IDs:
+  --
+  -- @
+  -- SELECT *
+  -- FROM Person
+  -- WHERE Person.id IN (?)
+  -- @
+  --
+  -- In @esqueleto@, we may write the same query above as:
+  --
+  -- @
+  -- select $
+  -- 'from' $ \\person -> do
+  -- 'where_' $ person '^.' PersonId `in_` 'valList' personIds
+  -- return person
+  -- @
+  --
+  -- Where @personIds@ is of type @[Key Person]@.
   in_ :: PersistField typ => expr (Value typ) -> expr (ValueList typ) -> expr (Value Bool)
 
   -- | @NOT IN@ operator.
