@@ -1208,6 +1208,18 @@ main = do
           ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
           liftIO $ ret `shouldBe` [Value (3::Int)]
 
+    describe "inserts by select, returns count" $ do
+      it "IN works for insertSelectCount" $
+        run $ do
+          _ <- insert p1
+          _ <- insert p2
+          _ <- insert p3
+          cnt <- insertSelectCount $ from $ \p -> do
+            return $ BlogPost <# val "FakePost" <&> (p ^. PersonId)
+          ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
+          liftIO $ ret `shouldBe` [Value (3::Int)]
+          liftIO $ cnt `shouldBe` 3
+
     describe "Math-related functions" $ do
       it "rand returns result in random order" $
         run $ do
