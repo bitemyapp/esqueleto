@@ -1740,6 +1740,8 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 
 
 -- | Insert a 'PersistField' for every selected value.
+--
+-- /Since: 2.4.2/
 insertSelect :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
 insertSelect = liftM (const ()) . insertSelectCount
