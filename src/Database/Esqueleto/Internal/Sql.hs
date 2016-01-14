@@ -28,6 +28,7 @@ module Database.Esqueleto.Internal.Sql
   , updateCount
   , insertSelectDistinct
   , insertSelect
+  , insertSelectCount
     -- * The guts
   , unsafeSqlCase
   , unsafeSqlBinOp
@@ -1741,7 +1742,12 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 -- | Insert a 'PersistField' for every selected value.
 insertSelect :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m ()
-insertSelect = liftM (const ()) . rawEsqueleto INSERT_INTO . fmap EInsertFinal
+insertSelect = liftM (const ()) . insertSelectCount
+
+-- | Insert a 'PersistField' for every selected value, return the count afterward
+insertSelectCount :: (MonadIO m, PersistEntity a) =>
+  SqlQuery (SqlExpr (Insertion a)) -> SqlPersistT m Int64
+insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 
 -- | Insert a 'PersistField' for every unique selected value.

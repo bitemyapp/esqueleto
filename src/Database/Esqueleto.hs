@@ -85,6 +85,7 @@ module Database.Esqueleto
   , update
   , updateCount
   , insertSelect
+  , insertSelectCount
   , insertSelectDistinct
   , (<#)
   , (<&>)
