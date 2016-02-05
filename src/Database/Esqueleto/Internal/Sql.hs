@@ -524,6 +524,8 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (EInsert _ _) <&> (ECompositeKey _) = unexpectedCompositeKeyError "(<&>)"
 
   case_ = unsafeSqlCase
+  toBaseId = veryUnsafeCoerceSqlExprValue
+
 
 instance ToSomeValues SqlExpr (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
