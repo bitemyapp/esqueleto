@@ -44,7 +44,6 @@ module Database.Esqueleto.Internal.Language
   , else_
   ) where
 
-import Control.Applicative (Applicative(..), (<$>))
 import Control.Exception (Exception)
 import Data.Int (Int64)
 import Data.Typeable (Typeable)
@@ -52,7 +51,6 @@ import Database.Esqueleto.Internal.PersistentImport
 import Text.Blaze.Html (Html)
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 

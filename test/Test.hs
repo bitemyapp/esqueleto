@@ -18,21 +18,17 @@
  #-}
 module Main (main) where
 
-import Control.Applicative ((<$>))
-import Control.Arrow ((&&&))
-import Control.Exception (IOException)
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
-import Data.List (sortBy)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
+import qualified Database.Esqueleto.PostgreSQL as EP
 #elif defined (WITH_MYSQL)
 import Database.Persist.MySQL ( withMySQLConn
                               , connectHost
@@ -53,7 +49,6 @@ import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
-import qualified Database.Esqueleto.PostgreSQL as EP
 import qualified Database.Esqueleto.Internal.Sql as EI
 
 
@@ -808,8 +803,6 @@ main = do
                      orderBy [asc title]
                      return title
               liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
-      it "works on a simple example (selectDistinct)" $
-        selDistTest selectDistinct
 
       it "works on a simple example (select . distinct)" $
         selDistTest (select . distinct)
@@ -1307,15 +1300,15 @@ main = do
       -- reaction to the clause.
       let sanityCheck kind syntax = do
             let complexQuery =
-                  from $ \(p1 `InnerJoin` p2) -> do
-                  on (p1 ^. PersonName ==. p2 ^. PersonName)
-                  where_ (p1 ^. PersonFavNum >. val 2)
-                  orderBy [desc (p2 ^. PersonAge)]
+                  from $ \(pl `InnerJoin` pr) -> do
+                  on (pl ^. PersonName ==. pr ^. PersonName)
+                  where_ (pl ^. PersonFavNum >. val 2)
+                  orderBy [desc (pr ^. PersonAge)]
                   limit 3
                   offset 9
-                  groupBy (p1 ^. PersonId)
+                  groupBy (pl ^. PersonId)
                   having (countRows <. val (0 :: Int))
-                  return (p1, p2)
+                  return (pl, pr)
                 queryWithClause1 = do
                   r <- complexQuery
                   locking kind
