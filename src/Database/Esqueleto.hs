@@ -53,6 +53,7 @@ module Database.Esqueleto
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
              , case_, toBaseId)
+  , ToBaseId(..)
   , when_
   , then_
   , else_
