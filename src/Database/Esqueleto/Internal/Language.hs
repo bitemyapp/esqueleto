@@ -32,6 +32,7 @@ module Database.Esqueleto.Internal.Language
   , Insertion
   , LockingKind(..)
   , SqlString
+  , ToBaseId(..)
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
@@ -43,7 +44,6 @@ module Database.Esqueleto.Internal.Language
   , else_
   ) where
 
-import Control.Applicative (Applicative(..), (<$>))
 import Control.Exception (Exception)
 import Data.Int (Int64)
 import Data.Typeable (Typeable)
@@ -51,7 +51,6 @@ import Database.Esqueleto.Internal.PersistentImport
 import Text.Blaze.Html (Html)
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 
@@ -555,6 +554,42 @@ class (Functor query, Applicative query, Monad query) =>
   -- /Since: 2.1.2/
   case_ :: PersistField a => [(expr (Value Bool), expr (Value a))] -> expr (Value a) -> expr (Value a)
 
+  -- | Convert an entity's key into another entity's.
+  --
+  -- This function is to be used when you change an entity's @Id@ to be
+  -- that of another entity.  For example:
+  --
+  -- @
+  -- Bar
+  --   barNum Int
+  -- Foo
+  --   Id BarId
+  --   fooNum Int
+  -- @
+  --
+  -- For this example, declare:
+  --
+  -- @
+  -- instance ToBaseId Foo where
+  --   type BaseEnt Foo = Bar
+  --   toBaseIdWitness = FooKey
+  -- @
+  --
+  -- Now you're able to write queries such as:
+  --
+  -- @
+  -- 'select' $
+  -- 'from' $ \(bar `'InnerJoin`` foo) -> do
+  -- 'on' ('toBaseId' (foo '^.' FooId) '==.' bar '^.' BarId)
+  -- return (bar, foo)
+  -- @
+  --
+  -- Note: this function may be unsafe to use in conditions not like the
+  -- one of the example above.
+  --
+  -- /Since: 2.4.3/
+  toBaseId :: ToBaseId ent => expr (Value (Key ent)) -> expr (Value (Key (BaseEnt ent)))
+
 {-# DEPRECATED sub_selectDistinct "Since 2.2.4: use 'sub_select' and 'distinct'." #-}
 {-# DEPRECATED subList_selectDistinct "Since 2.2.4: use 'subList_select' and 'distinct'." #-}
 
@@ -836,6 +871,12 @@ instance SqlString Html where
 
 -- | /Since: 2.4.0/
 instance SqlString a => SqlString (Maybe a) where
+
+-- | Class that enables one to use 'toBaseId' to convert an entity's
+-- key on a query into another (cf. 'toBaseId').
+class ToBaseId ent where
+  type BaseEnt ent :: *
+  toBaseIdWitness :: Key (BaseEnt ent) -> Key ent
 
 
 -- | @FROM@ clause: bring entities into scope.

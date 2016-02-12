@@ -52,7 +52,8 @@ module Database.Esqueleto
              , subList_select, subList_selectDistinct, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_ )
+             , case_, toBaseId)
+  , ToBaseId(..)
   , when_
   , then_
   , else_
