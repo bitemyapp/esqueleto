@@ -50,6 +50,7 @@ module Database.Esqueleto.Internal.Sql
   , veryUnsafeCoerceSqlExprValueList
   ) where
 
+import Control.Applicative (Applicative(..), (<$>), (<$))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
 import Control.Monad (ap, MonadPlus(..), liftM)
@@ -59,7 +60,7 @@ import Control.Monad.Trans.Resource (MonadResource)
 import Data.Acquire (with, allocateAcquire, Acquire)
 import Data.Int (Int64)
 import Data.List (intersperse)
-import Data.Monoid (Last(..), (<>))
+import Data.Monoid (Last(..), Monoid(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
@@ -416,7 +417,6 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
     where
       toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
       toDistinctOn (EOrderBy _ f) = EDistinctOn f
-      toDistinctOn EOrderRandom = error "toDistinctOn get an EOrderRandom but expect an EOrderBy"
 
   sub_select         = sub SELECT
   sub_selectDistinct = sub_select . distinct
@@ -647,7 +647,7 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
-    deconstruct (b', []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b'), [])
+    deconstruct (b, []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b), [])
     deconstruct x = err $ "cannot deconstruct " ++ show x ++ "."
 
     compose f1 f2 info
