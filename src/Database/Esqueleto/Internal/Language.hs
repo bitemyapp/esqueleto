@@ -471,7 +471,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- @
   -- select $
   -- 'from' $ \\person -> do
-  -- 'where_' $ person '^.' PersonId `in_` 'valList' personIds
+  -- 'where_' $ person '^.' PersonId ``in_'` 'valList' personIds
   -- return person
   -- @
   --
