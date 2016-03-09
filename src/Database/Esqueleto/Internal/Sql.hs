@@ -927,7 +927,7 @@ deleteCount = rawEsqueleto DELETE
 -- Example of usage:
 --
 -- @
--- 'update' $ \p -> do
+-- 'update' $ \\p -> do
 -- 'set' p [ PersonAge '=.' 'just' ('val' thisYear) -. p '^.' PersonBorn ]
 -- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
