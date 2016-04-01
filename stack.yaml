@@ -1,1 +1,7 @@
 resolver: lts-5.1
+packages:
+- location:
+    git: git@github.com:pseudonom/persistent
+    commit: 041eb7346cf5b597d8d6c67dc86dfc55d76acce3
+  subdirs:
+  - persistent
