@@ -9,6 +9,7 @@
            , UndecidableInstances
            , ScopedTypeVariables
            , InstanceSigs
+           , Rank2Types
  #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -873,7 +874,7 @@ runSource src = src C.$$ CL.consume
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadIO m, SqlSelect a r, IsPersistBackend backend, BaseBackend backend ~ SqlBackend)
+rawEsqueleto :: ( MonadIO m, SqlSelect a r, IsSqlBackend backend)
            => Mode
            -> SqlQuery a
            -> R.ReaderT backend m Int64
@@ -962,7 +963,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- possible but tedious), you may just turn on query logging of
 -- @persistent@.
 toRawSql
-  :: (IsPersistBackend backend, BaseBackend backend ~ SqlBackend, SqlSelect a r)
+  :: (IsSqlBackend backend, SqlSelect a r)
   => Mode -> (backend, IdentState) -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode (conn, firstIdentState) query =
   let ((ret, sd), finalIdentState) =
