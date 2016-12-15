@@ -2,6 +2,7 @@ sudo: false
 
 services:
   - postgresql
+  - mysql
 
 addons:
   apt:
@@ -27,7 +28,8 @@ script:
   - stack setup
   - stack update
   - stack build
-  # - stack test
+  - stack test --flag esqueleto:-postgresql
+  - stack test --flag esqueleto:-mysql
 
 cache:
   directories:
