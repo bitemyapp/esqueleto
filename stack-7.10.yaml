@@ -1,0 +1,6 @@
+flags: {}
+packages:
+- '.'
+resolver: lts-6.12
+extra-deps:
+  - persistent-2.5

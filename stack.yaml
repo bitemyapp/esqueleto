@@ -1,3 +1,1 @@
-resolver: lts-5.1
-extra-deps:
-  - persistent-2.5
+stack-7.10.yaml

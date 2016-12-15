@@ -1,0 +1,33 @@
+sudo: false
+
+services:
+  - postgresql
+
+addons:
+  apt:
+    packages:
+      - postgresql-client
+      - postgresql-server-dev-all
+
+env:
+ - GHCVER=7.10
+ # - GHCVER=8.0 # ehhh
+
+install:
+  # stack
+  - export STACK_YAML=stack-$GHCVER.yaml
+  - mkdir -p ~/.local/bin
+  - travis_retry curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.4.0/stack-0.1.4.0-x86_64-linux.tar.gz | tar -xvzf -
+  - mv stack ~/.local/bin
+  - export PATH=~/.local/bin:$PATH
+  - stack --version
+
+script:
+  - stack setup
+  - stack update
+  - stack build
+  - stack test
+
+cache:
+  directories:
+  - $HOME/.stack
