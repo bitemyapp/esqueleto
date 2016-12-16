@@ -40,12 +40,9 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectUser
                               , connectPassword
                               , defaultConnectInfo)
-#else
+#endif
 import Database.Persist.Sqlite (withSqliteConn)
-#if MIN_VERSION_persistent_sqlite(2,1,3)
 import Database.Sqlite (SqliteException)
-#endif
-#endif
 import Database.Persist.TH
 import Test.Hspec
 
@@ -921,12 +918,8 @@ main = do
       it "throws an exception on SQLite with <2 arguments" $
         run (select $
              from $ \p -> do
-             return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
-#if MIN_VERSION_persistent_sqlite(2,1,3)
-        ) `shouldThrow` (\(_ :: SqliteException) -> True)
-#else
-        ) `shouldThrow` (\(_ :: IOException) -> True)
-#endif
+             return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int))))
+        `shouldThrow` (\(_ :: SqliteException) -> True)
 #endif
 
     describe "text functions" $ do
