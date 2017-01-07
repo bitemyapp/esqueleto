@@ -14,14 +14,14 @@
 -- @
 -- -- For a module that mostly uses esqueleto.
 -- import Database.Esqueleto
--- import qualified Database.Persistent as P
+-- import qualified Database.Persist as P
 -- @
 --
 -- or import @esqueleto@ itself qualified:
 --
 -- @
 -- -- For a module that uses esqueleto just on some queries.
--- import Database.Persistent
+-- import Database.Persist
 -- import qualified Database.Esqueleto as E
 -- @
 --
