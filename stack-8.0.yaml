@@ -1,10 +1,9 @@
-flags: {}
+resolver: nightly-2017-01-10
 packages:
 - '.'
 extra-deps:
 - doctest-prop-0.2.0.1
 - quickcheck-properties-0.1
-
 # - http-client-0.5.0
 # - fail-4.9.0.0
 # - http-types-0.9
@@ -13,4 +12,3 @@ extra-deps:
 # - semigroups-0.18.0.1
 # - uri-bytestring-0.1.9
 # - temporary-resourcet-0.1.0.0
-resolver: nightly-2016-08-20

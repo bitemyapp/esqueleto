@@ -51,17 +51,16 @@ module Database.Esqueleto.Internal.Sql
   , veryUnsafeCoerceSqlExprValueList
   ) where
 
-import Control.Applicative (Applicative(..), (<$>), (<$))
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), liftM)
+import Control.Monad (ap, MonadPlus(..), join, void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource)
 import Data.Acquire (with, allocateAcquire, Acquire)
 import Data.Int (Int64)
 import Data.List (intersperse)
-import Data.Monoid (Last(..), Monoid(..), (<>))
+import Data.Monoid (Last(..), (<>))
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
@@ -648,7 +647,7 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
-    deconstruct (b, []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b), [])
+    deconstruct (b', []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b'), [])
     deconstruct x = err $ "cannot deconstruct " ++ show x ++ "."
 
     compose f1 f2 info
@@ -667,7 +666,7 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
 unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
-unsafeSqlValue v = ERaw Never $ \_ -> (v, mempty)
+unsafeSqlValue v = ERaw Never $ const (v, mempty)
 {-# INLINE unsafeSqlValue #-}
 
 
@@ -784,12 +783,9 @@ selectSource :: ( SqlSelect a r
                 , MonadResource m )
              => SqlQuery a
              -> C.Source (SqlPersistT m) r
-selectSource query = do
-    src <- lift $ do
-        res <- rawSelectSource SELECT query
-        fmap snd $ allocateAcquire res
-    src
-
+selectSource query = join . lift $ do
+  res <- rawSelectSource SELECT query
+  snd <$> allocateAcquire res
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a list of rows.
@@ -910,8 +906,7 @@ rawEsqueleto mode query = do
 delete :: ( MonadIO m )
        => SqlQuery ()
        -> SqlWriteT m ()
-delete = liftM (const ()) . deleteCount
-
+delete = void . deleteCount
 
 -- | Same as 'delete', but returns the number of rows affected.
 deleteCount :: ( MonadIO m )
@@ -936,8 +931,7 @@ update :: ( MonadIO m
           , SqlEntity val )
        => (SqlExpr (Entity val) -> SqlQuery ())
        -> SqlWriteT m ()
-update = liftM (const ()) . updateCount
-
+update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
 updateCount :: ( MonadIO m
@@ -1037,7 +1031,7 @@ makeSelect info mode_ distinctClause ret = process mode_
         DistinctOn exprs -> first (("SELECT DISTINCT ON (" <>) . (<> ") ")) $
                             uncommas' (processExpr <$> exprs)
       where processExpr (EDistinctOn f) = materializeExpr info f
-    withCols v = v <> (sqlSelectCols info ret)
+    withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
 
@@ -1122,7 +1116,7 @@ makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
       let fs = f info
           vals = repeat []
       in zip (map (<> orderByType t) fs) vals
-    mk EOrderRandom = [first ((<> "RANDOM()")) mempty]
+    mk EOrderRandom = [first (<> "RANDOM()") mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 
@@ -1215,8 +1209,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
               in (process ed, mempty)
   sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
   sqlSelectProcessRow = parseEntityValues ed
-    where ed = entityDef $ getEntityVal $ (Proxy :: Proxy (SqlExpr (Entity a)))
-
+    where ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
 
 getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
 getEntityVal = const Proxy
@@ -1749,7 +1742,7 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 -- /Since: 2.4.2/
 insertSelect :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m ()
-insertSelect = liftM (const ()) . insertSelectCount
+insertSelect = void . insertSelectCount
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
 insertSelectCount :: (MonadIO m, PersistEntity a) =>

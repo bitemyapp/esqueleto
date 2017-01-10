@@ -1,3 +1,5 @@
+language: c
+
 sudo: false
 
 services:
@@ -13,15 +15,13 @@ addons:
 
 env:
  - GHCVER=7.10
- # - GHCVER=8.0 # ehhh
+ - GHCVER=8.0
 
 install:
-  # stack
   - export STACK_YAML=stack-$GHCVER.yaml
   - mkdir -p ~/.local/bin
-  - travis_retry curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.4.0/stack-0.1.4.0-x86_64-linux.tar.gz | tar -xvzf -
-  - mv stack ~/.local/bin
-  - export PATH=~/.local/bin:$PATH
+  - export PATH=$HOME/.local/bin:$PATH
+  - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
 
 script:
