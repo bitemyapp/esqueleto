@@ -89,7 +89,7 @@ FROM Person
 
 ## Where
 
-Filtering by `PersonName``
+Filtering by `PersonName`:
 
 ```haskell
 select $
