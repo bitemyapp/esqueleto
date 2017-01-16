@@ -44,7 +44,7 @@ description:
 
 source-repository head
   type:     git
-  location: git://github.com/prowdsponsor/esqueleto.git
+  location: git://github.com/bitemyapp/esqueleto.git
 
 Flag postgresql
   Description: test postgresql. default is to test sqlite.
