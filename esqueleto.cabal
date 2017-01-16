@@ -36,7 +36,7 @@ description:
   Not all SQL features are available, but most of them can be easily added
   (especially functions), so please open an issue or send a pull request if
   you need anything that is not covered by @esqueleto@ on
-  <https://github.com/prowdsponsor/esqueleto/>.
+  <https://github.com/bitemyapp/esqueleto>.
   .
   The name of this library means \"skeleton\" in Portuguese and
   contains all three SQL letters in the correct order =).  It was
