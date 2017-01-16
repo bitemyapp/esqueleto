@@ -18,18 +18,13 @@
  #-}
 module Main (main) where
 
-import Control.Applicative ((<$>))
-import Control.Arrow ((&&&))
-import Control.Exception (IOException)
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
-import Data.List (sortBy)
 import Data.Monoid ((<>))
-import Data.Ord (comparing)
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
@@ -53,7 +48,6 @@ import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
-import qualified Database.Esqueleto.PostgreSQL as EP
 import qualified Database.Esqueleto.Internal.Sql as EI
 
 
@@ -154,7 +148,7 @@ main = do
 
       it "works for a single NULL value" $
         run $ do
-          ret <- select $ return $ nothing
+          ret <- select $ return nothing
           liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
     describe "select/from" $ do
@@ -289,7 +283,7 @@ main = do
               number = 101
               Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
-          [Entity _ ret] <- select $ from $ return
+          [Entity _ ret] <- select $ from return
           liftIO $ do
             ret `shouldBe` fc
             fcPk `shouldBe` thePk
