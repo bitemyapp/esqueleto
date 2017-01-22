@@ -1,4 +1,7 @@
-resolver: nightly-2017-01-10
+# resolver: nightly-2017-01-10
+resolver: lts-7.16
+compiler: ghc-8.0.2
+
 packages:
 - '.'
 extra-deps:
