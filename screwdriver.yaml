@@ -1,11 +1,15 @@
-# workflow:
-#   - 
+workflow:
+  - esqueleto
 
 shared:
   image: fpco/stack-build
 
 jobs:
   main:
+    steps:
+      - stack-setup: stack setup
+
+  esqueleto:
     steps:
       - build: stack build
       - test: stack test
