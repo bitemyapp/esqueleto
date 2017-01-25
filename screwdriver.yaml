@@ -1,0 +1,11 @@
+# workflow:
+#   - 
+
+shared:
+  image: fpco/stack-build
+
+jobs:
+  main:
+    steps:
+      - build: stack build
+      - test: stack test
