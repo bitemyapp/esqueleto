@@ -28,6 +28,9 @@ import Data.Monoid ((<>))
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
+import Data.Ord (comparing)
+import Control.Arrow ((&&&))
+import qualified Database.Esqueleto.PostgreSQL as EP
 #elif defined (WITH_MYSQL)
 import Database.Persist.MySQL ( withMySQLConn
                               , connectHost
@@ -825,7 +828,7 @@ main = do
                  distinctOn [don (bp ^. BlogPostAuthorId)] $ do
                  orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
                  return bp
-          liftIO $ ret `shouldBe` sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
+          liftIO $ ret `shouldBe` L.sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
 
       let slightlyLessSimpleTest q =
             run $ do
@@ -838,7 +841,7 @@ main = do
                      from $ \bp ->
                      q bp $ return bp
               let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
-              liftIO $ ret `shouldBe` sortBy (comparing cmp) [bpA, bpB, bpC]
+              liftIO $ ret `shouldBe` L.sortBy (comparing cmp) [bpA, bpB, bpC]
       it "works on a slightly less simple example (two distinctOn calls, orderBy)" $
         slightlyLessSimpleTest $ \bp act ->
           distinctOn [don (bp ^. BlogPostAuthorId)] $
@@ -1181,7 +1184,6 @@ main = do
                  return p
           liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
-
     describe "list fields" $ do
       -- <https://github.com/prowdsponsor/esqueleto/issues/100>
       it "can update list fields" $
@@ -1365,9 +1367,7 @@ main = do
           let people = [p1, p2, p3, p4, p5]
           mapM_ insert people
           [Value ret] <-
-            select $
-            from $ \p -> do
-            return (EP.arrayAgg (p ^. PersonName))
+            select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
           liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
       it "stringAgg looks sane" $
@@ -1410,9 +1410,14 @@ cleanDB
   :: (forall m. RunDbMonad m
   => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
+  delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
+
   delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+  
+  delete $ from $ \(_ :: SqlExpr (Entity CcList))  -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity ArticleTag)) -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Article))    -> return ()

@@ -23,12 +23,14 @@ install:
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
+  - createuser -s --no-password test
+  - createdb -O test test
 
 script:
   - stack setup
   - stack update
   - stack build
-  - stack test --flag esqueleto:-postgresql
+  - stack test --flag esqueleto:postgresql
   - stack test --flag esqueleto:-mysql
 
 cache:
