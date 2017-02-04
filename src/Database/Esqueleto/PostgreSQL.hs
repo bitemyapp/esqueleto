@@ -20,7 +20,6 @@ import Database.Esqueleto.Internal.Sql
 arrayAgg :: SqlExpr (Value a) -> SqlExpr (Value [a])
 arrayAgg = unsafeSqlFunction "array_agg"
 
-
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.
 --
