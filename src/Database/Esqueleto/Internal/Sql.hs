@@ -76,6 +76,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 
 import Database.Esqueleto.Internal.Language
 
+import System.IO.Unsafe
 
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
@@ -1099,13 +1100,19 @@ makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
 makeGroupBy _ (GroupBy []) = (mempty, [])
 makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
   where
-    build = uncommas' $ map (\(SomeValue (ERaw _ f)) -> f info) fields
+    build :: (TLB.Builder, [PersistValue])
+    build = uncommas' $ map match fields
+
+    match :: SomeValue SqlExpr -> (TLB.Builder, [PersistValue])
+    match (SomeValue (ERaw _ f)) = f info
+    -- match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere                    = mempty
 makeHaving info (Where (ERaw _ f))         = first ("\nHAVING " <>) (f info)
-makeHaving _    (Where (ECompositeKey _ )) = unexpectedCompositeKeyError "makeHaving"
+makeHaving _    (Where (ECompositeKey _)) = unexpectedCompositeKeyError "makeHaving"
 
+-- makeHaving, makeWhere and makeOrderBy
 makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _    [] = mempty
 makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os

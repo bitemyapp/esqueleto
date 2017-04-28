@@ -1076,6 +1076,22 @@ main = do
                                   , (Entity p1k p1, Value 3)
                                   , (Entity p3k p3, Value 7) ]
 
+      it "GROUP BY works with COUNT and InnerJoin" $
+        run $ do
+          p1k <- insert p1
+          p2k <- insert p2
+          p3k <- insert p3
+          replicateM_ 3 (insert $ BlogPost "" p1k)
+          replicateM_ 7 (insert $ BlogPost "" p3k)
+          (ret :: [(Value (Key Person), Value Int)]) <- select $ from $
+            \ ( person `InnerJoin` post ) -> do
+            on $ person ^. PersonId ==. post ^. BlogPostAuthorId
+            groupBy (person ^. PersonId)
+            return (person ^. PersonId, count $ post ^. BlogPostId)
+          liftIO $ print ret
+          liftIO $ ret `shouldBe` [ (Value p1k, Value 3)
+                                  , (Value p3k, Value 7) ]
+
       it "GROUP BY works with HAVING" $
         run $ do
           p1k <- insert p1
