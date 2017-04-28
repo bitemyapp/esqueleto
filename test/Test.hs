@@ -72,6 +72,19 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     title String
     authorId PersonId
     deriving Eq Show
+
+  Lord
+    county String
+    dogs Int Maybe
+    Primary county
+    deriving Show
+
+  Deed
+    contract String
+    ownerId LordId
+    Primary contract
+    deriving Show
+
   Follow
     follower PersonId
     followed PersonId
@@ -132,6 +145,10 @@ main = do
       p3 = Person "Mike"   (Just 17) Nothing   3
       p4 = Person "Livia"  (Just 17) (Just 18) 4
       p5 = Person "Mitch"  Nothing   Nothing   5
+      l1 = Lord "Cornwall" (Just 36)
+      l2 = Lord "Dorset" Nothing
+      l3 = Lord "Chester" (Just 17)
+      
   hspec $ do
     describe "select" $ do
       it "works for a single value" $
@@ -1078,19 +1095,23 @@ main = do
 
       it "GROUP BY works with COUNT and InnerJoin" $
         run $ do
-          p1k <- insert p1
-          p2k <- insert p2
-          p3k <- insert p3
-          replicateM_ 3 (insert $ BlogPost "" p1k)
-          replicateM_ 7 (insert $ BlogPost "" p3k)
-          (ret :: [(Value (Key Person), Value Int)]) <- select $ from $
-            \ ( person `InnerJoin` post ) -> do
-            on $ person ^. PersonId ==. post ^. BlogPostAuthorId
-            groupBy (person ^. PersonId)
-            return (person ^. PersonId, count $ post ^. BlogPostId)
+          l1k <- insert l1
+          l2k <- insert l2
+          l3k <- insert l3
+          liftIO $ putStrLn "****** l3 ******"
+          replicateM_ 3 (insert $ Deed "" l1k)
+          liftIO $ putStrLn "****** l1k ******"
+          replicateM_ 7 (insert $ Deed "" l3k)
+          liftIO $ putStrLn "****** l3k ******"
+          (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
+            \ ( lord `InnerJoin` deed ) -> do
+            on $ lord ^. LordId ==. deed ^. DeedOwnerId
+            groupBy (lord ^. LordId)
+            return (lord ^. LordId, count $ deed ^. DeedId)
+          liftIO $ putStrLn "****** ret ******"
           liftIO $ print ret
-          liftIO $ ret `shouldBe` [ (Value p1k, Value 3)
-                                  , (Value p3k, Value 7) ]
+          liftIO $ ret `shouldBe` [ (Value l1k, Value 3)
+                                  , (Value l3k, Value 7) ]
 
       it "GROUP BY works with HAVING" $
         run $ do

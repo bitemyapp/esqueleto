@@ -76,8 +76,6 @@ import qualified Data.Text.Lazy.Builder as TLB
 
 import Database.Esqueleto.Internal.Language
 
-import System.IO.Unsafe
-
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
   Q { unQ :: W.WriterT SideData (S.State IdentState) a }
@@ -1105,7 +1103,7 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
 
     match :: SomeValue SqlExpr -> (TLB.Builder, [PersistValue])
     match (SomeValue (ERaw _ f)) = f info
-    -- match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
+    match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere                    = mempty
