@@ -1098,20 +1098,22 @@ main = do
           l1k <- insert l1
           l2k <- insert l2
           l3k <- insert l3
-          liftIO $ putStrLn "****** l3 ******"
-          replicateM_ 3 (insert $ Deed "" l1k)
-          liftIO $ putStrLn "****** l1k ******"
-          replicateM_ 7 (insert $ Deed "" l3k)
-          liftIO $ putStrLn "****** l3k ******"
+          -- liftIO $ putStrLn "****** l3 ******"
+          mapM_ (\k -> insert $ Deed k l1k) (map show [1..3])
+
+          -- liftIO $ putStrLn "****** l1k ******"
+          mapM_ (\k -> insert $ Deed k l3k) (map show [4..10])
+
+          -- liftIO $ putStrLn "****** l3k ******"
           (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
             \ ( lord `InnerJoin` deed ) -> do
             on $ lord ^. LordId ==. deed ^. DeedOwnerId
             groupBy (lord ^. LordId)
             return (lord ^. LordId, count $ deed ^. DeedId)
-          liftIO $ putStrLn "****** ret ******"
-          liftIO $ print ret
-          liftIO $ ret `shouldBe` [ (Value l1k, Value 3)
-                                  , (Value l3k, Value 7) ]
+          -- liftIO $ putStrLn "****** ret ******"
+          -- liftIO $ print ret
+          liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
+                                  , (Value l1k, Value 3) ]
 
       it "GROUP BY works with HAVING" $
         run $ do

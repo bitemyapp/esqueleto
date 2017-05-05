@@ -5,3 +5,12 @@ build-7.10:
 
 build-8.0:
 	STACK_YAML="stack-8.0.yaml" stack build
+
+ghci:
+	stack ghci
+
+test:
+	stack test
+
+test-ghci:
+	stack ghci esqueleto:test:test
