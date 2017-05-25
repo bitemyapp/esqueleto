@@ -69,6 +69,19 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     title String
     authorId PersonId
     deriving Eq Show
+
+  Lord
+    county String
+    dogs Int Maybe
+    Primary county
+    deriving Show
+
+  Deed
+    contract String
+    ownerId LordId
+    Primary contract
+    deriving Show
+
   Follow
     follower PersonId
     followed PersonId
@@ -129,6 +142,10 @@ main = do
       p3 = Person "Mike"   (Just 17) Nothing   3
       p4 = Person "Livia"  (Just 17) (Just 18) 4
       p5 = Person "Mitch"  Nothing   Nothing   5
+      l1 = Lord "Cornwall" (Just 36)
+      l2 = Lord "Dorset" Nothing
+      l3 = Lord "Chester" (Just 17)
+      
   hspec $ do
     describe "select" $ do
       it "works for a single value" $
@@ -1068,6 +1085,23 @@ main = do
           liftIO $ ret `shouldBe` [ (Entity p2k p2, Value (0 :: Int))
                                   , (Entity p1k p1, Value 3)
                                   , (Entity p3k p3, Value 7) ]
+
+      it "GROUP BY works with COUNT and InnerJoin" $
+        run $ do
+          l1k <- insert l1
+          l2k <- insert l2
+          l3k <- insert l3
+          mapM_ (\k -> insert $ Deed k l1k) (map show [1..3])
+
+          mapM_ (\k -> insert $ Deed k l3k) (map show [4..10])
+
+          (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
+            \ ( lord `InnerJoin` deed ) -> do
+            on $ lord ^. LordId ==. deed ^. DeedOwnerId
+            groupBy (lord ^. LordId)
+            return (lord ^. LordId, count $ deed ^. DeedId)
+          liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
+                                  , (Value l1k, Value 3) ]
 
       it "GROUP BY works with HAVING" $
         run $ do
