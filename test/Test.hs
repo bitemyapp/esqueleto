@@ -1098,20 +1098,15 @@ main = do
           l1k <- insert l1
           l2k <- insert l2
           l3k <- insert l3
-          -- liftIO $ putStrLn "****** l3 ******"
           mapM_ (\k -> insert $ Deed k l1k) (map show [1..3])
 
-          -- liftIO $ putStrLn "****** l1k ******"
           mapM_ (\k -> insert $ Deed k l3k) (map show [4..10])
 
-          -- liftIO $ putStrLn "****** l3k ******"
           (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
             \ ( lord `InnerJoin` deed ) -> do
             on $ lord ^. LordId ==. deed ^. DeedOwnerId
             groupBy (lord ^. LordId)
             return (lord ^. LordId, count $ deed ^. DeedId)
-          -- liftIO $ putStrLn "****** ret ******"
-          -- liftIO $ print ret
           liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
                                   , (Value l1k, Value 3) ]
 
