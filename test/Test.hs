@@ -145,7 +145,7 @@ main = do
       l1 = Lord "Cornwall" (Just 36)
       l2 = Lord "Dorset" Nothing
       l3 = Lord "Chester" (Just 17)
-      
+
   hspec $ do
     describe "select" $ do
       it "works for a single value" $
@@ -1443,7 +1443,7 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
-  
+
   delete $ from $ \(_ :: SqlExpr (Entity CcList))  -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity ArticleTag)) -> return ()
