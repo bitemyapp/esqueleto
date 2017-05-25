@@ -97,7 +97,7 @@ test-suite test
     , HUnit
     , QuickCheck
     , hspec               >= 1.8
-    , persistent-sqlite   >= 2.1
+    , persistent-sqlite   >= 2.1.3
     , persistent-template >= 2.1
     , monad-control
     , monad-logger        >= 0.3
