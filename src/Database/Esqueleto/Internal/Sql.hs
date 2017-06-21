@@ -787,9 +787,6 @@ selectSource query = do
   (key, src) <- lift $ allocateAcquire res
   src
   lift $ release key
---  selectSource query = join . lift $ do
---    res <- rawSelectSource SELECT query
---    snd <$> allocateAcquire res
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a list of rows.
