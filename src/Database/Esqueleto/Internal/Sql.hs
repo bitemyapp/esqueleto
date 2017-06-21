@@ -53,7 +53,7 @@ module Database.Esqueleto.Internal.Sql
 
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), void, join)
+import Control.Monad (ap, MonadPlus(..), void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
