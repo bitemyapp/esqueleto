@@ -44,6 +44,8 @@ import Database.Sqlite (SqliteException)
 import Database.Persist.TH
 import Test.Hspec
 
+import Data.Conduit (($$), Source, (=$=))
+import qualified Data.Conduit.List as CL
 import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
@@ -167,6 +169,44 @@ main = do
         run $ do
           ret <- select $ return nothing
           liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
+
+    describe "selectSource" $ do
+      it "works for a simple example" $
+        run $ do
+          let query = selectSource $
+                      from $ \person ->
+                      return person
+          p1e <- insert' p1
+          ret <- query $$ CL.consume
+          liftIO $ ret `shouldBe` [ p1e ]
+
+      it "can run a query many times" $
+        run $ do
+          let query = selectSource $
+                      from $ \person ->
+                      return person
+          p1e <- insert' p1
+          ret0 <- query $$ CL.consume
+          ret1 <- query $$ CL.consume
+          liftIO $ ret0 `shouldBe` [ p1e ]
+          liftIO $ ret1 `shouldBe` [ p1e ]
+
+      it "works on repro" $ do
+        let selectPerson :: R.MonadResource m => String -> Source (SqlPersistT m) (Key Person)
+            selectPerson name = do
+              let source = selectSource $ from $ \person -> do
+                           where_ $ person ^. PersonName ==. val name
+                           return $ person ^. PersonId
+              source =$= CL.map unValue
+        run $ do
+          p1e <- insert' p1
+          p2e <- insert' p2
+          r1 <- selectPerson (personName p1) $$ CL.consume
+          r2 <- selectPerson (personName p2) $$ CL.consume
+          liftIO $ do
+            r1 `shouldBe` [ entityKey p1e ]
+            r2 `shouldBe` [ entityKey p2e ]
+
 
     describe "select/from" $ do
       it "works for a simple example" $

@@ -53,7 +53,7 @@ module Database.Esqueleto.Internal.Sql
 
 import Control.Arrow ((***), first)
 import Control.Exception (throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), void)
+import Control.Monad (ap, MonadPlus(..), void, join)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
@@ -782,11 +782,14 @@ selectSource :: ( SqlSelect a r
                 , MonadResource m )
              => SqlQuery a
              -> C.Source (SqlPersistT m) r
-selectSource query = do
-  res <- lift $ rawSelectSource SELECT query
-  (key, src) <- lift $ allocateAcquire res
-  src
-  lift $ release key
+-- selectSource query = do
+--   res <- lift $ rawSelectSource SELECT query
+--   (key, src) <- lift $ allocateAcquire res
+--   src
+--   lift $ release key
+selectSource query = join . lift $ do
+  res <- rawSelectSource SELECT query
+  snd <$> allocateAcquire res
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a list of rows.
