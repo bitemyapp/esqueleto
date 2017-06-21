@@ -32,6 +32,7 @@ script:
   - stack build
   - stack test --flag esqueleto:postgresql
   - stack test --flag esqueleto:-mysql
+  - stack test
 
 cache:
   directories:
