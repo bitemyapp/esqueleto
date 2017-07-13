@@ -668,6 +668,11 @@ unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
 unsafeSqlValue v = ERaw Never $ const (v, mempty)
 {-# INLINE unsafeSqlValue #-}
 
+-- | (Internal) A raw SQL ordering.  The same warning from
+-- 'unsafeSqlBinOp' applies to this function as well.
+unsafeSqlOrderBy :: TLB.Builder -> SqlExpr OrderBy
+unsafeSqlOrderBy v = ERaw Never $ const (v, mempty)
+{-# INLINE unsafeSqlOrderBy #-}
 
 -- | (Internal) A raw SQL function.  Once again, the same warning
 -- from 'unsafeSqlBinOp' applies to this function as well.
