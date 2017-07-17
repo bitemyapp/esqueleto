@@ -15,6 +15,7 @@ dependencies:
 - persistent-template
 - persistent-sqlite
 - text
+- microlens
 ghc-options:
 - -Wall
 - -threaded

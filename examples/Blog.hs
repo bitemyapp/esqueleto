@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -6,16 +7,24 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+module Main
+    ( main
+    ) where
 
+-------------------------------------------------------------------------------
 import           Control.Monad           (void)
 import           Control.Monad.IO.Class  (MonadIO, liftIO)
 import           Data.Text               (Text)
 import           Database.Esqueleto
-import           Database.Persist.Sqlite (runMigration, runSqlite)
-import           Database.Persist.TH     (mkMigrate, mkPersist,
+import           Database.Persist.Sqlite (fkEnabled, mkSqliteConnectionInfo,
+                                          runMigration, runSqliteInfo)
+import           Database.Persist.TH     (mkDeleteCascade, mkMigrate, mkPersist,
                                           persistLowerCase, share, sqlSettings)
+import           Lens.Micro              ((&), (.~))
+-------------------------------------------------------------------------------
 
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+
+share [mkPersist sqlSettings, mkDeleteCascade sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
   Person
     name String
     age Int Maybe
@@ -30,14 +39,18 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
     deriving Eq Show
 |]
 
+
+-------------------------------------------------------------------------------
 putPersons :: (MonadIO m)
            => SqlPersistT m ()
 putPersons = do
   people <- select $
               from $ \person -> do
               return person
-  liftIO $ mapM_ (putStrLn . personName . entityVal) people
+  liftIO $ mapM_ (putStrLn . ("Name: " ++) . personName . entityVal) people
 
+
+-------------------------------------------------------------------------------
 getJohns :: (MonadIO m)
          => SqlReadT m [Entity Person]
 getJohns =
@@ -46,6 +59,8 @@ getJohns =
     where_ (p ^. PersonName ==. val "John")
     return p
 
+
+-------------------------------------------------------------------------------
 getJaoas :: (MonadIO m)
          => SqlReadT m [Entity Person]
 getJaoas =
@@ -54,6 +69,8 @@ getJaoas =
     where_ (p ^. PersonName ==. val "João" ||. p ^. PersonName ==. val "Joao")
     return p
 
+
+-------------------------------------------------------------------------------
 getAdults :: (MonadIO m)
           => SqlReadT m [Entity Person]
 getAdults =
@@ -62,6 +79,8 @@ getAdults =
     where_ (p ^. PersonAge >=. just (val 18))
     return p
 
+
+-------------------------------------------------------------------------------
 getBlogPostsByAuthors :: (MonadIO m)
                       => SqlReadT m [(Entity BlogPost, Entity Person)]
 getBlogPostsByAuthors =
@@ -71,6 +90,8 @@ getBlogPostsByAuthors =
     orderBy [asc (b ^. BlogPostTitle)]
     return (b, p)
 
+
+-------------------------------------------------------------------------------
 getAuthorMaybePosts :: (MonadIO m)
                     => SqlReadT m [(Entity Person, Maybe (Entity BlogPost))]
 getAuthorMaybePosts =
@@ -80,6 +101,8 @@ getAuthorMaybePosts =
     orderBy [asc (p ^. PersonName), asc (mb ?. BlogPostTitle)]
     return (p, mb)
 
+
+-------------------------------------------------------------------------------
 followers :: (MonadIO m)
           => SqlReadT m [(Entity Person, Entity Follow, Entity Person)]
 followers =
@@ -89,6 +112,8 @@ followers =
     on (p1 ^. PersonId ==. f ^. FollowFollower)
     return (p1, f, p2)
 
+
+-------------------------------------------------------------------------------
 updateJoao :: (MonadIO m)
            => SqlWriteT m ()
 updateJoao =
@@ -96,19 +121,25 @@ updateJoao =
     set p [ PersonName =. val "João" ]
     where_ (p ^. PersonName ==. val "Joao")
 
+
+-------------------------------------------------------------------------------
 deleteYoungsters :: (MonadIO m)
                  => SqlWriteT m ()
-deleteYoungsters =
+deleteYoungsters = do
   delete $
     from $ \p -> do
     where_ (p ^. PersonAge <. just (val 14))
 
+
+-------------------------------------------------------------------------------
 insertBlogPosts :: (MonadIO m)
                 => SqlWriteT m ()
 insertBlogPosts =
   insertSelect $ from $ \p ->
     return $ BlogPost <# (val "Group Blog Post") <&> (p ^. PersonId)
 
+
+-------------------------------------------------------------------------------
 testDb :: (MonadIO m)
        => SqlWriteT m ()
 testDb = do
@@ -122,18 +153,20 @@ testDb = do
   void $ insert $ Follow sean john
   void $ insert $ Follow joao sean
 
-arith :: Num b => (a -> b) -> Integer -> a -> b
-arith f i a = (f a) + fromInteger i
 
+-------------------------------------------------------------------------------
 main :: IO ()
-main = runSqlite ":memory:" $ do
+main =
+  let conn = (mkSqliteConnectionInfo ":memory:") & fkEnabled .~ True
+  in runSqliteInfo conn $ do
+  -- Run migrations to synchronise the databse
   runMigration migrateAll
+
+  -- Initialise our test database
   testDb
 
-  printMessage "Listing all names of the people in the database"
-  printMessage "==============================================="
+  -- Print the names of our Persons
   putPersons
-  printMessage "==============================================="
 
   printMessage "Listing all the people with the name John:"
   printMessage "==============================================="
