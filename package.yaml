@@ -9,8 +9,7 @@ maintainer:          cma@bitemyapp.com
 copyright:           (c) 2012-2016 Felipe Almeida Lessa
 category:            Database
 build-type:          Simple
-cabal-version:       >=1.8
-description:
+description: >
   @esqueleto@ is a bare bones, type-safe EDSL for SQL queries
   that works with unmodified @persistent@ SQL backends.  Its
   language closely resembles SQL, so you don't have to learn
@@ -42,81 +41,85 @@ description:
   contains all three SQL letters in the correct order =).  It was
   inspired by Scala's Squeryl but created from scratch.
 
-source-repository head
-  type:     git
-  location: git://github.com/bitemyapp/esqueleto.git
+github: bitemyapp/esqueleto
 
-Flag postgresql
-  Description: test postgresql. default is to test sqlite.
-  Default: False
+flags:
+  postgresql:
+    description: test postgresql. default is to test sqlite.
+    default: false
+    manual: false
+  mysql:
+    description: test MySQL/MariaDB. default is to test sqlite.
+    default: false
+    manual: false
 
-Flag mysql
-  Description: test MySQL/MariaDB. default is to test sqlite.
-  Default: False
+default-extensions:
+  - ConstraintKinds
+  - EmptyDataDecls
+  - FlexibleContexts
+  - FlexibleInstances
+  - DeriveGeneric
+  - GADTs
+  - GeneralizedNewtypeDeriving
+  - MultiParamTypeClasses
+  - OverloadedStrings
+  - QuasiQuotes
+  - Rank2Types
+  - TemplateHaskell
+  - TypeFamilies
+  - ScopedTypeVariables
+  - CPP
+  - TypeSynonymInstances
 
-library
+dependencies:
+  - base                 >= 4.8     && < 5.0
+  - bytestring
+  - text                 >= 0.11    && < 1.3
+  - persistent           >= 2.5     && < 2.8
+  - transformers         >= 0.2
+  - unordered-containers >= 0.2
+  - tagged               >= 0.2
+  - monad-logger
+  - conduit              >= 1.1
+  - resourcet            >= 1.1
+  - blaze-html
+
+library:
+  source-dirs: src
   exposed-modules:
-    Database.Esqueleto
-    Database.Esqueleto.PostgreSQL
-    Database.Esqueleto.Internal.Language
-    Database.Esqueleto.Internal.Sql
-  other-modules:
-    Database.Esqueleto.Internal.PersistentImport
-  build-depends:
-      base                 >= 4.8     && < 5.0
-    , bytestring
-    , text                 >= 0.11    && < 1.3
-    , persistent           >= 2.5     && < 2.8
-    , transformers         >= 0.2
-    , unordered-containers >= 0.2
-    , tagged               >= 0.2
+    - Database.Esqueleto
+    - Database.Esqueleto.PostgreSQL
+    - Database.Esqueleto.Internal.Language
+    - Database.Esqueleto.Internal.Sql
+  when:
+    - condition: impl(ghc >= 8.0)
+      then:
+        ghc-options: -Wall -Wno-redundant-constraints
+      else:
+        ghc-options: -Wall
 
-    , monad-logger
-    , conduit              >= 1.1
-    , resourcet            >= 1.1
-    , blaze-html
-  hs-source-dirs: src/
-  if impl(ghc >= 8.0)
-    ghc-options: -Wall -Wno-redundant-constraints
-  else
+tests:
+  test:
     ghc-options: -Wall
-
-test-suite test
-  type: exitcode-stdio-1.0
-  ghc-options:    -Wall
-  hs-source-dirs: test
-  main-is:        Test.hs
-  build-depends:
-      -- Library dependencies used on the tests.  No need to
-      -- specify versions since they'll use the same as above.
-      base, persistent, transformers, resourcet, text
-
-      -- Test-only dependencies
-    , conduit             >= 1.1
-    , containers
-    , HUnit
-    , QuickCheck
-    , hspec               >= 1.8
-    , persistent-sqlite   >= 2.1.3
-    , persistent-template >= 2.1
-    , monad-control
-    , monad-logger        >= 0.3
-
-      -- This library
-    , esqueleto
-
-  if flag(postgresql)
-    build-depends:
-        postgresql-simple     >= 0.2
-      , postgresql-libpq      >= 0.6
-      , persistent-postgresql >= 2.0
-
-    cpp-options: -DWITH_POSTGRESQL
-
-  if flag(mysql)
-    build-depends:
-        mysql-simple          >= 0.2.2.3
-      , mysql                 >= 0.1.1.3
-      , persistent-mysql      >= 2.0
-
-    cpp-options: -DWITH_MYSQL
+    source-dirs: test
+    main: Test.hs
+    dependencies:
+      - esqueleto
+      - containers
+      - hspec
+      - monad-control
+      - persistent-sqlite   >= 2.1.3
+      - persistent-template >= 2.1
+    when:
+      - condition: flag(postgresql)
+        dependencies:
+          - postgresql-simple     >= 0.2
+          - postgresql-libpq      >= 0.6
+          - persistent-postgresql >= 2.0
+        cpp-options: -DWITH_POSTGRESQL
+      - condition: flag(mysql)
+        dependencies:
+          - mysql-simple          >= 0.2.2.3
+          - mysql                 >= 0.1.1.3
+          - persistent-mysql      >= 2.0
+        cpp-options: -DWITH_MYSQL

@@ -483,6 +483,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   like    = unsafeSqlBinOp    " LIKE "
   ilike   = unsafeSqlBinOp    " ILIKE "
   (%)     = unsafeSqlValue    "'%'"
+-- SQLite                      ||
+-- Oracle                      CONCAT(string1, string2) or ||
+-- MySQL                       CONCAT(string1, string2, string3...)
+-- Postgres                    CONCAT(string1, string2, string3...) or ||
+-- Microsoft SQL Server 2012+  CONCAT(string1, string2, string3...) or +
+-- Microsoft Access            +
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "
   castString = veryUnsafeCoerceSqlExprValue

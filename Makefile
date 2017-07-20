@@ -12,5 +12,16 @@ ghci:
 test:
 	stack test
 
+test-mysql:
+	stack test --flag esqueleto:mysql
+
+test-pgsql:
+	stack test --flag esqueleto:postgresql
+
 test-ghci:
 	stack ghci esqueleto:test:test
+
+test-mysql-ghci:
+	stack ghci esqueleto:test:test --flag esqueleto:mysql
+
+.PHONY: build build-7.10 build-8.0 ghci test test-mysql test-pgsql test-ghci
