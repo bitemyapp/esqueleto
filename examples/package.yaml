@@ -14,8 +14,6 @@ dependencies:
 - persistent
 - persistent-template
 - persistent-postgresql
-- text
-- microlens
 - mtl
 - monad-logger
 - monad-control

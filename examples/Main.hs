@@ -8,7 +8,7 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 module Main
     ( main
@@ -22,14 +22,12 @@ import           Control.Monad.Logger        (MonadLogger)
 import           Control.Monad.Reader        (MonadReader (..), runReaderT)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.Monoid                 ((<>))
-import           Data.Text                   (Text)
 import           Database.Esqueleto
 import           Database.Persist.Postgresql (ConnectionString,
                                               withPostgresqlConn)
 import           Database.Persist.TH         (mkDeleteCascade, mkMigrate,
                                               mkPersist, persistLowerCase,
                                               share, sqlSettings)
-import           Lens.Micro                  ((&), (.~))
 -------------------------------------------------------------------------------
 
 
@@ -53,9 +51,13 @@ share [mkPersist sqlSettings, mkDeleteCascade sqlSettings, mkMigrate "migrateAll
 putPersons :: (MonadIO m, MonadLogger m)
            => SqlPersistT m ()
 putPersons = do
+  -- | Select all values from the `person` table
   people <- select $
               from $ \person -> do
               return person
+
+  -- | entityVal extracts the Person value, which we then extract
+  -- | the person name from the record and print it
   liftIO $ mapM_ (putStrLn . ("Name: " ++) . personName . entityVal) people
 
 
@@ -63,6 +65,7 @@ putPersons = do
 getJohns :: (MonadIO m, MonadLogger m)
          => SqlReadT m [Entity Person]
 getJohns =
+  -- | Select all persons where their name is equal to "John"
   select $
   from $ \p -> do
     where_ (p ^. PersonName ==. val "John")
@@ -70,19 +73,10 @@ getJohns =
 
 
 -------------------------------------------------------------------------------
-getJaoas :: (MonadIO m, MonadLogger m)
-         => SqlReadT m [Entity Person]
-getJaoas =
-  select $
-  from $ \p -> do
-    where_ (p ^. PersonName ==. val "João" ||. p ^. PersonName ==. val "Joao")
-    return p
-
-
--------------------------------------------------------------------------------
 getAdults :: (MonadIO m, MonadLogger m)
           => SqlReadT m [Entity Person]
 getAdults =
+  -- | Select any Person where their age is >= 18 and NOT NULL
   select $
   from $ \p -> do
     where_ (p ^. PersonAge >=. just (val 18))
@@ -93,6 +87,7 @@ getAdults =
 getBlogPostsByAuthors :: (MonadIO m, MonadLogger m)
                       => SqlReadT m [(Entity BlogPost, Entity Person)]
 getBlogPostsByAuthors =
+  -- | Select all persons and their blogposts, ordering by title
   select $
   from $ \(b, p) -> do
     where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
@@ -104,6 +99,9 @@ getBlogPostsByAuthors =
 getAuthorMaybePosts :: (MonadIO m, MonadLogger m)
                     => SqlReadT m [(Entity Person, Maybe (Entity BlogPost))]
 getAuthorMaybePosts =
+  -- | Select all persons doing a left outer join on blogposts
+  -- | Since a person may not have any blogposts the BlogPost Entity is wrapped
+  -- | in a Maybe
   select $
   from $ \(p `LeftOuterJoin` mb) -> do
     on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
@@ -115,6 +113,10 @@ getAuthorMaybePosts =
 followers :: (MonadIO m, MonadLogger m)
           => SqlReadT m [(Entity Person, Entity Follow, Entity Person)]
 followers =
+  -- | Select mutual follow relationships
+  -- | Note carefully that the order of the ON clauses is reversed!
+  -- | You're required to write your ons in reverse order because that helps composability
+  -- | (see the documentation of on for more details).
   select $
   from $ \(p1 `InnerJoin` f `InnerJoin` p2) -> do
     on (p2 ^. PersonId ==. f ^. FollowFollowed)
@@ -126,6 +128,7 @@ followers =
 updateJoao :: (MonadIO m, MonadLogger m)
            => SqlWriteT m ()
 updateJoao =
+  -- Update the name of any Joao in our person table to João
   update $ \p -> do
     set p [ PersonName =. val "João" ]
     where_ (p ^. PersonName ==. val "Joao")
@@ -135,6 +138,7 @@ updateJoao =
 deleteYoungsters :: (MonadIO m, MonadLogger m)
                  => SqlWriteT m ()
 deleteYoungsters = do
+  -- | Delete any persons under the age of 14
   delete $
     from $ \p -> do
     where_ (p ^. PersonAge <. just (val 14))
@@ -144,6 +148,7 @@ deleteYoungsters = do
 insertBlogPosts :: (MonadIO m, MonadLogger m)
                 => SqlWriteT m ()
 insertBlogPosts =
+  -- | Insert a new blogpost for every person
   insertSelect $ from $ \p ->
     return $ BlogPost <# (val "Group Blog Post") <&> (p ^. PersonId)
 
@@ -155,6 +160,7 @@ runDB :: (MonadReader ConnectionString m,
           MonadLogger m)
       => SqlPersistT m a -> m a
 runDB query = do
+  -- | Helper for running a query
   conn <- ask
   withPostgresqlConn conn $ \backend -> runReaderT query backend
 
@@ -163,6 +169,7 @@ runDB query = do
 setupDb :: (MonadIO m, MonadLogger m)
           => SqlPersistT m ()
 setupDb = do
+  -- | Run migrations and create the test database entries
   runMigration migrateAll
   createDb
   where
@@ -184,6 +191,7 @@ setupDb = do
 cleanDb :: (MonadIO m, MonadLogger m)
         => SqlPersistT m ()
 cleanDb = do
+  -- | Drop the tables so we can re-run the script again if needed
   dropTable "follow"
   dropTable "blog_post"
   dropTable "person"
@@ -193,9 +201,32 @@ cleanDb = do
 
 -------------------------------------------------------------------------------
 main :: IO ()
-main =
-  let connection = "host=localhost port=5433 user=postgres dbname=esqueleto_blog_example password=***"
-  in runBlogT connection . runDB $ do
+main = do
+  -- Connection string for the postrgesql database
+  runBlogT connection . runDB $ do
     setupDb
     putPersons
+
+    johns <- getJohns
+    mapM_ say johns
+
+    adults <- getAdults
+    mapM_ say adults
+
+    authorBlogPosts <- getBlogPostsByAuthors
+    mapM_ say authorBlogPosts
+
+    authoMaybePosts <- getAuthorMaybePosts
+    mapM_ say authoMaybePosts
+
+    mutualFollowers <- followers
+    mapM_ say mutualFollowers
+
+    updateJoao
+    deleteYoungsters
+    insertBlogPosts
     cleanDb
+  where
+    say :: (MonadIO m, Show a) => a -> m ()
+    say = liftIO . print
+    connection = "host=localhost port=5433 user=postgres dbname=esqueleto_blog_example password=Leon93"
