@@ -13,9 +13,13 @@ dependencies:
 - esqueleto
 - persistent
 - persistent-template
-- persistent-sqlite
+- persistent-postgresql
 - text
 - microlens
+- mtl
+- monad-logger
+- monad-control
+- transformers-base
 ghc-options:
 - -Wall
 - -threaded

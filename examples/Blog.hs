@@ -1,26 +1,37 @@
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 module Main
     ( main
     ) where
 
 -------------------------------------------------------------------------------
-import           Control.Monad           (void)
-import           Control.Monad.IO.Class  (MonadIO, liftIO)
-import           Data.Text               (Text)
+import           Control.Monad               (void)
+import           Control.Monad.Base          (MonadBase (..))
+import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.Logger        (MonadLogger, NoLoggingT (..))
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (..),
+                                              MonadTransControl (..),
+                                              defaultLiftBaseWith,
+                                              defaultRestoreM)
+import           Data.Text                   (Text)
 import           Database.Esqueleto
-import           Database.Persist.Sqlite (fkEnabled, mkSqliteConnectionInfo,
-                                          runMigration, runSqliteInfo)
-import           Database.Persist.TH     (mkDeleteCascade, mkMigrate, mkPersist,
-                                          persistLowerCase, share, sqlSettings)
-import           Lens.Micro              ((&), (.~))
+import           Database.Persist.Postgresql (ConnectionString,
+                                              withPostgresqlConn)
+import           Database.Persist.TH         (mkDeleteCascade, mkMigrate,
+                                              mkPersist, persistLowerCase,
+                                              share, sqlSettings)
+import           Lens.Micro                  ((&), (.~))
 -------------------------------------------------------------------------------
 
 
@@ -41,7 +52,7 @@ share [mkPersist sqlSettings, mkDeleteCascade sqlSettings, mkMigrate "migrateAll
 
 
 -------------------------------------------------------------------------------
-putPersons :: (MonadIO m)
+putPersons :: (MonadIO m, MonadLogger m)
            => SqlPersistT m ()
 putPersons = do
   people <- select $
@@ -51,7 +62,7 @@ putPersons = do
 
 
 -------------------------------------------------------------------------------
-getJohns :: (MonadIO m)
+getJohns :: (MonadIO m, MonadLogger m)
          => SqlReadT m [Entity Person]
 getJohns =
   select $
@@ -61,7 +72,7 @@ getJohns =
 
 
 -------------------------------------------------------------------------------
-getJaoas :: (MonadIO m)
+getJaoas :: (MonadIO m, MonadLogger m)
          => SqlReadT m [Entity Person]
 getJaoas =
   select $
@@ -71,7 +82,7 @@ getJaoas =
 
 
 -------------------------------------------------------------------------------
-getAdults :: (MonadIO m)
+getAdults :: (MonadIO m, MonadLogger m)
           => SqlReadT m [Entity Person]
 getAdults =
   select $
@@ -81,7 +92,7 @@ getAdults =
 
 
 -------------------------------------------------------------------------------
-getBlogPostsByAuthors :: (MonadIO m)
+getBlogPostsByAuthors :: (MonadIO m, MonadLogger m)
                       => SqlReadT m [(Entity BlogPost, Entity Person)]
 getBlogPostsByAuthors =
   select $
@@ -92,7 +103,7 @@ getBlogPostsByAuthors =
 
 
 -------------------------------------------------------------------------------
-getAuthorMaybePosts :: (MonadIO m)
+getAuthorMaybePosts :: (MonadIO m, MonadLogger m)
                     => SqlReadT m [(Entity Person, Maybe (Entity BlogPost))]
 getAuthorMaybePosts =
   select $
@@ -103,7 +114,7 @@ getAuthorMaybePosts =
 
 
 -------------------------------------------------------------------------------
-followers :: (MonadIO m)
+followers :: (MonadIO m, MonadLogger m)
           => SqlReadT m [(Entity Person, Entity Follow, Entity Person)]
 followers =
   select $
@@ -114,7 +125,7 @@ followers =
 
 
 -------------------------------------------------------------------------------
-updateJoao :: (MonadIO m)
+updateJoao :: (MonadIO m, MonadLogger m)
            => SqlWriteT m ()
 updateJoao =
   update $ \p -> do
@@ -123,7 +134,7 @@ updateJoao =
 
 
 -------------------------------------------------------------------------------
-deleteYoungsters :: (MonadIO m)
+deleteYoungsters :: (MonadIO m, MonadLogger m)
                  => SqlWriteT m ()
 deleteYoungsters = do
   delete $
@@ -132,7 +143,7 @@ deleteYoungsters = do
 
 
 -------------------------------------------------------------------------------
-insertBlogPosts :: (MonadIO m)
+insertBlogPosts :: (MonadIO m, MonadLogger m)
                 => SqlWriteT m ()
 insertBlogPosts =
   insertSelect $ from $ \p ->
@@ -140,8 +151,15 @@ insertBlogPosts =
 
 
 -------------------------------------------------------------------------------
-testDb :: (MonadIO m)
-       => SqlWriteT m ()
+cleanDB :: (MonadIO m, MonadLogger m)
+        => SqlPersistT m ()
+cleanDB = do
+  rawExecute "DROP TABLE follow" []
+  rawExecute "DROP TABLE blog_post" []
+  rawExecute "DROP TABLE person" []
+
+testDb :: (MonadIO m, MonadLogger m)
+       => SqlPersistT m ()
 testDb = do
   john <- insert $ Person "John" (Just 24)
   sean <- insert $ Person "Seán" (Just 70)
@@ -155,68 +173,49 @@ testDb = do
 
 
 -------------------------------------------------------------------------------
-main :: IO ()
-main =
-  let conn = (mkSqliteConnectionInfo ":memory:") & fkEnabled .~ True
-  in runSqliteInfo conn $ do
-  -- Run migrations to synchronise the databse
-  runMigration migrateAll
+newtype BlogT m a = BlogT { unBlogT :: NoLoggingT (ReaderT ConnectionString m) a }
+  deriving (Functor, Applicative, Monad, MonadLogger, MonadReader ConnectionString, MonadIO)
 
-  -- Initialise our test database
+instance MonadTrans BlogT where
+  lift = BlogT . lift . lift
+
+deriving instance (MonadBase b m) => MonadBase b (BlogT m)
+
+instance MonadBaseControl b m => MonadBaseControl b (BlogT m) where
+  type StM (BlogT m) a = ComposeSt BlogT m a
+  liftBaseWith     = defaultLiftBaseWith
+  restoreM         = defaultRestoreM
+
+instance MonadTransControl BlogT where
+  type StT BlogT a = StT NoLoggingT (StT (ReaderT ConnectionString) a)
+  liftWith f = BlogT $ liftWith $ \run ->
+                                    liftWith $ \run' ->
+                                                f (run' . run . unBlogT)
+  restoreT = BlogT . restoreT . restoreT
+
+
+runBlogT :: ConnectionString -> BlogT m a -> m a
+runBlogT backend (BlogT m) =
+  runReaderT (runNoLoggingT m) backend
+
+type Blog a = BlogT IO a
+
+runDB :: (MonadReader ConnectionString m, MonadIO m, MonadBaseControl IO m, Monad m, MonadLogger m)
+      => SqlPersistT m a -> m a
+runDB query = do
+  conn <- ask
+  withPostgresqlConn conn $ \backend -> runReaderT query backend
+
+setupBlog :: (MonadIO m, MonadLogger m)
+          => SqlPersistT m ()
+setupBlog = do
+  runMigration migrateAll
   testDb
 
-  -- Print the names of our Persons
-  putPersons
-
-  printMessage "Listing all the people with the name John:"
-  printMessage "==============================================="
-  getJohns >>= printVals
-  printMessage "==============================================="
-
-  printMessage "Listing all people of the age 18 or over"
-  printMessage "==============================================="
-  getAdults >>= printVals
-  printMessage "==============================================="
-
-  printMessage "Listing all Blog Posts and their Authors"
-  printMessage "==============================================="
-  getBlogPostsByAuthors >>= printVals2
-  printMessage "==============================================="
-
-  printMessage "Listing all Authors and their possible Blog Posts"
-  printMessage "==============================================="
-  getAuthorMaybePosts >>= mapM_ print'
-  printMessage "==============================================="
-
-  printMessage "Listing all mutual Followers"
-  printMessage "==============================================="
-  followers >>= mapM_ print'
-  printMessage "==============================================="
-
-  printMessage "Updating Jaoa and checking the update"
-  printMessage "==============================================="
-  updateJoao
-  getJaoas >>= printVals
-  printMessage "==============================================="
-
-  printMessage "Deleting poor Jaoa because he is too young"
-  printMessage "==============================================="
-  deleteYoungsters
-  getJaoas >>= printVals
-  printMessage "==============================================="
-  where
-    -- | Helper for print Text and getting rid of pesky warnings to default
-    -- | literals to [Char]
-    printMessage :: (MonadIO m) => Text -> m ()
-    printMessage = liftIO . print
-
-    -- | Helper function for printing in our DB environment
-    print' :: (MonadIO m, Show a) => a -> m ()
-    print' = liftIO . print
-
-    -- | Helper to extract the entity values and print each one
-    printVals = liftIO . mapM_ (print . entityVal)
-
-    -- | TODO: Scrap this for something better
-    printVals2 = liftIO . mapM_ (print . both entityVal entityVal)
-    both f g (a, b) = (f a, g b)
+main :: IO ()
+main =
+  let connection = "host=localhost port=5433 user=postgres dbname=esqueleto_blog_example password=***"
+  in runBlogT connection . runDB $ do
+    setupBlog
+    putPersons
+    cleanDB
