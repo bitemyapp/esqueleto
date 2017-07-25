@@ -12,7 +12,8 @@ ghci:
 test:
 	stack test
 
-test-postgresql:
+# Intended for use in local dev
+test-postgresql: reset-pgsql
 	stack test --flag esqueleto:postgresql
 
 test-mysql:
