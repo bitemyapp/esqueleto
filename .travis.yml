@@ -23,8 +23,8 @@ install:
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
-  - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | sudo -u postgres psql
-  - sudo -u postgres createdb -O esqutest esqutest
+  - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | psql
+  - createdb -O esqutest esqutest
 
 script:
   - stack setup
