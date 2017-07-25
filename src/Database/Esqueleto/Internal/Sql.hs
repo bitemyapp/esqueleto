@@ -642,7 +642,11 @@ unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError "unsafeSqlBinOp"
 --   - If it is not a single placeholder, then it's assumed to be
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
-unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOpComposite :: TLB.Builder
+                        -> TLB.Builder
+                        -> SqlExpr (Value a)
+                        -> SqlExpr (Value b)
+                        -> SqlExpr (Value c)
 unsafeSqlBinOpComposite op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
 unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify b)
   where
@@ -652,6 +656,7 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
+    deconstruct ("?", [x]) = (["?"], [x])
     deconstruct (b', []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b'), [])
     deconstruct x = err $ "cannot deconstruct " ++ show x ++ "."
 

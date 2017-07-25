@@ -281,6 +281,21 @@ main = do
             ret `shouldBe` fc
             fcPk `shouldBe` thePk
 
+      it "works with non-id primary key constrained" $
+        run $ do
+          let fc = Frontcover number ""
+              number = 101
+              Right thePk = keyFromValues [toPersistValue number]
+          fcPk <- insert fc
+          [Entity _ ret] <- select
+                            $ from
+                            $ \fc -> do
+                                where_ (fc ^. FrontcoverId ==. val (FrontcoverKey number))
+                                return fc
+          liftIO $ do
+            ret `shouldBe` fc
+            fcPk `shouldBe` thePk
+
       it "works when returning a custom non-composite primary key from a query" $
         run $ do
           let name = "foo"
