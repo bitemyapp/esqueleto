@@ -82,6 +82,7 @@ data EsqueletoProblem =
   | UnexpectedCase String              -- | Unexpected function case encountered
   | EmptySqlExprValueList              -- | EEmptyList found for value list
   | UnsupportedSqlInsertIntoType       -- | Default Exception for sqlInsertInto
+  | UnsafeSqlBinOpComposite String     -- | Error in unsafeSqlBinOpComposite
   deriving (Show)
 
 instance Exception EsqueletoProblem
@@ -674,7 +675,7 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
         vc = v1 <> v2
         err' = err . (++ (", " ++ show ((b1, v1), (b2, v2))))
 
-    err = error . ("unsafeSqlBinOpComposite: " ++)
+    err = throw . UnsafeSqlBinOpComposite . ("unsafeSqlBinOpComposite: " ++)
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
@@ -1201,7 +1202,7 @@ instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
     in ("INSERT INTO " <> table <> parens fields <> "\n", [])
   sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
   sqlSelectColCount   = const 0
-  sqlSelectProcessRow = const (Right (error msg))
+  sqlSelectProcessRow = const (Right (throw $ UnexpectedCase msg))
     where
       msg = "sqlSelectProcessRow/SqlSelect/InsertionFinal: never here"
 
