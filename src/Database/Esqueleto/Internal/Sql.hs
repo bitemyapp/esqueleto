@@ -52,7 +52,7 @@ module Database.Esqueleto.Internal.Sql
   ) where
 
 import Control.Arrow ((***), first)
-import Control.Exception (throw, throwIO)
+import Control.Exception (Exception, throw, throwIO)
 import Control.Monad (ap, MonadPlus(..), void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
@@ -75,6 +75,20 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
 import Database.Esqueleto.Internal.Language
+
+-- | Exception data type for @esqueleto@ internal problems
+data EsqueletoProblem =
+    UnexpectedCompositeKeyError String -- | Unexpected composite key error
+  | UnexpectedCase String              -- | Unexpected function case encountered
+  | EmptySqlExprValueList              -- | EEmptyList found for value list
+  | UnsupportedSqlInsertIntoType       -- | Default Exception for sqlInsertInto
+  deriving (Show)
+
+instance Exception EsqueletoProblem
+
+
+----------------------------------------------------------------------
+
 
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
@@ -238,7 +252,7 @@ newIdentFor = Q . lift . try . unDBName
       s <- S.get
       let go (t:ts) | t `HS.member` inUse s = go ts
                     | otherwise             = use t
-          go [] = error "Esqueleto/Sql/newIdentFor: never here"
+          go [] = unexpectedCase "Esqueleto/Sql/newIdentFor: never here"
       go (possibilities orig)
 
     possibilities t = t : map addNum [2..]
@@ -578,7 +592,7 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
         in ( "CASE" <> b2 <> " ELSE " <> parensM p1 b1 <> " END", vals2 <> vals1)
 
     mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> IdentInfo -> (TLB.Builder, [PersistValue])
-    mapWhen []    _    = error "unsafeSqlCase: empty when list."
+    mapWhen []    _    = unexpectedCase "unsafeSqlCase: empty when list."
     mapWhen when' info = foldl (foldHelp info) (mempty, mempty) when'
 
     foldHelp :: IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
@@ -739,8 +753,7 @@ veryUnsafeCoerceSqlExprValue (ECompositeKey f) = ECompositeKey f
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
 veryUnsafeCoerceSqlExprValueList (EList v)  = v
-veryUnsafeCoerceSqlExprValueList EEmptyList =
-  error "veryUnsafeCoerceSqlExprValueList: empty list."
+veryUnsafeCoerceSqlExprValueList EEmptyList = throw EmptySqlExprValueList
 
 
 ----------------------------------------------------------------------
@@ -1055,7 +1068,7 @@ makeFrom info mode fs = ret
               , mk Parens rhs
               , maybe mempty makeOnClause monClause
               ]
-    mk _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
+    mk _ (OnClause _) = unexpectedCase "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def
@@ -1080,8 +1093,10 @@ makeFrom info mode fs = ret
     mkExc (ECompositeKey _) = unexpectedCompositeKeyError "makeFrom/mkExc"
 
 unexpectedCompositeKeyError :: String -> a
-unexpectedCompositeKeyError w = error $ w ++ ": non-id/composite keys not expected here"
+unexpectedCompositeKeyError w = throw $ UnexpectedCompositeKeyError (w ++ ": non-id/composite keys not expected here")
 
+unexpectedCase :: String -> a
+unexpectedCase = throw . UnexpectedCase
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
@@ -1172,7 +1187,7 @@ class SqlSelect a r | a -> r, r -> a where
 
   -- | Create @INSERT INTO@ clause instead.
   sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
-  sqlInsertInto = error "Type does not support sqlInsertInto."
+  sqlInsertInto = throw UnsupportedSqlInsertIntoType
 
 
 -- | @INSERT INTO@ hack.
