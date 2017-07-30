@@ -112,9 +112,6 @@ data SqlBinOpCompositeError =
   | DeconstructionError
   deriving (Show)
 
-instance Exception SqlBinOpCompositeError
-instance Exception UnexpectedCaseError
-instance Exception CompositeKeyError
 instance Exception EsqueletoError
 
 
@@ -283,7 +280,7 @@ newIdentFor = Q . lift . try . unDBName
       s <- S.get
       let go (t:ts) | t `HS.member` inUse s = go ts
                     | otherwise             = use t
-          go [] = throw NewIdentForError
+          go [] = throw (UnexpectedCaseErr NewIdentForError)
       go (possibilities orig)
 
     possibilities t = t : map addNum [2..]
@@ -1223,7 +1220,8 @@ instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
     in ("INSERT INTO " <> table <> parens fields <> "\n", [])
   sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
   sqlSelectColCount   = const 0
-  sqlSelectProcessRow = const (Right (throw InsertionFinalError))
+  sqlSelectProcessRow =
+    const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
 
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
