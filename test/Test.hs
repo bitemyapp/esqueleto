@@ -1,21 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# LANGUAGE ConstraintKinds
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , DeriveGeneric
-           , GADTs
-           , GeneralizedNewtypeDeriving
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , QuasiQuotes
-           , Rank2Types
-           , TemplateHaskell
-           , TypeFamilies
-           , ScopedTypeVariables
-           , CPP
-           , TypeSynonymInstances
- #-}
+
 module Main (main) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
@@ -49,93 +33,44 @@ import qualified Data.Conduit.List as CL
 import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
+import qualified Data.Text as T
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.Sql as EI
 
-
--- Test schema
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
-  Foo
-    name Int
-    Primary name
-  Bar
-    quux FooId
-
-  Person
-    name String
-    age Int Maybe
-    weight Int Maybe
-    favNum Int
-    deriving Eq Show
-  BlogPost
-    title String
-    authorId PersonId
-    deriving Eq Show
-
-  Lord
-    county String
-    dogs Int Maybe
-    Primary county
-    deriving Show
-
-  Deed
-    contract String
-    ownerId LordId
-    Primary contract
-    deriving Show
-
-  Follow
-    follower PersonId
-    followed PersonId
-    deriving Eq Show
-
-  CcList
-    names [String]
-
-  Frontcover
-    number Int
-    title String
-    Primary number
-    deriving Eq Show
-  Article
-    title String
-    frontcoverNumber Int
-    Foreign Frontcover fkfrontcover frontcoverNumber
-    deriving Eq Show
-  Tag
-    name String
-    Primary name
-    deriving Eq Show
-  ArticleTag
-    articleId ArticleId
-    tagId     TagId
-    Primary   articleId tagId
-    deriving Eq Show
-  Article2
-    title String
-    frontcoverId FrontcoverId
-    deriving Eq Show
-  Point
-    x Int
-    y Int
-    name String
-    Primary x y
-    deriving Eq Show
-  Circle
-    centerX Int
-    centerY Int
-    name String
-    Foreign Point fkpoint centerX centerY
-    deriving Eq Show
-  Numbers
-    int    Int
-    double Double
-|]
+import Test.Types
 
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
 sameElementsAs :: Eq a => [a] -> [a] -> Bool
 sameElementsAs l1 l2 = null (l1 L.\\ l2)
+
+-- | Helper for rounding to a specific digit
+--   Prelude> map (flip roundTo 12.3456) [0..5]
+--   [12.0, 12.3, 12.35, 12.346, 12.3456, 12.3456]
+roundTo :: (Fractional a, RealFrac a1, Integral b) => b -> a1 -> a
+roundTo n f =
+  (fromInteger $ round $ f * (10^n)) / (10.0^^n)
+
+nameContains
+  :: (BaseBackend backend ~ SqlBackend,
+      Esqueleto query expr backend, MonadIO m, SqlString s,
+      IsPersistBackend backend, PersistQueryRead backend,
+      PersistUniqueRead backend) =>
+     (SqlExpr (Value [Char]) -> expr (Value s) -> SqlExpr (Value Bool))
+     -> s -> [Entity Person] -> ReaderT backend m ()
+nameContains f t expected = do
+  ret <- select $
+         from $ \p -> do
+         where_ (f
+                  (p ^. PersonName)
+#if defined (WITH_MYSQL)
+                  (concat_ [(%), val t, (%)]))
+#else
+                  ((%) ++. val t ++. (%)))
+#endif
+         orderBy [asc (p ^. PersonName)]
+         return p
+  liftIO $ ret `shouldBe` expected
 
 main :: IO ()
 main = do
@@ -147,6 +82,7 @@ main = do
       l1 = Lord "Cornwall" (Just 36)
       l2 = Lord "Dorset" Nothing
       l3 = Lord "Chester" (Just 17)
+      -- n1 = Lawyer "Clarence"
 
   hspec $ do
     describe "select" $ do
@@ -341,6 +277,21 @@ main = do
               Right thePk = keyFromValues [toPersistValue number]
           fcPk <- insert fc
           [Entity _ ret] <- select $ from return
+          liftIO $ do
+            ret `shouldBe` fc
+            fcPk `shouldBe` thePk
+
+      it "works with non-id primary key constrained" $
+        run $ do
+          let fc = Frontcover number ""
+              number = 101
+              Right thePk = keyFromValues [toPersistValue number]
+          fcPk <- insert fc
+          [Entity _ ret] <- select
+                            $ from
+                            $ \fc -> do
+                                where_ (fc ^. FrontcoverId ==. val (FrontcoverKey number))
+                                return fc
           liftIO $ do
             ret `shouldBe` fc
             fcPk `shouldBe` thePk
@@ -592,7 +543,9 @@ main = do
           ret <- select $
                  from $ \p->
                  return $ joinV $ avg_ (p ^. PersonAge)
-          liftIO $ ret `shouldBe` [ Value $ Just ((36 + 17 + 17) / 3 :: Double) ]
+          let testV :: Double
+              testV = roundTo 4 $ (36 + 17 + 17) / 3
+          liftIO $ ret `shouldBe` [ Value $ Just testV ]
 
       it "works with min_" $
         run $ do
@@ -980,30 +933,16 @@ main = do
       it "like, (%) and (++.) work on a simple example" $
          run $ do
            [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
-           let nameContains t expected = do
-                 ret <- select $
-                        from $ \p -> do
-                        where_ (p ^. PersonName `like` (%) ++. val t ++. (%))
-                        orderBy [asc (p ^. PersonName)]
-                        return p
-                 liftIO $ ret `shouldBe` expected
-           nameContains "h"  [p1e, p2e]
-           nameContains "i"  [p4e, p3e]
-           nameContains "iv" [p4e]
+           nameContains like "h"  [p1e, p2e]
+           nameContains like "i"  [p4e, p3e]
+           nameContains like "iv" [p4e]
 
 #if defined(WITH_POSTGRESQL)
       it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
          run $ do
            [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-           let nameContains t expected = do
-                 ret <- select $
-                        from $ \p -> do
-                        where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
-                        orderBy [asc (p ^. PersonName)]
-                        return p
-                 liftIO $ ret `shouldBe` expected
-           nameContains "mi" [p3e, p5e]
-           nameContains "JOHN" [p1e]
+           nameContains ilike "mi" [p3e, p5e]
+           nameContains ilike "JOHN" [p1e]
 #endif
 
     describe "delete" $

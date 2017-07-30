@@ -52,7 +52,7 @@ module Database.Esqueleto.Internal.Sql
   ) where
 
 import Control.Arrow ((***), first)
-import Control.Exception (throw, throwIO)
+import Control.Exception (Exception, throw, throwIO)
 import Control.Monad (ap, MonadPlus(..), void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
@@ -75,6 +75,48 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
 import Database.Esqueleto.Internal.Language
+
+-- | Exception data type for @esqueleto@ internal errors
+data EsqueletoError =
+    CompositeKeyErr CompositeKeyError
+  | UnexpectedCaseErr UnexpectedCaseError
+  | SqlBinOpCompositeErr SqlBinOpCompositeError
+  deriving (Show)
+
+instance Exception EsqueletoError
+
+data CompositeKeyError =
+    NotError
+  | ToInsertionError
+  | CombineInsertionError
+  | FoldHelpError
+  | SqlCaseError
+  | SqlBinOpError
+  | MakeOnClauseError
+  | MakeExcError
+  | MakeSetError
+  | MakeWhereError
+  | MakeHavingError
+  deriving (Show)
+
+data UnexpectedCaseError =
+    EmptySqlExprValueList
+  | MakeFromError
+  | UnsupportedSqlInsertIntoType
+  | InsertionFinalError
+  | NewIdentForError
+  | UnsafeSqlCaseError
+  deriving (Show)
+
+data SqlBinOpCompositeError =
+    MismatchingLengthsError
+  | NullPlaceholdersError
+  | DeconstructionError
+  deriving (Show)
+
+
+----------------------------------------------------------------------
+
 
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
@@ -238,7 +280,7 @@ newIdentFor = Q . lift . try . unDBName
       s <- S.get
       let go (t:ts) | t `HS.member` inUse s = go ts
                     | otherwise             = use t
-          go [] = error "Esqueleto/Sql/newIdentFor: never here"
+          go [] = throw (UnexpectedCaseErr NewIdentForError)
       go (possibilities orig)
 
     possibilities t = t : map addNum [2..]
@@ -448,7 +490,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
 
   not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                           in ("NOT " <> parensM p b, vals)
-  not_ (ECompositeKey _) = unexpectedCompositeKeyError "not_"
+  not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 
   (==.) = unsafeSqlBinOpComposite " = " " AND "
   (!=.) = unsafeSqlBinOpComposite " != " " OR "
@@ -463,7 +505,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (/.)  = unsafeSqlBinOp " / "
   (*.)  = unsafeSqlBinOp " * "
 
-  random_  = unsafeSqlValue "RANDOM()"
+  random_  = unsafeSqlValue "RAND()"
   round_   = unsafeSqlFunction "ROUND"
   ceiling_ = unsafeSqlFunction "CEILING"
   floor_   = unsafeSqlFunction "FLOOR"
@@ -483,6 +525,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   like    = unsafeSqlBinOp    " LIKE "
   ilike   = unsafeSqlBinOp    " ILIKE "
   (%)     = unsafeSqlValue    "'%'"
+-- SQLite                      ||
+-- Oracle                      CONCAT(string1, string2) or ||
+-- MySQL                       CONCAT(string1, string2, string3...)
+-- Postgres                    CONCAT(string1, string2, string3...) or ||
+-- Microsoft SQL Server 2012+  CONCAT(string1, string2, string3...) or +
+-- Microsoft Access            +
   concat_ = unsafeSqlFunction "CONCAT"
   (++.)   = unsafeSqlBinOp    " || "
   castString = veryUnsafeCoerceSqlExprValue
@@ -514,13 +562,13 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
   (<#) _ (ERaw _ f)        = EInsert Proxy f
-  (<#) _ (ECompositeKey _) = unexpectedCompositeKeyError "(<#)"
+  (<#) _ (ECompositeKey _) = throw (CompositeKeyErr ToInsertionError)
 
   (EInsert _ f) <&> (ERaw _ g) = EInsert Proxy $ \x ->
     let (fb, fv) = f x
         (gb, gv) = g x
     in (fb <> ", " <> gb, fv ++ gv)
-  (EInsert _ _) <&> (ECompositeKey _) = unexpectedCompositeKeyError "(<&>)"
+  (EInsert _ _) <&> (ECompositeKey _) = throw (CompositeKeyErr CombineInsertionError)
 
   case_ = unsafeSqlCase
   toBaseId = veryUnsafeCoerceSqlExprValue
@@ -578,7 +626,7 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
         in ( "CASE" <> b2 <> " ELSE " <> parensM p1 b1 <> " END", vals2 <> vals1)
 
     mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> IdentInfo -> (TLB.Builder, [PersistValue])
-    mapWhen []    _    = error "unsafeSqlCase: empty when list."
+    mapWhen []    _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
     mapWhen when' info = foldl (foldHelp info) (mempty, mempty) when'
 
     foldHelp :: IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
@@ -586,8 +634,8 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
         let (b1, vals1) = f1' info
             (b2, vals2) = f2 info
         in ( b0 <> " WHEN " <> parensM p1' b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
-    foldHelp _ _ _ = unexpectedCompositeKeyError "unsafeSqlCase/foldHelp"
-unsafeSqlCase _ (ECompositeKey _) = unexpectedCompositeKeyError "unsafeSqlCase"
+    foldHelp _ _ _ = throw (CompositeKeyErr FoldHelpError)
+unsafeSqlCase _ (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
 
 
 -- | (Internal) Create a custom binary operator.  You /should/
@@ -609,7 +657,7 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError "unsafeSqlBinOp"
+unsafeSqlBinOp _ _ _ = throw (CompositeKeyErr SqlBinOpError)
 {-# INLINE unsafeSqlBinOp #-}
 
 
@@ -636,7 +684,11 @@ unsafeSqlBinOp _ _ _ = unexpectedCompositeKeyError "unsafeSqlBinOp"
 --   - If it is not a single placeholder, then it's assumed to be
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
-unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOpComposite :: TLB.Builder
+                        -> TLB.Builder
+                        -> SqlExpr (Value a)
+                        -> SqlExpr (Value b)
+                        -> SqlExpr (Value c)
 unsafeSqlBinOpComposite op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
 unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify b)
   where
@@ -646,21 +698,19 @@ unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify 
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
+    deconstruct ("?", [x]) = (["?"], [x])
     deconstruct (b', []) = (TLB.fromLazyText <$> TL.splitOn "," (TLB.toLazyText b'), [])
-    deconstruct x = err $ "cannot deconstruct " ++ show x ++ "."
+    deconstruct _ = throw (SqlBinOpCompositeErr DeconstructionError)
 
     compose f1 f2 info
-      | not (null v1 || null v2) = err' "one side needs to have null placeholders"
-      | length b1 /= length b2   = err' "mismatching lengths"
+      | not (null v1 || null v2) = throw (SqlBinOpCompositeErr NullPlaceholdersError)
+      | length b1 /= length b2   = throw (SqlBinOpCompositeErr MismatchingLengthsError)
       | otherwise                = (bc, vc)
       where
         (b1, v1) = f1 info
         (b2, v2) = f2 info
         bc = intersperseB sep [x <> op <> y | (x, y) <- zip b1 b2]
         vc = v1 <> v2
-        err' = err . (++ (", " ++ show ((b1, v1), (b2, v2))))
-
-    err = error . ("unsafeSqlBinOpComposite: " ++)
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
@@ -739,8 +789,7 @@ veryUnsafeCoerceSqlExprValue (ECompositeKey f) = ECompositeKey f
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
 veryUnsafeCoerceSqlExprValueList (EList v)  = v
-veryUnsafeCoerceSqlExprValueList EEmptyList =
-  error "veryUnsafeCoerceSqlExprValueList: empty list."
+veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlExprValueList)
 
 
 ----------------------------------------------------------------------
@@ -1055,7 +1104,7 @@ makeFrom info mode fs = ret
               , mk Parens rhs
               , maybe mempty makeOnClause monClause
               ]
-    mk _ (OnClause _) = error "Esqueleto/Sql/makeFrom: never here (is collectOnClauses working?)"
+    mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def
@@ -1071,29 +1120,25 @@ makeFrom info mode fs = ret
     fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
 
     makeOnClause (ERaw _ f)        = first (" ON " <>) (f info)
-    makeOnClause (ECompositeKey _) = unexpectedCompositeKeyError "makeFrom/makeOnClause"
+    makeOnClause (ECompositeKey _) = throw (CompositeKeyErr MakeOnClauseError)
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f info)
-    mkExc (ECompositeKey _) = unexpectedCompositeKeyError "makeFrom/mkExc"
-
-unexpectedCompositeKeyError :: String -> a
-unexpectedCompositeKeyError w = error $ w ++ ": non-id/composite keys not expected here"
-
+    mkExc (ECompositeKey _) = throw (CompositeKeyErr MakeExcError)
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
 makeSet info os = first ("\nSET " <>) . uncommas' $ concatMap mk os
   where
     mk (SetClause (ERaw _ f))        = [f info]
-    mk (SetClause (ECompositeKey _)) = unexpectedCompositeKeyError "makeSet" -- FIXME
+    mk (SetClause (ECompositeKey _)) = throw (CompositeKeyErr MakeSetError) -- FIXME
 
 makeWhere :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeWhere _    NoWhere                   = mempty
 makeWhere info (Where (ERaw _ f))        = first ("\nWHERE " <>) (f info)
-makeWhere _    (Where (ECompositeKey _)) = unexpectedCompositeKeyError "makeWhere"
+makeWhere _    (Where (ECompositeKey _)) = throw (CompositeKeyErr MakeWhereError)
 
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
@@ -1110,7 +1155,7 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere                    = mempty
 makeHaving info (Where (ERaw _ f))         = first ("\nHAVING " <>) (f info)
-makeHaving _    (Where (ECompositeKey _)) = unexpectedCompositeKeyError "makeHaving"
+makeHaving _    (Where (ECompositeKey _)) = throw (CompositeKeyErr MakeHavingError)
 
 -- makeHaving, makeWhere and makeOrderBy
 makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
@@ -1123,7 +1168,7 @@ makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
       let fs = f info
           vals = repeat []
       in zip (map (<> orderByType t) fs) vals
-    mk EOrderRandom = [first (<> "RANDOM()") mempty]
+    mk EOrderRandom = [first (<> "RAND()") mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 
@@ -1172,7 +1217,7 @@ class SqlSelect a r | a -> r, r -> a where
 
   -- | Create @INSERT INTO@ clause instead.
   sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
-  sqlInsertInto = error "Type does not support sqlInsertInto."
+  sqlInsertInto = throw (UnexpectedCaseErr UnsupportedSqlInsertIntoType)
 
 
 -- | @INSERT INTO@ hack.
@@ -1186,9 +1231,8 @@ instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
     in ("INSERT INTO " <> table <> parens fields <> "\n", [])
   sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
   sqlSelectColCount   = const 0
-  sqlSelectProcessRow = const (Right (error msg))
-    where
-      msg = "sqlSelectProcessRow/SqlSelect/InsertionFinal: never here"
+  sqlSelectProcessRow =
+    const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
 
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
