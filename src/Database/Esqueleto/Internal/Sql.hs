@@ -83,6 +83,8 @@ data EsqueletoError =
   | SqlBinOpCompositeErr SqlBinOpCompositeError
   deriving (Show)
 
+instance Exception EsqueletoError
+
 data CompositeKeyError =
     NotError
   | ToInsertionError
@@ -111,8 +113,6 @@ data SqlBinOpCompositeError =
   | NullPlaceholdersError
   | DeconstructionError
   deriving (Show)
-
-instance Exception EsqueletoError
 
 
 ----------------------------------------------------------------------
