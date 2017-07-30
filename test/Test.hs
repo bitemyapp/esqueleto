@@ -1528,13 +1528,13 @@ withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
   R.runResourceT .
 #if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=test dbname=test"
+  withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
 #elif defined (WITH_MYSQL)
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
-    , connectUser     = "test"
-    , connectPassword = "test"
-    , connectDatabase = "test"
+    , connectUser     = "esqutest"
+    , connectPassword = "esqutest"
+    , connectDatabase = "esqutest"
     }
 #else
   withSqliteConn ":memory:"

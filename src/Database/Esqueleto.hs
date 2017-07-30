@@ -90,7 +90,8 @@ module Database.Esqueleto
   , insertSelectDistinct
   , (<#)
   , (<&>)
-
+    -- * Internal.Language
+  , From
     -- * RDBMS-specific modules
     -- $rdbmsSpecificModules
 
