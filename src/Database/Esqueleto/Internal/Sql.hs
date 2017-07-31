@@ -115,8 +115,6 @@ data SqlBinOpCompositeError =
   deriving (Show)
 
 
-----------------------------------------------------------------------
-
 
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
 newtype SqlQuery a =
