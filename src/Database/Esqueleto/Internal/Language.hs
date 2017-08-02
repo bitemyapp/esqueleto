@@ -352,6 +352,7 @@ class (Functor query, Applicative query, Monad query) =>
 
 
   random_  :: (PersistField a, Num a) => expr (Value a)
+  now_     :: (PersistField a)        => expr (Value a)
   round_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
   ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
   floor_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)

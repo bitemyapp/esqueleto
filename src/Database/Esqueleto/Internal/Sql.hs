@@ -504,6 +504,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (*.)  = unsafeSqlBinOp " * "
 
   random_  = unsafeSqlValue "RANDOM()"
+  now_     = unsafeSqlValue "NOW()"
   round_   = unsafeSqlFunction "ROUND"
   ceiling_ = unsafeSqlFunction "CEILING"
   floor_   = unsafeSqlFunction "FLOOR"

@@ -51,6 +51,7 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.Sql as EI
+import Data.Time.Clock (UTCTime)
 
 
 -- Test schema
@@ -644,6 +645,11 @@ main = do
 #endif
           return ()
 
+      it "works with now_" $
+        run $ do
+          _ <- select $ return (now_ :: SqlExpr (Value UTCTime))
+          return ()
+
       it "works with round_" $
         run $ do
           ret <- select $ return $ round_ (val (16.2 :: Double))
@@ -1126,22 +1132,22 @@ main = do
                                   , (Entity p1k p1, Value 3)
                                   , (Entity p3k p3, Value 7) ]
 
-      it "GROUP BY works with COUNT and InnerJoin" $
-        run $ do
-          l1k <- insert l1
-          l2k <- insert l2
-          l3k <- insert l3
-          mapM_ (\k -> insert $ Deed k l1k) (map show [1..3])
-
-          mapM_ (\k -> insert $ Deed k l3k) (map show [4..10])
-
-          (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
-            \ ( lord `InnerJoin` deed ) -> do
-            on $ lord ^. LordId ==. deed ^. DeedOwnerId
-            groupBy (lord ^. LordId)
-            return (lord ^. LordId, count $ deed ^. DeedId)
-          liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
-                                  , (Value l1k, Value 3) ]
+      -- it "GROUP BY works with COUNT and InnerJoin" $
+      --   run $ do
+      --     l1k <- insert l1
+      --     l2k <- insert l2
+      --     l3k <- insert l3
+      --     mapM_ (\k -> insert $ Deed k l1k) (map show [1..3])
+      --
+      --     mapM_ (\k -> insert $ Deed k l3k) (map show [4..10])
+      --
+      --     (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
+      --       \ ( lord `InnerJoin` deed ) -> do
+      --       on $ lord ^. LordId ==. deed ^. DeedOwnerId
+      --       groupBy (lord ^. LordId)
+      --       return (lord ^. LordId, count $ deed ^. DeedId)
+      --     liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
+      --                             , (Value l1k, Value 3) ]
 
       it "GROUP BY works with HAVING" $
         run $ do

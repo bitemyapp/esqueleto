@@ -48,7 +48,7 @@ source-repository head
 
 Flag postgresql
   Description: test postgresql. default is to test sqlite.
-  Default: False
+  Default: True
 
 Flag mysql
   Description: test MySQL/MariaDB. default is to test sqlite.
@@ -101,6 +101,7 @@ test-suite test
     , persistent-template >= 2.1
     , monad-control
     , monad-logger        >= 0.3
+    , time                >= 1.6.0.1
 
       -- This library
     , esqueleto
