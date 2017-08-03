@@ -16,7 +16,6 @@ module Database.Esqueleto.Internal.Language
     Esqueleto(..)
   , from
   , Value(..)
-  , unValue
   , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
@@ -624,9 +623,7 @@ else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
-data Value a = Value a deriving (Eq, Ord, Show, Typeable)
--- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
--- <https://ghc.haskell.org/trac/ghc/ticket/6124>
+newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
 
 
 -- | /Since: 1.4.4/
@@ -634,19 +631,10 @@ instance Functor Value where
   fmap f (Value a) = Value (f a)
 
 
--- | Unwrap a 'Value'.
---
--- /Since: 1.4.1/
-unValue :: Value a -> a
-unValue (Value a) = a
-
-
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
-data ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
--- Note: because of GHC bug #6124 we use @data@ instead of @newtype@.
--- <https://ghc.haskell.org/trac/ghc/ticket/6124>
+newtype ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 
 
 -- | A wrapper type for for any @expr (Value a)@ for all a.
