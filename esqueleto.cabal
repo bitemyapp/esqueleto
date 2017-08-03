@@ -48,7 +48,7 @@ source-repository head
 
 Flag postgresql
   Description: test postgresql. default is to test sqlite.
-  Default: True
+  Default: False
 
 Flag mysql
   Description: test MySQL/MariaDB. default is to test sqlite.
