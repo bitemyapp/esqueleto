@@ -7,11 +7,12 @@ module Database.Esqueleto.PostgreSQL
   ( arrayAgg
   , stringAgg
   , chr
+  , now_
   ) where
 
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
-
+import Data.Time.Clock (UTCTime)
 
 -- | (@array_agg@) Concatenate input values, including @NULL@s,
 -- into an array.
@@ -38,3 +39,6 @@ stringAgg expr delim = unsafeSqlFunction "string_agg" (expr, delim)
 -- /Since: 2.2.11/
 chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
 chr = unsafeSqlFunction "chr"
+
+now_ :: SqlExpr (Value UTCTime)
+now_ = unsafeSqlValue "NOW()"

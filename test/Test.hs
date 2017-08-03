@@ -51,7 +51,7 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.Sql as EI
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (getCurrentTime, diffUTCTime, NominalDiffTime)
 
 
 -- Test schema
@@ -645,10 +645,20 @@ main = do
 #endif
           return ()
 
-      it "works with now_" $
+      it "works with now" $
         run $ do
-          _ <- select $ return (now_ :: SqlExpr (Value UTCTime))
-          return ()
+          nowDb <- select $ return EP.now_
+          nowUtc <- liftIO getCurrentTime
+          let halfSecond = realToFrac 0.5 :: NominalDiffTime
+
+          -- | Check the result is not null
+          liftIO $ nowDb `shouldSatisfy` (not . null)
+
+          -- | Unpack the now value
+          let (Value now: _) = nowDb
+
+          -- | Get the time diff and check it's less than half a second
+          liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
 
       it "works with round_" $
         run $ do

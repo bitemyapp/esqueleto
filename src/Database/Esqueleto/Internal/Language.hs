@@ -53,7 +53,6 @@ import Text.Blaze.Html (Html)
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
-import Data.Time.Clock (UTCTime)
 
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
@@ -353,7 +352,6 @@ class (Functor query, Applicative query, Monad query) =>
 
 
   random_  :: (PersistField a, Num a) => expr (Value a)
-  now_     :: (PersistField a, a ~ UTCTime) => expr (Value a)
   round_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
   ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
   floor_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)

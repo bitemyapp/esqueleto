@@ -45,7 +45,7 @@ module Database.Esqueleto
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)
-             , random_, now_, round_, ceiling_, floor_
+             , random_, round_, ceiling_, floor_
              , min_, max_, sum_, avg_, castNum, castNumM
              , coalesce, coalesceDefault
              , lower_, like, ilike, (%), concat_, (++.), castString
