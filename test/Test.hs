@@ -1158,9 +1158,8 @@ main = do
             on $ lord ^. LordId ==. deed ^. DeedOwnerId
             groupBy (lord ^. LordId)
             return (lord ^. LordId, count $ deed ^. DeedId)
-          liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
-                                  , (Value l1k, Value 3) ]
-
+          liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
+                                         , (Value l1k, Value 3) ]
       it "GROUP BY works with HAVING" $
         run $ do
           p1k <- insert p1
