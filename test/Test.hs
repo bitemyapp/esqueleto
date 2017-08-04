@@ -645,6 +645,7 @@ main = do
 #endif
           return ()
 
+#if   defined(WITH_POSTGRESQL)
       it "works with now" $
         run $ do
           nowDb <- select $ return EP.now_
@@ -659,6 +660,7 @@ main = do
 
           -- | Get the time diff and check it's less than half a second
           liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
+#endif
 
       it "works with round_" $
         run $ do
@@ -1499,6 +1501,9 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+
+  delete $ from $ \(_ :: SqlExpr (Entity Deed)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Lord)) -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity CcList))  -> return ()
 
