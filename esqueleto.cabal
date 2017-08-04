@@ -74,7 +74,7 @@ library
     , monad-logger
     , conduit              >= 1.1
     , resourcet            >= 1.1
-    , time                 >= 1.6.0.1
+    , time                 >= 1.5.0.1 && <= 1.6.0.1
     , blaze-html
   hs-source-dirs: src/
   if impl(ghc >= 8.0)
@@ -102,7 +102,7 @@ test-suite test
     , persistent-template >= 2.1
     , monad-control
     , monad-logger        >= 0.3
-    , time                >= 1.6.0.1
+    , time                >= 1.5.0.1 && <= 1.6.0.1
 
       -- This library
     , esqueleto
