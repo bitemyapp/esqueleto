@@ -51,6 +51,7 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.Sql as EI
+import Data.Time.Clock (getCurrentTime, diffUTCTime, NominalDiffTime)
 
 
 -- Test schema
@@ -644,6 +645,23 @@ main = do
 #endif
           return ()
 
+#if   defined(WITH_POSTGRESQL)
+      it "works with now" $
+        run $ do
+          nowDb <- select $ return EP.now_
+          nowUtc <- liftIO getCurrentTime
+          let halfSecond = realToFrac 0.5 :: NominalDiffTime
+
+          -- | Check the result is not null
+          liftIO $ nowDb `shouldSatisfy` (not . null)
+
+          -- | Unpack the now value
+          let (Value now: _) = nowDb
+
+          -- | Get the time diff and check it's less than half a second
+          liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
+#endif
+
       it "works with round_" $
         run $ do
           ret <- select $ return $ round_ (val (16.2 :: Double))
@@ -1140,9 +1158,8 @@ main = do
             on $ lord ^. LordId ==. deed ^. DeedOwnerId
             groupBy (lord ^. LordId)
             return (lord ^. LordId, count $ deed ^. DeedId)
-          liftIO $ ret `shouldBe` [ (Value l3k, Value 7)
-                                  , (Value l1k, Value 3) ]
-
+          liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
+                                         , (Value l1k, Value 3) ]
       it "GROUP BY works with HAVING" $
         run $ do
           p1k <- insert p1
@@ -1483,6 +1500,9 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+
+  delete $ from $ \(_ :: SqlExpr (Entity Deed)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Lord)) -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity CcList))  -> return ()
 
