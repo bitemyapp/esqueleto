@@ -107,18 +107,16 @@ test-suite test
       -- This library
     , esqueleto
 
-  if flag(postgresql)
-    build-depends:
-        postgresql-simple     >= 0.2
-      , postgresql-libpq      >= 0.6
-      , persistent-postgresql >= 2.0
+    , postgresql-simple     >= 0.2
+    , postgresql-libpq      >= 0.6
+    , persistent-postgresql >= 2.0
 
+    , mysql-simple          >= 0.2.2.3
+    , mysql                 >= 0.1.1.3
+    , persistent-mysql      >= 2.0
+
+  if flag(postgresql)
     cpp-options: -DWITH_POSTGRESQL
 
   if flag(mysql)
-    build-depends:
-        mysql-simple          >= 0.2.2.3
-      , mysql                 >= 0.1.1.3
-      , persistent-mysql      >= 2.0
-
     cpp-options: -DWITH_MYSQL
