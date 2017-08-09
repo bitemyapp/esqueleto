@@ -46,14 +46,6 @@ source-repository head
   type:     git
   location: git://github.com/bitemyapp/esqueleto.git
 
-Flag postgresql
-  Description: test postgresql. default is to test sqlite.
-  Default: False
-
-Flag mysql
-  Description: test MySQL/MariaDB. default is to test sqlite.
-  Default: False
-
 library
   exposed-modules:
     Database.Esqueleto
@@ -81,7 +73,7 @@ library
     ghc-options: -Wall -Wno-redundant-constraints
   else
     ghc-options: -Wall
-    
+
 
 test-suite postgresql
   type: exitcode-stdio-1.0

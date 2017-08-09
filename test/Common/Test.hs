@@ -13,7 +13,6 @@
            , TemplateHaskell
            , TypeFamilies
            , ScopedTypeVariables
-           , CPP
            , TypeSynonymInstances
  #-}
 
