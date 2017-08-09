@@ -16,39 +16,55 @@
            , CPP
            , TypeSynonymInstances
  #-}
-module Main (main) where
+
+module Common.Test
+    ( tests
+    , testLocking
+    , migrateAll
+    , cleanDB
+    , RunDbMonad
+    , Run
+    , p1, p2, p3, p4, p5
+    , l1, l2, l3
+    , insert'
+    , EntityField (..)
+    , Foo (..)
+    , Bar (..)
+    , Person (..)
+    , BlogPost (..)
+    , Lord (..)
+    , Deed (..)
+    , Follow (..)
+    , CcList (..)
+    , Frontcover (..)
+    , Article (..)
+    , Tag (..)
+    , ArticleTag (..)
+    , Article2 (..)
+    , Point (..)
+    , Circle (..)
+    , Numbers (..)
+    ) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Logger (MonadLogger (..), NoLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
 import Database.Esqueleto
-import Database.Persist.Postgresql (withPostgresqlConn)
-import Data.Ord (comparing)
-import Control.Arrow ((&&&))
-import qualified Database.Esqueleto.PostgreSQL as EP
-import Database.Persist.MySQL ( withMySQLConn
-                              , connectHost
-                              , connectDatabase
-                              , connectUser
-                              , connectPassword
-                              , defaultConnectInfo)
-import Database.Persist.Sqlite (withSqliteConn)
-import Database.Sqlite (SqliteException)
 import Database.Persist.TH
 import Test.Hspec
 
-import Data.Conduit (($$), Source, (=$=))
+import Data.Conduit (($$), (=$=), Source)
 import qualified Data.Conduit.List as CL
 import qualified Control.Monad.Trans.Resource as R
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
+import qualified Data.Text.Internal.Lazy as TL
 import qualified Database.Esqueleto.Internal.Sql as EI
-import Data.Time.Clock (getCurrentTime, diffUTCTime)
 
 
 -------------------------------------------------------------------------------
@@ -168,8 +184,8 @@ l3 = Lord "Chester" (Just 17)
 -------------------------------------------------------------------------------
 
 
-testSelect :: SpecWith (Arg (IO ()))
-testSelect = do
+testSelect :: Run -> Spec
+testSelect run = do
   describe "select" $ do
     it "works for a single value" $
       run $ do
@@ -195,8 +211,8 @@ testSelect = do
 -------------------------------------------------------------------------------
 
 
-testSelectSource :: SpecWith (Arg (IO ()))
-testSelectSource = do
+testSelectSource :: Run -> Spec
+testSelectSource run = do
   describe "selectSource" $ do
     it "works for a simple example" $
       run $ do
@@ -238,8 +254,8 @@ testSelectSource = do
 -------------------------------------------------------------------------------
 
 
-testSelectFrom :: SpecWith (Arg (IO ()))
-testSelectFrom = do
+testSelectFrom :: Run -> Spec
+testSelectFrom run = do
   describe "select/from" $ do
     it "works for a simple example" $
       run $ do
@@ -399,8 +415,8 @@ testSelectFrom = do
 -------------------------------------------------------------------------------
 
 
-testSelectJoin :: SpecWith (Arg (IO ()))
-testSelectJoin = do
+testSelectJoin :: Run -> Spec
+testSelectJoin run = do
   describe "select/JOIN" $ do
     it "works with a LEFT OUTER JOIN" $
       run $ do
@@ -561,68 +577,9 @@ testSelectJoin = do
 
 -------------------------------------------------------------------------------
 
-testPostgresqlRandom :: SpecWith (Arg (IO ()))
-testPostgresqlRandom = do
-  it "works with random_" $
-    run $ do
-      _ <- select $ return (random_ :: SqlExpr (Value Double))
-      return ()
 
-testMysqlRandom :: SpecWith (Arg (IO ()))
-testMysqlRandom = do
-  it "works with random_" $
-    run $ do
-      _ <- select $ return (random_ :: SqlExpr (Value Double))
-      return ()
-
-testSqliteRandom :: SpecWith (Arg (IO ()))
-testSqliteRandom = do
-  it "works with random_" $
-    run $ do
-      _ <- select $ return (random_ :: SqlExpr (Value Int))
-      return ()
-
-testPostgresqlSum :: SpecWith (Arg (IO ()))
-testPostgresqlSum = do
-  it "works with sum_" $
-    run $ do
-      _ <- insert' p1
-      _ <- insert' p2
-      _ <- insert' p3
-      _ <- insert' p4
-      ret <- select $
-             from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
-      liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
-
-testMysqlSum :: SpecWith (Arg (IO ()))
-testMysqlSum = do
-  it "works with sum_" $
-    run $ do
-      _ <- insert' p1
-      _ <- insert' p2
-      _ <- insert' p3
-      _ <- insert' p4
-      ret <- select $
-             from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
-      liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Double ) ]
-
-testSqliteSum :: SpecWith (Arg (IO ()))
-testSqliteSum = do
-  it "works with sum_" $
-    run $ do
-      _ <- insert' p1
-      _ <- insert' p2
-      _ <- insert' p3
-      _ <- insert' p4
-      ret <- select $
-             from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
-      liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
-
-testSelectWhere :: SpecWith (Arg (IO ()))
-testSelectWhere = do
+testSelectWhere :: Run -> Spec
+testSelectWhere run = do
   describe "select/where_" $ do
     it "works for a simple example with (==.)" $
       run $ do
@@ -667,14 +624,6 @@ testSelectWhere = do
                where_ (not_ $ p ^. PersonAge >. just (val 17))
                return p
         liftIO $ ret `shouldBe` [ p3e ]
-
-#if   defined(WITH_POSTGRESQL)
-    testPostgresqlSum
-#elif defined(WITH_MYSQL)
-    testMysqlSum
-#else
-    testSqliteSum
-#endif
 
     it "works with avg_" $
       run $ do
@@ -727,12 +676,6 @@ testSelectWhere = do
                 where_ (p ^. PersonName ==. lower_ (val $ map toUpper $ personName bob))
                 return p
         liftIO $ ret2 `shouldBe` [ p2e ]
-
-#if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
-    testPostgresqlRandom >> testMysqlRandom
-#else
-    testSqliteRandom
-#endif
 
     it "works with round_" $
       run $ do
@@ -844,98 +787,9 @@ testSelectWhere = do
 
 -------------------------------------------------------------------------------
 
-testPostgresqlTwoAscFields :: SpecWith (Arg (IO ()))
-testPostgresqlTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
-             return p
-      -- in PostgreSQL nulls are bigger than everything
-      liftIO $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
 
-testMysqlTwoAscFields :: SpecWith (Arg (IO ()))
-testMysqlTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
-             return p
-      -- in SQLite and MySQL, its the reverse
-      liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
-
-testSqliteTwoAscFields :: SpecWith (Arg (IO ()))
-testSqliteTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
-             return p
-      -- in SQLite and MySQL, its the reverse
-      liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
-
-testPostgresqlOneAscOneDesc :: SpecWith (Arg (IO ()))
-testPostgresqlOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [desc (p ^. PersonAge)]
-             orderBy [asc (p ^. PersonName)]
-             return p
-      liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
-
-testMysqlOneAscOneDesc :: SpecWith (Arg (IO ()))
-testMysqlOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [desc (p ^. PersonAge)]
-             orderBy [asc (p ^. PersonName)]
-             return p
-      liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
-
-testSqliteOneAscOneDesc :: SpecWith (Arg (IO ()))
-testSqliteOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [desc (p ^. PersonAge)]
-             orderBy [asc (p ^. PersonName)]
-             return p
-      liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
-
-testSelectOrderBy :: SpecWith (Arg (IO ()))
-testSelectOrderBy = do
+testSelectOrderBy :: Run -> Spec
+testSelectOrderBy run = do
   describe "select/orderBy" $ do
     it "works with a single ASC field" $
       run $ do
@@ -947,18 +801,6 @@ testSelectOrderBy = do
                orderBy [asc $ p ^. PersonName]
                return p
         liftIO $ ret `shouldBe` [ p1e, p3e, p2e ]
-
-#ifdef WITH_POSTGRESQL
-    testPostgresqlTwoAscFields
-#else
-    testMysqlTwoAscFields >> testSqliteTwoAscFields
-#endif
-
-#ifdef WITH_POSTGRESQL
-    testPostgresqlOneAscOneDesc
-#else
-    testMysqlOneAscOneDesc >> testSqliteOneAscOneDesc
-#endif
 
     it "works with a sub_select" $
       run $ do
@@ -1006,8 +848,8 @@ testSelectOrderBy = do
 -------------------------------------------------------------------------------
 
 
-testSelectDistinct :: SpecWith (Arg (IO ()))
-testSelectDistinct = do
+testSelectDistinct :: Run -> Spec
+testSelectDistinct run = do
   describe "SELECT DISTINCT" $ do
     let selDistTest
           :: (   forall m. RunDbMonad m
@@ -1038,59 +880,8 @@ testSelectDistinct = do
 -------------------------------------------------------------------------------
 
 
-testSelectDistinctOn :: SpecWith (Arg (IO ()))
-testSelectDistinctOn = do
-  describe "SELECT DISTINCT ON" $ do
-    it "works on a simple example" $ do
-      run $ do
-        [p1k, p2k, _] <- mapM insert [p1, p2, p3]
-        [_, bpB, bpC] <- mapM insert'
-          [ BlogPost "A" p1k
-          , BlogPost "B" p1k
-          , BlogPost "C" p2k ]
-        ret <- select $
-               from $ \bp ->
-               distinctOn [don (bp ^. BlogPostAuthorId)] $ do
-               orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
-               return bp
-        liftIO $ ret `shouldBe` L.sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
-
-    let slightlyLessSimpleTest q =
-          run $ do
-            [p1k, p2k, _] <- mapM insert [p1, p2, p3]
-            [bpA, bpB, bpC] <- mapM insert'
-              [ BlogPost "A" p1k
-              , BlogPost "B" p1k
-              , BlogPost "C" p2k ]
-            ret <- select $
-                   from $ \bp ->
-                   q bp $ return bp
-            let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
-            liftIO $ ret `shouldBe` L.sortBy (comparing cmp) [bpA, bpB, bpC]
-
-    it "works on a slightly less simple example (two distinctOn calls, orderBy)" $
-      slightlyLessSimpleTest $ \bp act ->
-        distinctOn [don (bp ^. BlogPostAuthorId)] $
-        distinctOn [don (bp ^. BlogPostTitle)] $ do
-          orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
-          act
-
-    it "works on a slightly less simple example (one distinctOn call, orderBy)" $ do
-      slightlyLessSimpleTest $ \bp act ->
-        distinctOn [don (bp ^. BlogPostAuthorId), don (bp ^. BlogPostTitle)] $ do
-          orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
-          act
-
-    it "works on a slightly less simple example (distinctOnOrderBy)" $ do
-      slightlyLessSimpleTest $ \bp ->
-        distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
-
-
--------------------------------------------------------------------------------
-
-
-testCoasleceDefault :: SpecWith (Arg (IO ()))
-testCoasleceDefault = do
+testCoasleceDefault :: Run -> Spec
+testCoasleceDefault run = do
   describe "coalesce/coalesceDefault" $ do
     it "works on a simple example" $
       run $ do
@@ -1139,45 +930,12 @@ testCoasleceDefault = do
                                 , Value 17
                                 ]
 
-#if defined(WITH_POSTGRESQL) || defined(WITH_MYSQL)
-    testPostgresqlCoalesce >> testMysqlCoalesce
-#else
-    testSqliteCoalesce
-#endif
-
-testPostgresqlCoalesce :: SpecWith (Arg (IO ()))
-testPostgresqlCoalesce = do
-  it "works on PostgreSQL and MySQL with <2 arguments" $
-    run $ do
-      _ :: [Value (Maybe Int)] <-
-        select $
-        from $ \p -> do
-        return (coalesce [p ^. PersonAge])
-      return ()
-
-testMysqlCoalesce :: SpecWith (Arg (IO ()))
-testMysqlCoalesce = do
-  it "works on PostgreSQL and MySQL with <2 arguments" $
-    run $ do
-      _ :: [Value (Maybe Int)] <-
-        select $
-        from $ \p -> do
-        return (coalesce [p ^. PersonAge])
-      return ()
-
-testSqliteCoalesce :: SpecWith (Arg (IO ()))
-testSqliteCoalesce = do
-  it "throws an exception on SQLite with <2 arguments" $
-    run (select $
-         from $ \p -> do
-         return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int))))
-    `shouldThrow` (\(_ :: SqliteException) -> True)
 
 -------------------------------------------------------------------------------
 
 
-testTextFunctions :: SpecWith (Arg (IO ()))
-testTextFunctions = do
+testTextFunctions :: Run -> Spec
+testTextFunctions run = do
   describe "text functions" $ do
     it "like, (%) and (++.) work on a simple example" $
        run $ do
@@ -1193,31 +951,12 @@ testTextFunctions = do
          nameContains "i"  [p4e, p3e]
          nameContains "iv" [p4e]
 
-#if defined(WITH_POSTGRESQL)
-    testPostgresqlTextFunction
-#endif
-
-testPostgresqlTextFunction :: SpecWith (Arg (IO ()))
-testPostgresqlTextFunction = do
-  it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
-    run $ do
-      [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-      let nameContains t expected = do
-            ret <- select $
-                   from $ \p -> do
-                   where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
-                   orderBy [asc (p ^. PersonName)]
-                   return p
-            liftIO $ ret `shouldBe` expected
-      nameContains "mi" [p3e, p5e]
-      nameContains "JOHN" [p1e]
-
 
 -------------------------------------------------------------------------------
 
 
-testDelete :: SpecWith (Arg (IO ()))
-testDelete = do
+testDelete :: Run -> Spec
+testDelete run = do
   describe "delete" $
     it "works on a simple example" $
       run $ do
@@ -1244,93 +983,10 @@ testDelete = do
 
 -------------------------------------------------------------------------------
 
-testPostgresqlUpdate :: SpecWith (Arg (IO ()))
-testPostgresqlUpdate = do
-  it "works on a simple example" $
-    run $ do
-      p1k <- insert p1
-      p2k <- insert p2
-      p3k <- insert p3
-      let anon = "Anonymous"
-      ()  <- update $ \p -> do
-             set p [ PersonName =. val anon
-                   , PersonAge *=. just (val 2) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      n   <- updateCount $ \p -> do
-             set p [ PersonAge +=. just (val 1) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $
-             from $ \p -> do
-             orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
-             return p
-      -- PostgreSQL: nulls are bigger than data, and update returns
-      --             matched rows, not actually changed rows.
-      liftIO $ n `shouldBe` 2
-      liftIO $ ret `shouldBe` [ Entity p1k (Person anon (Just 73) Nothing 1)
-                              , Entity p2k (Person anon Nothing (Just 37) 2)
-                              , Entity p3k p3 ]
 
-testMysqlUpdate :: SpecWith (Arg (IO ()))
-testMysqlUpdate = do
-  it "works on a simple example" $
-    run $ do
-      p1k <- insert p1
-      p2k <- insert p2
-      p3k <- insert p3
-      let anon = "Anonymous"
-      ()  <- update $ \p -> do
-             set p [ PersonName =. val anon
-                   , PersonAge *=. just (val 2) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      n   <- updateCount $ \p -> do
-             set p [ PersonAge +=. just (val 1) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $
-             from $ \p -> do
-             orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
-             return p
-      -- MySQL: nulls appear first, and update returns actual number
-      --        of changed rows
-      liftIO $ n `shouldBe` 1
-      liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing (Just 37) 2)
-                              , Entity p1k (Person anon (Just 73) Nothing 1)
-                              , Entity p3k p3 ]
-
-testSqliteUpdate :: SpecWith (Arg (IO ()))
-testSqliteUpdate = do
-  it "works on a simple example" $
-    run $ do
-      p1k <- insert p1
-      p2k <- insert p2
-      p3k <- insert p3
-      let anon = "Anonymous"
-      ()  <- update $ \p -> do
-             set p [ PersonName =. val anon
-                   , PersonAge *=. just (val 2) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      n   <- updateCount $ \p -> do
-             set p [ PersonAge +=. just (val 1) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $
-             from $ \p -> do
-             orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
-             return p
-      -- SQLite: nulls appear first, update returns matched rows.
-      liftIO $ n `shouldBe` 2
-      liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing (Just 37) 2)
-                              , Entity p1k (Person anon (Just 73) Nothing 1)
-                              , Entity p3k p3 ]
-
-testUpdate :: SpecWith (Arg (IO ()))
-testUpdate = do
+testUpdate :: Run -> Spec
+testUpdate run = do
   describe "update" $ do
-#if   defined(WITH_POSTGRESQL)
-    testPostgresqlUpdate
-#elif defined(WITH_MYSQL)
-    testMysqlUpdate
-#else
-    testSqliteUpdate
-#endif
 
     it "works with a subexpression having COUNT(*)" $
       run $ do
@@ -1405,6 +1061,7 @@ testUpdate = do
           return (lord ^. LordId, count $ deed ^. DeedId)
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
+
     it "GROUP BY works with HAVING" $
       run $ do
         p1k <- insert p1
@@ -1427,8 +1084,8 @@ testUpdate = do
 -------------------------------------------------------------------------------
 
 
-testListOfValues :: SpecWith (Arg (IO ()))
-testListOfValues = do
+testListOfValues :: Run -> Spec
+testListOfValues run = do
   describe "lists of values" $ do
     it "IN works for valList" $
       run $ do
@@ -1523,8 +1180,8 @@ testListOfValues = do
 -------------------------------------------------------------------------------
 
 
-testListFields :: SpecWith (Arg (IO ()))
-testListFields = do
+testListFields :: Run -> Spec
+testListFields run = do
   describe "list fields" $ do
     -- <https://github.com/prowdsponsor/esqueleto/issues/100>
     it "can update list fields" $
@@ -1538,8 +1195,8 @@ testListFields = do
 -------------------------------------------------------------------------------
 
 
-testInsertsBySelect :: SpecWith (Arg (IO ()))
-testInsertsBySelect = do
+testInsertsBySelect :: Run -> Spec
+testInsertsBySelect run = do
   describe "inserts by select" $ do
     it "IN works for insertSelect" $
       run $ do
@@ -1555,8 +1212,8 @@ testInsertsBySelect = do
 -------------------------------------------------------------------------------
 
 
-testInsertsBySelectReturnsCount :: SpecWith (Arg (IO ()))
-testInsertsBySelectReturnsCount = do
+testInsertsBySelectReturnsCount :: Run -> Spec
+testInsertsBySelectReturnsCount run = do
   describe "inserts by select, returns count" $ do
     it "IN works for insertSelectCount" $
       run $ do
@@ -1573,8 +1230,8 @@ testInsertsBySelectReturnsCount = do
 -------------------------------------------------------------------------------
 
 
-testMathFunctions :: SpecWith (Arg (IO ()))
-testMathFunctions = do
+testMathFunctions :: Run -> Spec
+testMathFunctions run = do
   describe "Math-related functions" $ do
     it "rand returns result in random order" $
       run $ do
@@ -1613,8 +1270,8 @@ testMathFunctions = do
 -------------------------------------------------------------------------------
 
 
-testCase :: SpecWith (Arg (IO ()))
-testCase = do
+testCase :: Run -> Spec
+testCase run = do
   describe "case" $ do
     it "Works for a simple value based when - False" $
       run $ do
@@ -1665,8 +1322,8 @@ testCase = do
 -------------------------------------------------------------------------------
 
 
-testLocking :: SpecWith (Arg (IO ()))
-testLocking = do
+testLocking :: WithConn (NoLoggingT IO) [TL.Text] -> Spec
+testLocking withConn = do
   describe "locking" $ do
     -- The locking clause is the last one, so try to use many
     -- others to test if it's at the right position.  We don't
@@ -1713,8 +1370,8 @@ testLocking = do
 -------------------------------------------------------------------------------
 
 
-testCountingRows :: SpecWith (Arg (IO ()))
-testCountingRows = do
+testCountingRows :: Run -> Spec
+testCountingRows run = do
   describe "counting rows" $ do
     forM_ [ ("count (test A)",    count . (^. PersonAge),         4)
           , ("count (test B)",    count . (^. PersonWeight),      5)
@@ -1736,77 +1393,26 @@ testCountingRows = do
 -------------------------------------------------------------------------------
 
 
-testPostgresModule :: SpecWith (Arg (IO ()))
-testPostgresModule = do
-  describe "PostgreSQL module" $ do
-    it "arrayAgg looks sane" $
-      run $ do
-        let people = [p1, p2, p3, p4, p5]
-        mapM_ insert people
-        [Value ret] <-
-          select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
-        liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
-
-    it "stringAgg looks sane" $
-      run $ do
-        let people = [p1, p2, p3, p4, p5]
-        mapM_ insert people
-        [Value ret] <-
-          select $
-          from $ \p -> do
-          return (EP.stringAgg (p ^. PersonName) (val " "))
-        liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
-
-    it "chr looks sane" $
-      run $ do
-        [Value (ret :: String)] <- select $ return (EP.chr (val 65))
-        liftIO $ ret `shouldBe` "A"
-
-    it "works with now" $
-      run $ do
-        nowDb <- select $ return EP.now_
-        nowUtc <- liftIO getCurrentTime
-        let halfSecond = realToFrac (0.5 :: Double)
-
-        -- | Check the result is not null
-        liftIO $ nowDb `shouldSatisfy` (not . null)
-
-        -- | Unpack the now value
-        let (Value now: _) = nowDb
-
-        -- | Get the time diff and check it's less than half a second
-        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
-
-
--------------------------------------------------------------------------------
-
-main :: IO ()
-main = do
-  hspec $ do
-    testSelect
-    testSelectSource
-    testSelectFrom
-    testSelectJoin
-    testSelectWhere
-    testSelectOrderBy
-    testSelectDistinct
-
-#if defined(WITH_POSTGRESQL)
-    testSelectDistinctOn
-    testPostgresModule
-#endif
-
-    testCoasleceDefault
-    testTextFunctions
-    testDelete
-    testUpdate
-    testListOfValues
-    testListFields
-    testInsertsBySelect
-    testMathFunctions
-    testCase
-    testLocking
-    testCountingRows
+tests :: Run -> Spec
+tests run = do
+  describe "Tests that are common to all backends" $ do
+    testSelect run
+    testSelectSource run
+    testSelectFrom run
+    testSelectJoin run
+    testSelectWhere run
+    testSelectOrderBy run
+    testSelectDistinct run
+    testCoasleceDefault run
+    testTextFunctions run
+    testDelete run
+    testUpdate run
+    testListOfValues run
+    testListFields run
+    testInsertsBySelect run
+    testMathFunctions run
+    testCase run
+    testCountingRows run
 
 ----------------------------------------------------------------------
 
@@ -1822,6 +1428,10 @@ insert' v = flip Entity v <$> insert v
 
 type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
                     , R.MonadThrow m )
+
+type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+
+type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 
 -- With SQLite and in-memory databases, a separate connection implies a
 -- separate database. With 'actual databases', the data is persistent and
@@ -1854,44 +1464,41 @@ cleanDB = do
 
   delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
 
-
-run, runSilent, runVerbose :: (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
-runSilent  act = runNoLoggingT     $ run_worker act
-runVerbose act = runStderrLoggingT $ run_worker act
-run =
-  if verbose
-  then runVerbose
-  else runSilent
-
-
-verbose :: Bool
-verbose = True
-
-
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
-
-
-migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
-migrateIt = do
-  void $ runMigrationSilent migrateAll
-#if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
-  cleanDB
-#endif
-
-
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn =
-  R.runResourceT .
-#if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
-#elif defined (WITH_MYSQL)
-  withMySQLConn defaultConnectInfo
-    { connectHost     = "localhost"
-    , connectUser     = "esqutest"
-    , connectPassword = "esqutest"
-    , connectDatabase = "esqutest"
-    }
-#else
-  withSqliteConn ":memory:"
-#endif
+-- run, runSilent, runVerbose :: Run a
+-- runSilent  act = runNoLoggingT     $ run_worker act
+-- runVerbose act = runStderrLoggingT $ run_worker act
+-- run =
+--   if verbose
+--   then runVerbose
+--   else runSilent
+--
+--
+-- verbose :: Bool
+-- verbose = True
+--
+--
+-- run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
+-- run_worker act = withConn $ runSqlConn (migrateIt >> act)
+--
+--
+-- migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
+-- migrateIt = do
+--   void $ runMigrationSilent migrateAll
+-- #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
+--   cleanDB
+-- #endif
+--
+--
+-- withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+-- withConn =
+--   R.runResourceT .
+-- #if defined (WITH_MYSQL)
+--   withMySQLConn defaultConnectInfo
+--     { connectHost     = "localhost"
+--     , connectUser     = "esqutest"
+--     , connectPassword = "esqutest"
+--     , connectDatabase = "esqutest"
+--     }
+-- #else
+--   withSqliteConn ":memory:"
+-- #endif
