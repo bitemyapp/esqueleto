@@ -138,6 +138,9 @@ main = do
   hspec $ do
     tests run
 
+    describe "Test MySQL locking" $ do
+      testLocking withConn
+
     describe "MySQL specific tests" $ do
       testMysqlRandom
       testMysqlSum
@@ -148,6 +151,7 @@ main = do
 
 
 -------------------------------------------------------------------------------
+
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act

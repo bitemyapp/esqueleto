@@ -1414,7 +1414,7 @@ tests run = do
     testCase run
     testCountingRows run
 
-----------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 
 insert' :: ( Functor m
@@ -1463,42 +1463,3 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
-
--- run, runSilent, runVerbose :: Run a
--- runSilent  act = runNoLoggingT     $ run_worker act
--- runVerbose act = runStderrLoggingT $ run_worker act
--- run =
---   if verbose
---   then runVerbose
---   else runSilent
---
---
--- verbose :: Bool
--- verbose = True
---
---
--- run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
--- run_worker act = withConn $ runSqlConn (migrateIt >> act)
---
---
--- migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
--- migrateIt = do
---   void $ runMigrationSilent migrateAll
--- #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
---   cleanDB
--- #endif
---
---
--- withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
--- withConn =
---   R.runResourceT .
--- #if defined (WITH_MYSQL)
---   withMySQLConn defaultConnectInfo
---     { connectHost     = "localhost"
---     , connectUser     = "esqutest"
---     , connectPassword = "esqutest"
---     , connectDatabase = "esqutest"
---     }
--- #else
---   withSqliteConn ":memory:"
--- #endif

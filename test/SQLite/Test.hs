@@ -17,6 +17,8 @@ import Test.Hspec
 
 import Common.Test
 
+-------------------------------------------------------------------------------
+
 
 testSqliteRandom :: Spec
 testSqliteRandom = do
@@ -24,6 +26,10 @@ testSqliteRandom = do
     run $ do
       _ <- select $ return (random_ :: SqlExpr (Value Int))
       return ()
+
+
+-------------------------------------------------------------------------------
+
 
 testSqliteSum :: Spec
 testSqliteSum = do
@@ -37,6 +43,10 @@ testSqliteSum = do
              from $ \p->
              return $ joinV $ sum_ (p ^. PersonAge)
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
+
+
+-------------------------------------------------------------------------------
+
 
 testSqliteTwoAscFields :: Spec
 testSqliteTwoAscFields = do
@@ -52,6 +62,10 @@ testSqliteTwoAscFields = do
              return p
       -- in SQLite and MySQL, its the reverse
       liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
+
+
+-------------------------------------------------------------------------------
+
 
 testSqliteOneAscOneDesc :: Spec
 testSqliteOneAscOneDesc = do
@@ -69,6 +83,9 @@ testSqliteOneAscOneDesc = do
       liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
 
+-------------------------------------------------------------------------------
+
+
 testSqliteCoalesce :: Spec
 testSqliteCoalesce = do
   it "throws an exception on SQLite with <2 arguments" $
@@ -76,6 +93,9 @@ testSqliteCoalesce = do
          from $ \p -> do
          return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int))))
     `shouldThrow` (\(_ :: SqliteException) -> True)
+
+
+-------------------------------------------------------------------------------
 
 
 testSqliteUpdate :: Spec
@@ -103,6 +123,10 @@ testSqliteUpdate = do
                               , Entity p1k (Person anon (Just 73) Nothing 1)
                               , Entity p3k p3 ]
 
+
+-------------------------------------------------------------------------------
+
+
 main :: IO ()
 main = do
   hspec $ do
@@ -118,6 +142,10 @@ main = do
       testSqliteOneAscOneDesc
       testSqliteCoalesce
       testSqliteUpdate
+
+
+-------------------------------------------------------------------------------
+
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act

@@ -32,6 +32,8 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 
 import Common.Test
 
+-------------------------------------------------------------------------------
+
 
 testPostgresqlCoalesce :: Spec
 testPostgresqlCoalesce = do
@@ -42,6 +44,9 @@ testPostgresqlCoalesce = do
         from $ \p -> do
         return (coalesce [p ^. PersonAge])
       return ()
+
+
+-------------------------------------------------------------------------------
 
 
 testPostgresqlTextFunction :: Spec
@@ -58,6 +63,9 @@ testPostgresqlTextFunction = do
             liftIO $ ret `shouldBe` expected
       nameContains "mi" [p3e, p5e]
       nameContains "JOHN" [p1e]
+
+
+-------------------------------------------------------------------------------
 
 
 testPostgresqlUpdate :: Spec
@@ -87,12 +95,18 @@ testPostgresqlUpdate = do
                               , Entity p3k p3 ]
 
 
+-------------------------------------------------------------------------------
+
+
 testPostgresqlRandom :: Spec
 testPostgresqlRandom = do
   it "works with random_" $
     run $ do
       _ <- select $ return (random_ :: SqlExpr (Value Double))
       return ()
+
+
+-------------------------------------------------------------------------------
 
 
 testPostgresqlSum :: Spec
@@ -107,6 +121,9 @@ testPostgresqlSum = do
              from $ \p->
              return $ joinV $ sum_ (p ^. PersonAge)
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
+
+
+-------------------------------------------------------------------------------
 
 
 testPostgresqlTwoAscFields :: Spec
@@ -125,6 +142,9 @@ testPostgresqlTwoAscFields = do
       liftIO $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
 
 
+-------------------------------------------------------------------------------
+
+
 testPostgresqlOneAscOneDesc :: Spec
 testPostgresqlOneAscOneDesc = do
   it "works with one ASC and one DESC field (two calls)" $
@@ -141,7 +161,7 @@ testPostgresqlOneAscOneDesc = do
       liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
 
 
-----------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 
 testSelectDistinctOn :: Spec
@@ -192,7 +212,7 @@ testSelectDistinctOn = do
         distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
 
 
-----------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 
 testPostgresModule :: Spec
@@ -237,7 +257,7 @@ testPostgresModule = do
         liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
 
 
-----------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 
 main :: IO ()
@@ -258,6 +278,10 @@ main = do
       testPostgresqlUpdate
       testPostgresqlTextFunction
       testPostgresqlCoalesce
+
+
+-------------------------------------------------------------------------------
+
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
