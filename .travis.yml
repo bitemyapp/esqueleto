@@ -30,9 +30,9 @@ script:
   - stack setup
   - stack update
   - stack build
-  - stack test --flag esqueleto:postgresql
-  - stack test --flag esqueleto:-mysql
-  - stack test
+  - stack test -- esqueleto:postgresql
+  - stack test -- esqueleto:mysql
+  - stack test -- esqueleto:sqlite
 
 cache:
   directories:

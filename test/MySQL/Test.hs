@@ -1,14 +1,15 @@
 {-# LANGUAGE ScopedTypeVariables
            , FlexibleContexts
            , RankNTypes
+           , TypeFamilies
 #-}
 
 module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger(..), runStderrLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Control (MonadBaseControl(..))
+import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Trans.Reader (ReaderT)
 import Database.Persist.MySQL ( withMySQLConn
                               , connectHost
                               , connectDatabase
@@ -133,6 +134,40 @@ testMysqlUpdate = do
 -------------------------------------------------------------------------------
 
 
+nameContains :: (BaseBackend backend ~ SqlBackend,
+                 Esqueleto query expr backend, MonadIO m, SqlString s,
+                 IsPersistBackend backend, PersistQueryRead backend,
+                 PersistUniqueRead backend)
+             => (SqlExpr (Value [Char])
+             -> expr (Value s)
+             -> SqlExpr (Value Bool))
+             -> s
+             -> [Entity Person]
+             -> ReaderT backend m ()
+nameContains f t expected = do
+  ret <- select $
+         from $ \p -> do
+         where_ (f
+                  (p ^. PersonName)
+                  (concat_ [(%), val t, (%)]))
+         orderBy [asc (p ^. PersonName)]
+         return p
+  liftIO $ ret `shouldBe` expected
+
+
+testMysqlTextFunctions :: Spec
+testMysqlTextFunctions = do
+  describe "text functions" $ do
+    it "like, (%) and (++.) work on a simple example" $
+       run $ do
+         [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+         nameContains like "h"  [p1e, p2e]
+         nameContains like "i"  [p4e, p3e]
+         nameContains like "iv" [p4e]
+
+
+-------------------------------------------------------------------------------
+
 main :: IO ()
 main = do
   hspec $ do
@@ -148,6 +183,7 @@ main = do
       testMysqlOneAscOneDesc
       testMysqlCoalesce
       testMysqlUpdate
+      testMysqlTextFunctions
 
 
 -------------------------------------------------------------------------------

@@ -1,25 +1,16 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# LANGUAGE ConstraintKinds
-           , EmptyDataDecls
+{-# LANGUAGE ScopedTypeVariables
            , FlexibleContexts
-           , FlexibleInstances
-           , DeriveGeneric
-           , GADTs
-           , GeneralizedNewtypeDeriving
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , QuasiQuotes
-           , Rank2Types
-           , TemplateHaskell
+           , RankNTypes
            , TypeFamilies
-           , ScopedTypeVariables
-           , TypeSynonymInstances
+           , OverloadedStrings
  #-}
 module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Trans.Reader (ReaderT)
 import Database.Esqueleto
 import Database.Persist.Postgresql (withPostgresqlConn)
 import Data.Ord (comparing)
@@ -49,20 +40,49 @@ testPostgresqlCoalesce = do
 -------------------------------------------------------------------------------
 
 
-testPostgresqlTextFunction :: Spec
-testPostgresqlTextFunction = do
-  it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
-    run $ do
-      [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-      let nameContains t expected = do
-            ret <- select $
-                   from $ \p -> do
-                   where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
-                   orderBy [asc (p ^. PersonName)]
-                   return p
-            liftIO $ ret `shouldBe` expected
-      nameContains "mi" [p3e, p5e]
-      nameContains "JOHN" [p1e]
+nameContains :: (BaseBackend backend ~ SqlBackend,
+                 Esqueleto query expr backend, MonadIO m, SqlString s,
+                 IsPersistBackend backend, PersistQueryRead backend,
+                 PersistUniqueRead backend)
+             => (SqlExpr (Value [Char])
+             -> expr (Value s)
+             -> SqlExpr (Value Bool))
+             -> s
+             -> [Entity Person]
+             -> ReaderT backend m ()
+nameContains f t expected = do
+  ret <- select $
+         from $ \p -> do
+         where_ (f
+                  (p ^. PersonName)
+                  ((%) ++. val t ++. (%)))
+         orderBy [asc (p ^. PersonName)]
+         return p
+  liftIO $ ret `shouldBe` expected
+
+
+testPostgresqlTextFunctions :: Spec
+testPostgresqlTextFunctions = do
+  describe "text functions" $ do
+    it "like, (%) and (++.) work on a simple example" $
+       run $ do
+         [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+         nameContains like "h"  [p1e, p2e]
+         nameContains like "i"  [p4e, p3e]
+         nameContains like "iv" [p4e]
+
+    it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
+      run $ do
+        [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
+        let nameContains t expected = do
+              ret <- select $
+                     from $ \p -> do
+                     where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
+                     orderBy [asc (p ^. PersonName)]
+                     return p
+              liftIO $ ret `shouldBe` expected
+        nameContains "mi" [p3e, p5e]
+        nameContains "JOHN" [p1e]
 
 
 -------------------------------------------------------------------------------
@@ -276,8 +296,8 @@ main = do
       testPostgresqlSum
       testPostgresqlRandom
       testPostgresqlUpdate
-      testPostgresqlTextFunction
       testPostgresqlCoalesce
+      testPostgresqlTextFunctions
 
 
 -------------------------------------------------------------------------------

@@ -87,14 +87,14 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     deriving Eq Show
 
   Lord
-    county String
+    county String maxlen=100
     dogs Int Maybe
     Primary county
     deriving Show
 
   Deed
-    contract String
-    ownerId LordId
+    contract String maxlen=100
+    ownerId LordId maxlen=100
     Primary contract
     deriving Show
 
@@ -117,12 +117,12 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     Foreign Frontcover fkfrontcover frontcoverNumber
     deriving Eq Show
   Tag
-    name String
+    name String maxlen=100
     Primary name
     deriving Eq Show
   ArticleTag
     articleId ArticleId
-    tagId     TagId
+    tagId     TagId maxlen=100
     Primary   articleId tagId
     deriving Eq Show
   Article2
@@ -154,6 +154,13 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
 --   have Ord instances
 sameElementsAs :: Eq a => [a] -> [a] -> Bool
 sameElementsAs l1 l2 = null (l1 L.\\ l2)
+
+-- | Helper for rounding to a specific digit
+--   Prelude> map (flip roundTo 12.3456) [0..5]
+--   [12.0, 12.3, 12.35, 12.346, 12.3456, 12.3456]
+roundTo :: (Fractional a, RealFrac a1, Integral b) => b -> a1 -> a
+roundTo n f =
+  (fromInteger $ round $ f * (10^n)) / (10.0^^n)
 
 p1 :: Person
 p1 = Person "John"   (Just 36) Nothing   1
@@ -633,7 +640,12 @@ testSelectWhere run = do
         ret <- select $
                from $ \p->
                return $ joinV $ avg_ (p ^. PersonAge)
-        liftIO $ ret `shouldBe` [ Value $ Just ((36 + 17 + 17) / 3 :: Double) ]
+        let testV :: Double
+            testV = roundTo 4 $ (36 + 17 + 17) / 3
+
+            retV :: [Value (Maybe Double)]
+            retV = map (Value . fmap (roundTo 4) . unValue) (ret :: [Value (Maybe Double)])
+        liftIO $ retV `shouldBe` [ Value $ Just testV ]
 
     it "works with min_" $
       run $ do
@@ -928,27 +940,6 @@ testCoasleceDefault run = do
                                 , Value 42
                                 , Value 17
                                 ]
-
-
--------------------------------------------------------------------------------
-
-
-testTextFunctions :: Run -> Spec
-testTextFunctions run = do
-  describe "text functions" $ do
-    it "like, (%) and (++.) work on a simple example" $
-       run $ do
-         [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
-         let nameContains t expected = do
-               ret <- select $
-                      from $ \p -> do
-                      where_ (p ^. PersonName `like` (%) ++. val t ++. (%))
-                      orderBy [asc (p ^. PersonName)]
-                      return p
-               liftIO $ ret `shouldBe` expected
-         nameContains "h"  [p1e, p2e]
-         nameContains "i"  [p4e, p3e]
-         nameContains "iv" [p4e]
 
 
 -------------------------------------------------------------------------------
@@ -1403,7 +1394,6 @@ tests run = do
     testSelectOrderBy run
     testSelectDistinct run
     testCoasleceDefault run
-    testTextFunctions run
     testDelete run
     testUpdate run
     testListOfValues run
