@@ -31,8 +31,8 @@ script:
   - stack update
   - stack build
   - stack test -- esqueleto:postgresql
-  - stack test -- esqueleto:mysql
   - stack test -- esqueleto:sqlite
+  - stack test -- esqueleto:mysql
 
 cache:
   directories:
