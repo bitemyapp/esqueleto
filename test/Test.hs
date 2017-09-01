@@ -846,7 +846,7 @@ main = do
             return (p ^. PersonId :: SqlExpr (Value PersonId))
           -- There are 2^4 = 16 possible orderings.  The chance
           -- of 11 random samplings returning the same ordering
-          -- is 1/2^40, so this test should pass almost everytime.
+          -- is 1/2^40, so this test should pass almost every time.
           liftIO $ S.size rets `shouldSatisfy` (>2)
 
       it "works on a composite primary key" $
