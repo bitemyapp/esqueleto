@@ -781,9 +781,12 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 
 ----------------------------------------------------------------------
 
-type SqlReadT' m a
-  = forall backend
-  . (BackendCompatible SqlBackend backend, SqlBackendCanRead backend)
+type SqlReadT' m a = forall backend.
+  ( BackendCompatible SqlBackend backend
+  , IsPersistBackend backend
+  , PersistQueryRead backend
+  , PersistStoreRead backend, PersistUniqueRead backend
+  )
   => R.ReaderT backend m a
 
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
@@ -799,7 +802,7 @@ rawSelectSource mode query =
       do
         conn <- projectBackend <$> R.ask
         let _ = conn :: SqlBackend
-        res <- run conn
+        res <- R.withReaderT (const conn) (run conn)
         return $ (C.$= massage) `fmap` res
     where
 
