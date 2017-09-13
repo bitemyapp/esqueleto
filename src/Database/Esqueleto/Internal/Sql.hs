@@ -781,17 +781,20 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 
 ----------------------------------------------------------------------
 
+type SqlReadT' m a
+  = forall backend
+  . (BackendCompatible SqlBackend backend, SqlBackendCanRead backend)
+  => R.ReaderT backend m a
 
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
                    , MonadIO m1
                    , MonadIO m2
-                   , SqlBackendCanRead backend
-                   , BackendCompatible SqlBackend backend)
+                   )
                  => Mode
                  -> SqlQuery a
-                 -> R.ReaderT backend m1 (Acquire (C.Source m2 r))
+                 -> SqlReadT' m1 (Acquire (C.Source m2 r))
 rawSelectSource mode query =
       do
         conn <- projectBackend <$> R.ask
@@ -870,10 +873,8 @@ selectSource query = do
 -- @SqlExpr (Entity Person)@.
 select :: ( SqlSelect a r
           , MonadIO m
-          , SqlBackendCanRead backend
-          , BackendCompatible SqlBackend backend
           )
-       => SqlQuery a -> R.ReaderT backend m [r]
+       => SqlQuery a -> SqlReadT' m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
