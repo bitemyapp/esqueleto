@@ -35,6 +35,7 @@ module Database.Esqueleto.Internal.Language
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
+  , BackendCompatible(..)
   , PreprocessedFrom
   , From
   , FromPreprocess
