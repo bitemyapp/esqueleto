@@ -824,9 +824,13 @@ rawSelectSource mode query =
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a 'C.Source' of rows.
 selectSource :: ( SqlSelect a r
-                , MonadResource m )
+               , BackendCompatible SqlBackend backend
+               , IsPersistBackend backend
+               , PersistQueryRead backend
+               , PersistStoreRead backend, PersistUniqueRead backend
+               , MonadResource m )
              => SqlQuery a
-             -> C.Source (SqlPersistT m) r
+             -> C.Source (R.ReaderT backend m) r
 selectSource query = do
   res <- lift $ rawSelectSource SELECT query
   (key, src) <- lift $ allocateAcquire res
