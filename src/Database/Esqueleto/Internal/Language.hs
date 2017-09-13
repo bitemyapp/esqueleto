@@ -54,11 +54,18 @@ import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 
-class BackendCompatible sup sub
+class BackendCompatible sup sub where
+  projectBackend :: sub -> sup
 
-instance BackendCompatible SqlBackend SqlBackend
-instance BackendCompatible SqlBackend SqlReadBackend
-instance BackendCompatible SqlBackend SqlWriteBackend
+instance BackendCompatible SqlBackend SqlBackend where
+  projectBackend = id
+
+instance BackendCompatible SqlBackend SqlReadBackend where
+  projectBackend = unSqlReadBackend
+
+instance BackendCompatible SqlBackend SqlWriteBackend where
+  projectBackend = unSqlWriteBackend
+
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
 class (Functor query, Applicative query, Monad query) =>

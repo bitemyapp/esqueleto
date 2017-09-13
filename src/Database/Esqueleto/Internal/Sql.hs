@@ -786,13 +786,16 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
                    , MonadIO m1
-                   , MonadIO m2 )
+                   , MonadIO m2
+                   , SqlBackendCanRead backend
+                   , BackendCompatible SqlBackend backend)
                  => Mode
                  -> SqlQuery a
-                 -> SqlReadT m1 (Acquire (C.Source m2 r))
+                 -> R.ReaderT backend m1 (Acquire (C.Source m2 r))
 rawSelectSource mode query =
       do
-        conn <- persistBackend <$> R.ask
+        conn <- projectBackend <$> R.ask
+        let _ = conn :: SqlBackend
         res <- run conn
         return $ (C.$= massage) `fmap` res
     where
@@ -866,8 +869,11 @@ selectSource query = do
 -- function composition that the @p@ inside the query is of type
 -- @SqlExpr (Entity Person)@.
 select :: ( SqlSelect a r
-          , MonadIO m )
-       => SqlQuery a -> SqlReadT m [r]
+          , MonadIO m
+          , SqlBackendCanRead backend
+          , BackendCompatible SqlBackend backend
+          )
+       => SqlQuery a -> R.ReaderT backend m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
