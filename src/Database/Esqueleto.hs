@@ -41,7 +41,7 @@ module Database.Esqueleto
     Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , sub_select, sub_selectDistinct, (^.), (?.)
-             , val, isNothing, just, nothing, joinV
+             , val, isNothing, just, nothing, joinV, withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , (+.), (-.), (/.), (*.)

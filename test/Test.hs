@@ -25,6 +25,7 @@ import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
+import qualified Data.Maybe as M
 import Database.Esqueleto
 #if   defined (WITH_POSTGRESQL)
 import Database.Persist.Postgresql (withPostgresqlConn)
@@ -687,6 +688,15 @@ main = do
                  where_ $ not_ (isNothing (p ^. PersonAge))
                  return p
           liftIO $ ret `shouldBe` [ p1e ]
+
+      it "works with withNonNull" $
+        run $ do
+          ps <- traverse insert' [p1, p2, p3, p4, p5]
+          let ages = M.maybeToList =<< map (personAge . entityVal) ps
+          ret <- select $
+                 from $ \p ->
+                 withNonNull (p ^. PersonAge) return
+          liftIO $ ret `shouldBe` (map Value ages)
 
       it "works for a many-to-many implicit join" $
         run $ do
