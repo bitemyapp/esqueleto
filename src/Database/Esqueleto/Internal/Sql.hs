@@ -781,14 +781,6 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 
 ----------------------------------------------------------------------
 
-type SqlReadT' m a = forall backend.
-  ( BackendCompatible SqlBackend backend
-  , IsPersistBackend backend
-  , PersistQueryRead backend
-  , PersistStoreRead backend, PersistUniqueRead backend
-  )
-  => R.ReaderT backend m a
-
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
@@ -797,7 +789,7 @@ rawSelectSource :: ( SqlSelect a r
                    )
                  => Mode
                  -> SqlQuery a
-                 -> SqlReadT' m1 (Acquire (C.Source m2 r))
+                 -> SqlReadT m1 (Acquire (C.Source m2 r))
 rawSelectSource mode query =
       do
         conn <- projectBackend <$> R.ask
@@ -881,7 +873,7 @@ selectSource query = do
 select :: ( SqlSelect a r
           , MonadIO m
           )
-       => SqlQuery a -> SqlReadT' m [r]
+       => SqlQuery a -> SqlReadT m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
@@ -921,12 +913,12 @@ runSource src = src C.$$ CL.consume
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadIO m, SqlSelect a r, IsSqlBackend backend)
+rawEsqueleto :: ( MonadIO m, SqlSelect a r, BackendCompatible SqlBackend backend)
            => Mode
            -> SqlQuery a
            -> R.ReaderT backend m Int64
 rawEsqueleto mode query = do
-  conn <- persistBackend <$> R.ask
+  conn <- R.ask
   uncurry rawExecuteCount $
     first builderToText $
     toRawSql mode (conn, initialIdentState) query
@@ -1008,7 +1000,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- possible but tedious), you may just turn on query logging of
 -- @persistent@.
 toRawSql
-  :: (IsSqlBackend backend, SqlSelect a r)
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend)
   => Mode -> (backend, IdentState) -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode (conn, firstIdentState) query =
   let ((ret, sd), finalIdentState) =
@@ -1028,7 +1020,7 @@ toRawSql mode (conn, firstIdentState) query =
       -- that were used) to the subsequent calls.  This ensures
       -- that no name clashes will occur on subqueries that may
       -- appear on the expressions below.
-      info = (persistBackend conn, finalIdentState)
+      info = (projectBackend conn, finalIdentState)
   in mconcat
       [ makeInsertInto info mode ret
       , makeSelect     info mode distinctClause ret
