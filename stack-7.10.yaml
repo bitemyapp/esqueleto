@@ -3,4 +3,4 @@ packages:
 - '.'
 resolver: lts-6.12
 extra-deps:
-  - persistent-2.5
+  - persistent-2.7.1
