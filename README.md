@@ -246,21 +246,24 @@ In order to use these functions, you need to explicitly import their correspondi
 
 To ```stack test``` with Postgresql you'll need to set the Postgres flag to true in esqueleto.cabal 
 
-```Flag postgresql
+```
+Flag postgresql
   Description: test postgresql. default is to test sqlite.
-Default: False
+  Default: False
 ```
 
 If you don't have Postgres install it. Using apt-get it's just:
 
-```sudo apt-get install postgresql postgresql-contrib
+```
+sudo apt-get install postgresql postgresql-contrib
 sudo apt-get install libpq-dev
 ```
 
 The connection details are located near the bottom of the test/Test.hs file:
 
-```#if defined(WITH_POSTGRESQL)
-withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+```
+#if defined(WITH_POSTGRESQL)
+  withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
 ```
 
 You can change these if you like but to just get them working set up as follows:
@@ -269,7 +272,8 @@ You can change these if you like but to just get them working set up as follows:
 
 ```$ sudo -u postgres createdb esqutest```
 
-```$ sudo -u postgres psql
+```
+$ sudo -u postgres psql
 postgres=# \password esqutest
 ```
 
