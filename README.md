@@ -240,3 +240,59 @@ There are many differences between SQL syntax and functions supported by differe
 - PostgreSQL: `Database.Esqueleto.PostgreSQL`
 
 In order to use these functions, you need to explicitly import their corresponding modules.
+
+
+### Tests and Postgres
+
+To ```stack test``` with Postgresql you'll need to set the Postgres flag for [esqueleto.cabal](esqueleto.cabal)
+Do this from the command line with: ```stack test --flag esqueleto:postgresql```
+
+If you don't have Postgres install it. 
+Using apt-get it's just:
+
+```
+sudo apt-get install postgresql postgresql-contrib
+sudo apt-get install libpq-dev
+```
+
+Using homebrew on OSx 
+
+```
+brew install postgresql
+brew install libpq
+```
+
+Detailed instructions on the Postgres wike [here](https://wiki.postgresql.org/wiki/Detailed_installation_guides) 
+
+The connection details are located near the bottom of the [test/Test.hs](test/Test.hs) file:
+
+```
+#if defined(WITH_POSTGRESQL)
+  withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+```
+
+You can change these if you like but to just get them working set up as follows on linux:
+
+```$ sudo -u postgres createuser esqutest```
+
+```$ sudo -u postgres createdb esqutest```
+
+```
+$ sudo -u postgres psql
+postgres=# \password esqutest
+```
+
+
+And on osx
+
+```$ createuser esqutest```
+
+```$ createdb esqutest```
+
+```
+$ psql postgres
+postgres=# \password esqutest
+```
+
+
+Now ```stack test --flag esqueleto:postgresql``` should envoke and pass all the Postgres tests.
