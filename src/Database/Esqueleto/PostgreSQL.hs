@@ -4,7 +4,8 @@
 --
 -- /Since: 2.2.8/
 module Database.Esqueleto.PostgreSQL
-  ( arrayAgg
+  ( arrayAggDistinct
+  , arrayAgg
   , stringAgg
   , chr
   , now_
@@ -13,6 +14,15 @@ module Database.Esqueleto.PostgreSQL
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
 import Data.Time.Clock (UTCTime)
+
+-- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
+-- an array.
+--
+-- /Since: 2.5.3/
+arrayAggDistinct :: SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayAggDistinct = arrayAgg . distinct
+  where
+    distinct = unsafeSqlBinOp " " (unsafeSqlValue "DISTINCT")
 
 -- | (@array_agg@) Concatenate input values, including @NULL@s,
 -- into an array.

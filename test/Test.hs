@@ -1446,6 +1446,16 @@ main = do
 #else
         (return () :: IO ())
 
+      it "arrayAggDistinct looks sane" $
+        run $ do
+          let people1 = fmap (\p -> p { personName = "John" }) [p1, p2, p3]
+              people2 = fmap (\p -> p { personName = "Rachel" }) [p4, p5]
+          mapM_ insert $ people1 <> people2
+          [Value ret] <-
+            select . from $ \p -> return (EP.arrayAggDistinct (p ^. PersonName))
+          liftIO $ L.sort ret `shouldBe` ["John", "Rachel"]
+
+
       it "arrayAgg looks sane" $
         run $ do
           let people = [p1, p2, p3, p4, p5]
