@@ -13,6 +13,8 @@ addons:
       - postgresql-client
       - postgresql-server-dev-all
 
+  postgresql: "9.6"
+
 env:
  - GHCVER=7.10
  - GHCVER=8.0
