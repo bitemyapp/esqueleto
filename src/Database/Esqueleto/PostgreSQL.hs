@@ -6,6 +6,7 @@
 module Database.Esqueleto.PostgreSQL
   ( arrayAggDistinct
   , arrayAgg
+  , arrayRemove
   , stringAgg
   , chr
   , now_
@@ -30,6 +31,13 @@ arrayAggDistinct = arrayAgg . distinct
 -- /Since: 2.2.8/
 arrayAgg :: SqlExpr (Value a) -> SqlExpr (Value [a])
 arrayAgg = unsafeSqlFunction "array_agg"
+
+-- | (@array_remove@) Remove all elements equal to the given value from the
+-- array.
+--
+-- /Since: 2.5.3/
+arrayRemove :: SqlExpr (Value [a]) -> SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayRemove arr elem = unsafeSqlFunction "array_remove" (arr, elem)
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.

@@ -1464,6 +1464,14 @@ main = do
             select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
           liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
+      it "arrayRemove looks sane" $
+        run $ do
+          let people = [p1, p2, p3, p4, p5]
+          mapM_ insert people
+          [Value ret] <-
+            select . from $ \p -> return (EP.arrayRemove (EP.arrayAgg (p ^. PersonName)) (val "Rachel"))
+          liftIO $ ret `shouldMatchList` ["John", "Mike", "Livia", "Mitch"]
+
       it "stringAgg looks sane" $
         run $ do
           let people = [p1, p2, p3, p4, p5]
