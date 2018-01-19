@@ -1482,7 +1482,7 @@ insert' :: ( Functor m
 insert' v = flip Entity v <$> insert v
 
 
-type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
+type RunDbMonad m = ( R.MonadUnliftIO m, MonadIO m, MonadLogger m
                     , R.MonadThrow m )
 
 #if defined (WITH_POSTGRESQL) || defined (WITH_MYSQL)
