@@ -970,18 +970,24 @@ deleteCount = rawEsqueleto DELETE
 -- 'set' p [ PersonAge '=.' 'just' ('val' thisYear) -. p '^.' PersonBorn ]
 -- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
-update :: ( MonadIO m
-          , SqlEntity val
-          , BackendCompatible SqlBackend backend
-          , PersistQueryWrite backend
-          , PersistUniqueWrite backend)
-       => (SqlExpr (Entity val) -> SqlQuery ())
-       -> R.ReaderT backend m ()
+update
+  ::
+  ( PersistEntityBackend val ~ backend
+  , PersistEntity val
+  , PersistUniqueWrite backend
+  , PersistQueryWrite backend
+  , BackendCompatible SqlBackend backend
+  , PersistEntity val
+  , MonadIO m
+  )
+  => (SqlExpr (Entity val) -> SqlQuery ())
+  -> R.ReaderT backend m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
 updateCount :: ( MonadIO m
-               , SqlEntity val
+               , PersistEntity val
+               , PersistEntityBackend val ~ backend
                , BackendCompatible SqlBackend backend
                , PersistQueryWrite backend
                , PersistUniqueWrite backend)

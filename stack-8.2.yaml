@@ -25,6 +25,8 @@ extra-deps:
 - quickcheck-properties-0.1
 - monad-logger-0.3.28
 - mono-traversable-1.0.8.1
+- typed-process-0.2.1.0
+- persistent-2.8.0
   # - persistent-2.7.1
 # - http-client-0.5.0
 # - fail-4.9.0.0
