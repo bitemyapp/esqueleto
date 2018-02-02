@@ -471,6 +471,14 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
       ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
       Just pdef   = entityPrimary ed
 
+  withNonNull :: PersistField typ
+              => SqlExpr (Value (Maybe typ))
+              -> (SqlExpr (Value typ) -> SqlQuery a)
+              -> SqlQuery a
+  withNonNull field f = do
+    where_ $ not_ $ isNothing field
+    f $ veryUnsafeCoerceSqlExprValue field
+
   EMaybe r ?. field = just (r ^. field)
 
   val v = ERaw Never $ const ("?", [toPersistValue v])

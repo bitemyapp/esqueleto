@@ -299,6 +299,12 @@ class (Functor query, Applicative query, Monad query) =>
   (^.) :: (PersistEntity val, PersistField typ) =>
           expr (Entity val) -> EntityField val typ -> expr (Value typ)
 
+  -- | Project an expression that may be null, guarding against null cases.
+  withNonNull :: PersistField typ
+              => expr (Value (Maybe typ))
+              -> (expr (Value typ) -> query a)
+              -> query a
+
   -- | Project a field of an entity that may be null.
   (?.) :: (PersistEntity val, PersistField typ) =>
           expr (Maybe (Entity val)) -> EntityField val typ -> expr (Value (Maybe typ))
