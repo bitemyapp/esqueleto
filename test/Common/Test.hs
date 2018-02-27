@@ -48,25 +48,26 @@ module Common.Test
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger (..), NoLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Control (MonadBaseControl(..))
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
 import Database.Esqueleto
 import Database.Persist.TH
 import Test.Hspec
+import UnliftIO
 
-import Data.Conduit (($$), (=$=), Source)
+import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
-import qualified Control.Monad.Trans.Resource as R
+import Control.Monad.Trans.Resource (MonadThrow)
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Database.Esqueleto.Internal.Sql as EI
+import qualified UnliftIO.Resource as R
 
 
--------------------------------------------------------------------------------
+
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Foo
@@ -147,13 +148,12 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
 |]
 
 
--------------------------------------------------------------------------------
 
 
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
 sameElementsAs :: Eq a => [a] -> [a] -> Bool
-sameElementsAs l1 l2 = null (l1 L.\\ l2)
+sameElementsAs l1' l2' = null (l1' L.\\ l2')
 
 -- | Helper for rounding to a specific digit
 --   Prelude> map (flip roundTo 12.3456) [0..5]
@@ -187,8 +187,6 @@ l3 :: Lord
 l3 = Lord "Chester" (Just 17)
 
 
--------------------------------------------------------------------------------
-
 
 testSelect :: Run -> Spec
 testSelect run = do
@@ -214,8 +212,6 @@ testSelect run = do
         liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
 
--------------------------------------------------------------------------------
-
 
 testSelectSource :: Run -> Spec
 testSelectSource run = do
@@ -226,7 +222,7 @@ testSelectSource run = do
                     from $ \person ->
                     return person
         p1e <- insert' p1
-        ret <- query $$ CL.consume
+        ret <- runConduit $ query .| CL.consume
         liftIO $ ret `shouldBe` [ p1e ]
 
     it "can run a query many times" $
@@ -235,29 +231,29 @@ testSelectSource run = do
                     from $ \person ->
                     return person
         p1e <- insert' p1
-        ret0 <- query $$ CL.consume
-        ret1 <- query $$ CL.consume
+        ret0 <- runConduit $ query .| CL.consume
+        ret1 <- runConduit $ query .| CL.consume
         liftIO $ ret0 `shouldBe` [ p1e ]
         liftIO $ ret1 `shouldBe` [ p1e ]
 
     it "works on repro" $ do
-      let selectPerson :: R.MonadResource m => String -> Source (SqlPersistT m) (Key Person)
+      let selectPerson :: R.MonadResource m => String -> ConduitT () (Key Person) (SqlPersistT m) ()
           selectPerson name = do
             let source = selectSource $ from $ \person -> do
                          where_ $ person ^. PersonName ==. val name
                          return $ person ^. PersonId
-            source =$= CL.map unValue
+            source .| CL.map unValue
       run $ do
         p1e <- insert' p1
         p2e <- insert' p2
-        r1 <- selectPerson (personName p1) $$ CL.consume
-        r2 <- selectPerson (personName p2) $$ CL.consume
+        r1 <- runConduit $
+          selectPerson (personName p1) .| CL.consume
+        r2 <- runConduit $
+          selectPerson (personName p2) .| CL.consume
         liftIO $ do
           r1 `shouldBe` [ entityKey p1e ]
           r2 `shouldBe` [ entityKey p2e ]
 
-
--------------------------------------------------------------------------------
 
 
 testSelectFrom :: Run -> Spec
@@ -417,8 +413,6 @@ testSelectFrom run = do
         [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
         liftIO $ ppk `shouldBe` thePk
 
-
--------------------------------------------------------------------------------
 
 
 testSelectJoin :: Run -> Spec
@@ -581,8 +575,6 @@ testSelectJoin run = do
           liftIO $ (entityVal <$> ps) `shouldBe` [p1]
 
 
--------------------------------------------------------------------------------
-
 
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
@@ -641,10 +633,10 @@ testSelectWhere run = do
                from $ \p->
                return $ joinV $ avg_ (p ^. PersonAge)
         let testV :: Double
-            testV = roundTo 4 $ (36 + 17 + 17) / 3
+            testV = roundTo (4 :: Integer) $ (36 + 17 + 17) / (3 :: Double)
 
             retV :: [Value (Maybe Double)]
-            retV = map (Value . fmap (roundTo 4) . unValue) (ret :: [Value (Maybe Double)])
+            retV = map (Value . fmap (roundTo (4 :: Integer)) . unValue) (ret :: [Value (Maybe Double)])
         liftIO $ retV `shouldBe` [ Value $ Just testV ]
 
     it "works with min_" $
@@ -796,8 +788,6 @@ testSelectWhere run = do
           pPk `shouldBe` thePk
 
 
--------------------------------------------------------------------------------
-
 
 testSelectOrderBy :: Run -> Spec
 testSelectOrderBy run = do
@@ -856,8 +846,6 @@ testSelectOrderBy run = do
         liftIO $ map entityVal eps `shouldBe` reverse ps
 
 
--------------------------------------------------------------------------------
-
 
 testSelectDistinct :: Run -> Spec
 testSelectDistinct run = do
@@ -878,17 +866,12 @@ testSelectDistinct run = do
                  return title
           liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
-    it "works on a simple example (selectDistinct)" $
-      selDistTest selectDistinct
-
     it "works on a simple example (select . distinct)" $
       selDistTest (select . distinct)
 
     it "works on a simple example (distinct (return ()))" $
       selDistTest (\act -> select $ distinct (return ()) >> act)
 
-
--------------------------------------------------------------------------------
 
 
 testCoasleceDefault :: Run -> Spec
@@ -942,8 +925,6 @@ testCoasleceDefault run = do
                                 ]
 
 
--------------------------------------------------------------------------------
-
 
 testDelete :: Run -> Spec
 testDelete run = do
@@ -970,8 +951,6 @@ testDelete run = do
         ret3 <- getAll
         liftIO $ (n, ret3) `shouldBe` (2, [])
 
-
--------------------------------------------------------------------------------
 
 
 testUpdate :: Run -> Spec
@@ -1038,7 +1017,6 @@ testUpdate run = do
     it "GROUP BY works with COUNT and InnerJoin" $
       run $ do
         l1k <- insert l1
-        l2k <- insert l2
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
 
@@ -1070,8 +1048,6 @@ testUpdate run = do
         liftIO $ ret `shouldBe` [ (Entity p1k p1, Value (3 :: Int))
                                 , (Entity p3k p3, Value 7) ]
 
-
--------------------------------------------------------------------------------
 
 
 testListOfValues :: Run -> Spec
@@ -1167,7 +1143,7 @@ testListOfValues run = do
         liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testListFields :: Run -> Spec
@@ -1182,7 +1158,7 @@ testListFields run = do
           where_ (p ^. CcListId ==. val cclist)
 
 
--------------------------------------------------------------------------------
+
 
 
 testInsertsBySelect :: Run -> Spec
@@ -1199,7 +1175,7 @@ testInsertsBySelect run = do
         liftIO $ ret `shouldBe` [Value (3::Int)]
 
 
--------------------------------------------------------------------------------
+
 
 
 testInsertsBySelectReturnsCount :: Run -> Spec
@@ -1217,7 +1193,7 @@ testInsertsBySelectReturnsCount run = do
         liftIO $ cnt `shouldBe` 3
 
 
--------------------------------------------------------------------------------
+
 
 
 testMathFunctions :: Run -> Spec
@@ -1257,7 +1233,7 @@ testMathFunctions run = do
         liftIO $ max (abs (a - 6.8)) (abs (b - 7.7)) `shouldSatisfy` (< 0.01)
 
 
--------------------------------------------------------------------------------
+
 
 
 testCase :: Run -> Spec
@@ -1309,7 +1285,7 @@ testCase run = do
         liftIO $ ret `shouldBe` [ Value (3) ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testLocking :: WithConn (NoLoggingT IO) [TL.Text] -> Spec
@@ -1321,15 +1297,15 @@ testLocking withConn = do
     -- reaction to the clause.
     let sanityCheck kind syntax = do
           let complexQuery =
-                from $ \(p1 `InnerJoin` p2) -> do
-                on (p1 ^. PersonName ==. p2 ^. PersonName)
-                where_ (p1 ^. PersonFavNum >. val 2)
-                orderBy [desc (p2 ^. PersonAge)]
+                from $ \(p1' `InnerJoin` p2') -> do
+                on (p1' ^. PersonName ==. p2' ^. PersonName)
+                where_ (p1' ^. PersonFavNum >. val 2)
+                orderBy [desc (p2' ^. PersonAge)]
                 limit 3
                 offset 9
-                groupBy (p1 ^. PersonId)
+                groupBy (p1' ^. PersonId)
                 having (countRows <. val (0 :: Int))
-                return (p1, p2)
+                return (p1', p2')
               queryWithClause1 = do
                 r <- complexQuery
                 locking kind
@@ -1357,7 +1333,7 @@ testLocking withConn = do
     it "looks sane for LockInShareMode" $ sanityCheck LockInShareMode "LOCK IN SHARE MODE"
 
 
--------------------------------------------------------------------------------
+
 
 
 testCountingRows :: Run -> Spec
@@ -1380,7 +1356,7 @@ testCountingRows run = do
           liftIO $ (n :: Int) `shouldBe` expected
 
 
--------------------------------------------------------------------------------
+
 
 
 tests :: Run -> Spec
@@ -1403,7 +1379,7 @@ tests run = do
     testCase run
     testCountingRows run
 
--------------------------------------------------------------------------------
+
 
 
 insert' :: ( Functor m
@@ -1415,8 +1391,10 @@ insert' :: ( Functor m
 insert' v = flip Entity v <$> insert v
 
 
-type RunDbMonad m = ( MonadBaseControl IO m, MonadIO m, MonadLogger m
-                    , R.MonadThrow m )
+type RunDbMonad m = ( MonadUnliftIO m
+                    , MonadIO m
+                    , MonadLogger m
+                    , MonadThrow m )
 
 type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 

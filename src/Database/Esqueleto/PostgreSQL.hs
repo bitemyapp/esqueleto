@@ -21,9 +21,9 @@ import Data.Time.Clock (UTCTime)
 --
 -- /Since: 2.5.3/
 arrayAggDistinct :: SqlExpr (Value a) -> SqlExpr (Value [a])
-arrayAggDistinct = arrayAgg . distinct
+arrayAggDistinct = arrayAgg . distinct'
   where
-    distinct = unsafeSqlBinOp " " (unsafeSqlValue "DISTINCT")
+    distinct' = unsafeSqlBinOp " " (unsafeSqlValue "DISTINCT")
 
 -- | (@array_agg@) Concatenate input values, including @NULL@s,
 -- into an array.
@@ -37,7 +37,7 @@ arrayAgg = unsafeSqlFunction "array_agg"
 --
 -- /Since: 2.5.3/
 arrayRemove :: SqlExpr (Value [a]) -> SqlExpr (Value a) -> SqlExpr (Value [a])
-arrayRemove arr elem = unsafeSqlFunction "array_remove" (arr, elem)
+arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.

@@ -292,9 +292,6 @@ class (Functor query, Applicative query, Monad query) =>
   -- is guaranteed to return just one row.
   sub_select :: PersistField a => query (expr (Value a)) -> expr (Value a)
 
-  -- | Same as 'sub_select' but using @SELECT DISTINCT@.
-  sub_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (Value a)
-
   -- | Project a field of an entity.
   (^.) :: (PersistEntity val, PersistField typ) =>
           expr (Entity val) -> EntityField val typ -> expr (Value typ)
@@ -447,9 +444,6 @@ class (Functor query, Applicative query, Monad query) =>
   -- list of values.
   subList_select :: PersistField a => query (expr (Value a)) -> expr (ValueList a)
 
-  -- | Same as 'sublist_select' but using @SELECT DISTINCT@.
-  subList_selectDistinct :: PersistField a => query (expr (Value a)) -> expr (ValueList a)
-
   -- | Lift a list of constant value from Haskell-land to the query.
   valList :: PersistField typ => [typ] -> expr (ValueList typ)
 
@@ -594,9 +588,6 @@ class (Functor query, Applicative query, Monad query) =>
   --
   -- /Since: 2.4.3/
   toBaseId :: ToBaseId ent => expr (Value (Key ent)) -> expr (Value (Key (BaseEnt ent)))
-
-{-# DEPRECATED sub_selectDistinct "Since 2.2.4: use 'sub_select' and 'distinct'." #-}
-{-# DEPRECATED subList_selectDistinct "Since 2.2.4: use 'subList_select' and 'distinct'." #-}
 
 
 -- Fixity declarations

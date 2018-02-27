@@ -14,10 +14,10 @@ test:
 
 # Intended for use in local dev
 test-postgresql: reset-pgsql
-	stack test --flag esqueleto:postgresql
+	stack test esqueleto:postgresql
 
 test-mysql:
-	stack test --flag esqueleto:mysql
+	stack test esqueleto:mysql
 
 test-ghci:
 	stack ghci esqueleto:test:test

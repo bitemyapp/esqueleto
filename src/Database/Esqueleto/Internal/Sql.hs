@@ -21,13 +21,10 @@ module Database.Esqueleto.Internal.Sql
   , SqlEntity
   , select
   , selectSource
-  , selectDistinct
-  , selectDistinctSource
   , delete
   , deleteCount
   , update
   , updateCount
-  , insertSelectDistinct
   , insertSelect
   , insertSelectCount
     -- * The guts
@@ -456,9 +453,10 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
     where
       toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
       toDistinctOn (EOrderBy _ f) = EDistinctOn f
+      toDistinctOn EOrderRandom =
+        error "We can't select distinct by a random order!"
 
   sub_select         = sub SELECT
-  sub_selectDistinct = sub_select . distinct
 
   (^.) :: forall val typ. (PersistEntity val, PersistField typ)
        => SqlExpr (Entity val) -> EntityField val typ -> SqlExpr (Value typ)
@@ -536,7 +534,6 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   castString = veryUnsafeCoerceSqlExprValue
 
   subList_select         = EList . sub_select
-  subList_selectDistinct = subList_select . distinct
 
   valList []   = EEmptyList
   valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
@@ -797,13 +794,13 @@ rawSelectSource :: ( SqlSelect a r
                    )
                  => Mode
                  -> SqlQuery a
-                 -> SqlReadT m1 (Acquire (C.Source m2 r))
+                 -> SqlReadT m1 (Acquire (C.ConduitT () r m2 ()))
 rawSelectSource mode query =
       do
         conn <- projectBackend <$> R.ask
         let _ = conn :: SqlBackend
         res <- R.withReaderT (const conn) (run conn)
-        return $ (C.$= massage) `fmap` res
+        return $ (C..| massage) `fmap` res
     where
 
       run conn =
@@ -830,7 +827,7 @@ selectSource :: ( SqlSelect a r
                , PersistStoreRead backend, PersistUniqueRead backend
                , MonadResource m )
              => SqlQuery a
-             -> C.Source (R.ReaderT backend m) r
+             -> C.ConduitT () r (R.ReaderT backend m) ()
 selectSource query = do
   res <- lift $ rawSelectSource SELECT query
   (key, src) <- lift $ allocateAcquire res
@@ -887,33 +884,11 @@ select query = do
     conn <- R.ask
     liftIO $ with res $ flip R.runReaderT conn . runSource
 
-
--- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
--- @persistent@'s 'SqlPersistT' monad and return a 'C.Source' of
--- rows.
-selectDistinctSource
-  :: ( SqlSelect a r
-     , MonadResource m )
-  => SqlQuery a
-  -> C.Source (SqlPersistT m) r
-selectDistinctSource = selectSource . distinct
-{-# DEPRECATED selectDistinctSource "Since 2.2.4: use 'selectSource' and 'distinct'." #-}
-
-
--- | Execute an @esqueleto@ @SELECT DISTINCT@ query inside
--- @persistent@'s 'SqlPersistT' monad and return a list of rows.
-selectDistinct :: ( SqlSelect a r
-                  , MonadIO m )
-               => SqlQuery a -> SqlPersistT m [r]
-selectDistinct = select . distinct
-{-# DEPRECATED selectDistinct "Since 2.2.4: use 'select' and 'distinct'." #-}
-
-
 -- | (Internal) Run a 'C.Source' of rows.
 runSource :: Monad m =>
-             C.Source (R.ReaderT backend m) r
+             C.ConduitT () r (R.ReaderT backend m) ()
           -> R.ReaderT backend m [r]
-runSource src = src C.$$ CL.consume
+runSource src = C.runConduit $ src C..| CL.consume
 
 
 ----------------------------------------------------------------------
@@ -1812,10 +1787,3 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
-
-
--- | Insert a 'PersistField' for every unique selected value.
-insertSelectDistinct :: (MonadIO m, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m ()
-insertSelectDistinct = insertSelect . distinct
-{-# DEPRECATED insertSelectDistinct "Since 2.2.4: use 'insertSelect' and 'distinct'." #-}

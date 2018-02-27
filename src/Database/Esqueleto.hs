@@ -40,7 +40,7 @@ module Database.Esqueleto
     -- * @esqueleto@'s Language
     Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
-             , sub_select, sub_selectDistinct, (^.), (?.)
+             , sub_select, (^.), (?.)
              , val, isNothing, just, nothing, joinV, withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
@@ -49,7 +49,7 @@ module Database.Esqueleto
              , min_, max_, sum_, avg_, castNum, castNumM
              , coalesce, coalesceDefault
              , lower_, like, ilike, (%), concat_, (++.), castString
-             , subList_select, subList_selectDistinct, valList, justList
+             , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
              , case_, toBaseId)
@@ -59,7 +59,6 @@ module Database.Esqueleto
   , else_
   , from
   , Value(..)
-  , unValue
   , ValueList(..)
   , OrderBy
   , DistinctOn
@@ -78,16 +77,13 @@ module Database.Esqueleto
   , SqlExpr
   , SqlEntity
   , select
-  , selectDistinct
   , selectSource
-  , selectDistinctSource
   , delete
   , deleteCount
   , update
   , updateCount
   , insertSelect
   , insertSelectCount
-  , insertSelectDistinct
   , (<#)
   , (<&>)
     -- * Internal.Language

@@ -23,7 +23,7 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 
 import Common.Test
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlCoalesce :: Spec
@@ -37,10 +37,11 @@ testPostgresqlCoalesce = do
       return ()
 
 
--------------------------------------------------------------------------------
+
 
 
 nameContains :: (BaseBackend backend ~ SqlBackend,
+                 BackendCompatible SqlBackend backend,
                  Esqueleto query expr backend, MonadIO m, SqlString s,
                  IsPersistBackend backend, PersistQueryRead backend,
                  PersistUniqueRead backend)
@@ -74,18 +75,18 @@ testPostgresqlTextFunctions = do
     it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
       run $ do
         [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-        let nameContains t expected = do
+        let nameContains' t expected = do
               ret <- select $
                      from $ \p -> do
                      where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
                      orderBy [asc (p ^. PersonName)]
                      return p
               liftIO $ ret `shouldBe` expected
-        nameContains "mi" [p3e, p5e]
-        nameContains "JOHN" [p1e]
+        nameContains' "mi" [p3e, p5e]
+        nameContains' "JOHN" [p1e]
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlUpdate :: Spec
@@ -115,7 +116,7 @@ testPostgresqlUpdate = do
                               , Entity p3k p3 ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlRandom :: Spec
@@ -126,7 +127,7 @@ testPostgresqlRandom = do
       return ()
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlSum :: Spec
@@ -143,7 +144,7 @@ testPostgresqlSum = do
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlTwoAscFields :: Spec
@@ -162,7 +163,7 @@ testPostgresqlTwoAscFields = do
       liftIO $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresqlOneAscOneDesc :: Spec
@@ -181,7 +182,7 @@ testPostgresqlOneAscOneDesc = do
       liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testSelectDistinctOn :: Spec
@@ -232,7 +233,7 @@ testSelectDistinctOn = do
         distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
 
 
--------------------------------------------------------------------------------
+
 
 
 testPostgresModule :: Spec
@@ -277,7 +278,7 @@ testPostgresModule = do
         liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
 
 
--------------------------------------------------------------------------------
+
 
 
 main :: IO ()
@@ -300,7 +301,7 @@ main = do
       testPostgresqlTextFunctions
 
 
--------------------------------------------------------------------------------
+
 
 
 run, runSilent, runVerbose :: Run

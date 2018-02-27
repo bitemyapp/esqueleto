@@ -19,7 +19,7 @@ import Test.Hspec
 
 import Common.Test
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteRandom :: Spec
@@ -30,7 +30,7 @@ testSqliteRandom = do
       return ()
 
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteSum :: Spec
@@ -47,7 +47,7 @@ testSqliteSum = do
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteTwoAscFields :: Spec
@@ -66,7 +66,7 @@ testSqliteTwoAscFields = do
       liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteOneAscOneDesc :: Spec
@@ -85,7 +85,7 @@ testSqliteOneAscOneDesc = do
       liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteCoalesce :: Spec
@@ -97,7 +97,7 @@ testSqliteCoalesce = do
     `shouldThrow` (\(_ :: SqliteException) -> True)
 
 
--------------------------------------------------------------------------------
+
 
 
 testSqliteUpdate :: Spec
@@ -126,10 +126,11 @@ testSqliteUpdate = do
                               , Entity p3k p3 ]
 
 
--------------------------------------------------------------------------------
+
 
 
 nameContains :: (BaseBackend backend ~ SqlBackend,
+                 BackendCompatible SqlBackend backend,
                  Esqueleto query expr backend, MonadIO m, SqlString s,
                  IsPersistBackend backend, PersistQueryRead backend,
                  PersistUniqueRead backend)
@@ -160,7 +161,7 @@ testSqliteTextFunctions = do
          nameContains like "iv" [p4e]
 
 
--------------------------------------------------------------------------------
+
 
 
 main :: IO ()
@@ -181,7 +182,7 @@ main = do
       testSqliteTextFunctions
 
 
--------------------------------------------------------------------------------
+
 
 
 run, runSilent, runVerbose :: Run
