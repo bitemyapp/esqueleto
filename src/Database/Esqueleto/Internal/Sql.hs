@@ -789,19 +789,20 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 
 ----------------------------------------------------------------------
 
-
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource :: ( SqlSelect a r
                    , MonadIO m1
-                   , MonadIO m2 )
+                   , MonadIO m2
+                   )
                  => Mode
                  -> SqlQuery a
                  -> SqlReadT m1 (Acquire (C.Source m2 r))
 rawSelectSource mode query =
       do
-        conn <- persistBackend <$> R.ask
-        res <- run conn
+        conn <- projectBackend <$> R.ask
+        let _ = conn :: SqlBackend
+        res <- R.withReaderT (const conn) (run conn)
         return $ (C.$= massage) `fmap` res
     where
 
@@ -823,9 +824,13 @@ rawSelectSource mode query =
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a 'C.Source' of rows.
 selectSource :: ( SqlSelect a r
-                , MonadResource m )
+               , BackendCompatible SqlBackend backend
+               , IsPersistBackend backend
+               , PersistQueryRead backend
+               , PersistStoreRead backend, PersistUniqueRead backend
+               , MonadResource m )
              => SqlQuery a
-             -> C.Source (SqlPersistT m) r
+             -> C.Source (R.ReaderT backend m) r
 selectSource query = do
   res <- lift $ rawSelectSource SELECT query
   (key, src) <- lift $ allocateAcquire res
@@ -874,7 +879,8 @@ selectSource query = do
 -- function composition that the @p@ inside the query is of type
 -- @SqlExpr (Entity Person)@.
 select :: ( SqlSelect a r
-          , MonadIO m )
+          , MonadIO m
+          )
        => SqlQuery a -> SqlReadT m [r]
 select query = do
     res <- rawSelectSource SELECT query
@@ -915,12 +921,12 @@ runSource src = src C.$$ CL.consume
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadIO m, SqlSelect a r, IsSqlBackend backend)
+rawEsqueleto :: ( MonadIO m, SqlSelect a r, BackendCompatible SqlBackend backend)
            => Mode
            -> SqlQuery a
            -> R.ReaderT backend m Int64
 rawEsqueleto mode query = do
-  conn <- persistBackend <$> R.ask
+  conn <- R.ask
   uncurry rawExecuteCount $
     first builderToText $
     toRawSql mode (conn, initialIdentState) query
@@ -972,17 +978,29 @@ deleteCount = rawEsqueleto DELETE
 -- 'set' p [ PersonAge '=.' 'just' ('val' thisYear) -. p '^.' PersonBorn ]
 -- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
-update :: ( MonadIO m
-          , SqlEntity val )
-       => (SqlExpr (Entity val) -> SqlQuery ())
-       -> SqlWriteT m ()
+update
+  ::
+  ( PersistEntityBackend val ~ backend
+  , PersistEntity val
+  , PersistUniqueWrite backend
+  , PersistQueryWrite backend
+  , BackendCompatible SqlBackend backend
+  , PersistEntity val
+  , MonadIO m
+  )
+  => (SqlExpr (Entity val) -> SqlQuery ())
+  -> R.ReaderT backend m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
 updateCount :: ( MonadIO m
-               , SqlEntity val )
+               , PersistEntity val
+               , PersistEntityBackend val ~ backend
+               , BackendCompatible SqlBackend backend
+               , PersistQueryWrite backend
+               , PersistUniqueWrite backend)
             => (SqlExpr (Entity val) -> SqlQuery ())
-            -> SqlWriteT m Int64
+            -> R.ReaderT backend m Int64
 updateCount = rawEsqueleto UPDATE . from
 
 
@@ -1002,7 +1020,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- possible but tedious), you may just turn on query logging of
 -- @persistent@.
 toRawSql
-  :: (IsSqlBackend backend, SqlSelect a r)
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend)
   => Mode -> (backend, IdentState) -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode (conn, firstIdentState) query =
   let ((ret, sd), finalIdentState) =
@@ -1022,7 +1040,7 @@ toRawSql mode (conn, firstIdentState) query =
       -- that were used) to the subsequent calls.  This ensures
       -- that no name clashes will occur on subqueries that may
       -- appear on the expressions below.
-      info = (persistBackend conn, finalIdentState)
+      info = (projectBackend conn, finalIdentState)
   in mconcat
       [ makeInsertInto info mode ret
       , makeSelect     info mode distinctClause ret

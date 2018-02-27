@@ -35,6 +35,7 @@ module Database.Esqueleto.Internal.Language
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
+  , BackendCompatible(..)
   , PreprocessedFrom
   , From
   , FromPreprocess
@@ -52,7 +53,6 @@ import Text.Blaze.Html (Html)
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
-
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
 class (Functor query, Applicative query, Monad query) =>
@@ -72,12 +72,12 @@ class (Functor query, Applicative query, Monad query) =>
   --   @JOIN@.
   fromStart
     :: ( PersistEntity a
-       , PersistEntityBackend a ~ backend )
+       , BackendCompatible backend (PersistEntityBackend a) )
     => query (expr (PreprocessedFrom (expr (Entity a))))
   -- | (Internal) Same as 'fromStart', but entity may be missing.
   fromStartMaybe
     :: ( PersistEntity a
-       , PersistEntityBackend a ~ backend )
+       , BackendCompatible backend (PersistEntityBackend a) )
     => query (expr (PreprocessedFrom (expr (Maybe (Entity a)))))
   -- | (Internal) Do a @JOIN@.
   fromJoin
@@ -1047,13 +1047,13 @@ class Esqueleto query expr backend => FromPreprocess query expr backend a where
 
 instance ( Esqueleto query expr backend
          , PersistEntity val
-         , PersistEntityBackend val ~ backend
+         , BackendCompatible backend (PersistEntityBackend val)
          ) => FromPreprocess query expr backend (expr (Entity val)) where
   fromPreprocess = fromStart
 
 instance ( Esqueleto query expr backend
          , PersistEntity val
-         , PersistEntityBackend val ~ backend
+         , BackendCompatible backend (PersistEntityBackend val)
          ) => FromPreprocess query expr backend (expr (Maybe (Entity val))) where
   fromPreprocess = fromStartMaybe
 

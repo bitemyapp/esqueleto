@@ -58,14 +58,14 @@ library
       base                 >= 4.8     && < 5.0
     , bytestring
     , text                 >= 0.11    && < 1.3
-    , persistent           >= 2.5     && < 2.8
+    , persistent           >= 2.8.0   && < 2.9
     , transformers         >= 0.2
     , unordered-containers >= 0.2
     , tagged               >= 0.2
 
     , monad-logger
-    , conduit              >= 1.1
-    , resourcet            >= 1.1
+    , conduit              >= 1.3
+    , resourcet            >= 1.2
     , time                 >= 1.5.0.1 && <= 1.8.0.2
     , blaze-html
   hs-source-dirs: src/
@@ -101,6 +101,7 @@ test-suite postgresql
     , postgresql-simple     >= 0.2
     , postgresql-libpq      >= 0.6
     , persistent-postgresql >= 2.0
+    -- , persistent-sqlite   >= 2.8.0
     , persistent-template >= 2.1
     , monad-control
     , monad-logger        >= 0.3
