@@ -315,7 +315,7 @@ import qualified Database.Persist
 -- SELECT P1.*, Follow.*, P2.*
 -- FROM Person AS P1
 -- INNER JOIN Follow ON P1.id = Follow.follower
--- INNER JOIN P2 ON P2.id = Follow.followed
+-- INNER JOIN Person AS P2 ON P2.id = Follow.followed
 -- @
 --
 -- In @esqueleto@, we may write the same query above as:
