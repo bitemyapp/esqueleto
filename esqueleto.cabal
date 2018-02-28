@@ -1,170 +1,158 @@
-name:                esqueleto
-version:             2.6.0
-synopsis:            Type-safe EDSL for SQL queries on persistent backends.
-homepage:            https://github.com/bitemyapp/esqueleto
-license:             BSD3
-license-file:        LICENSE
-author:              Felipe Lessa
-maintainer:          cma@bitemyapp.com
-copyright:           (c) 2012-2016 Felipe Almeida Lessa
-category:            Database
-build-type:          Simple
-cabal-version:       >=1.8
-description:
-  @esqueleto@ is a bare bones, type-safe EDSL for SQL queries
-  that works with unmodified @persistent@ SQL backends.  Its
-  language closely resembles SQL, so you don't have to learn
-  new concepts, just new syntax, and it's fairly easy to
-  predict the generated SQL and optimize it for your backend.
-  Most kinds of errors committed when writing SQL are caught as
-  compile-time errors---although it is possible to write
-  type-checked @esqueleto@ queries that fail at runtime.
-  .
-  @persistent@ is a library for type-safe data serialization.  It
-  has many kinds of backends, such as SQL backends
-  (@persistent-mysql@, @persistent-postgresql@,
-  @persistent-sqlite@) and NoSQL backends (@persistent-mongoDB@).
-  While @persistent@ is a nice library for storing and retrieving
-  records, including with filters, it does not try to support
-  some of the features that are specific to SQL backends.  In
-  particular, @esqueleto@ is the recommended library for
-  type-safe @JOIN@s on @persistent@ SQL backends.  (The
-  alternative is using raw SQL, but that's error prone and does
-  not offer any composability.)
-  .
-  Currently, @SELECT@s, @UPDATE@s, @INSERT@s and @DELETE@s are supported.
-  Not all SQL features are available, but most of them can be easily added
-  (especially functions), so please open an issue or send a pull request if
-  you need anything that is not covered by @esqueleto@ on
-  <https://github.com/bitemyapp/esqueleto>.
-  .
-  The name of this library means \"skeleton\" in Portuguese and
-  contains all three SQL letters in the correct order =).  It was
-  inspired by Scala's Squeryl but created from scratch.
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: e5ab42806c413de0b3f9c18b155779bf6d71f87bcfec2fda5c109bf2f4adb4a2
+
+name:           esqueleto
+version:        2.6.0
+synopsis:       Type-safe EDSL for SQL queries on persistent backends.
+description:    @esqueleto@ is a bare bones, type-safe EDSL for SQL queries that works with unmodified @persistent@ SQL backends.  Its language closely resembles SQL, so you don't have to learn new concepts, just new syntax, and it's fairly easy to predict the generated SQL and optimize it for your backend. Most kinds of errors committed when writing SQL are caught as compile-time errors---although it is possible to write type-checked @esqueleto@ queries that fail at runtime.
+                .
+                @persistent@ is a library for type-safe data serialization.  It has many kinds of backends, such as SQL backends (@persistent-mysql@, @persistent-postgresql@, @persistent-sqlite@) and NoSQL backends (@persistent-mongoDB@). While @persistent@ is a nice library for storing and retrieving records, including with filters, it does not try to support some of the features that are specific to SQL backends.  In particular, @esqueleto@ is the recommended library for type-safe @JOIN@s on @persistent@ SQL backends.  (The alternative is using raw SQL, but that's error prone and does not offer any composability.)
+                .
+                Currently, @SELECT@s, @UPDATE@s, @INSERT@s and @DELETE@s are supported. Not all SQL features are available, but most of them can be easily added (especially functions), so please open an issue or send a pull request if you need anything that is not covered by @esqueleto@ on <https://github.com/bitemyapp/esqueleto>.
+                .
+                The name of this library means \"skeleton\" in Portuguese and contains all three SQL letters in the correct order =).  It was inspired by Scala's Squeryl but created from scratch.
+category:       Database
+homepage:       https://github.com/bitemyapp/esqueleto
+author:         Felipe Lessa
+maintainer:     cma@bitemyapp.com
+copyright:      (c) 2012-2016 Felipe Almeida Lessa
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
 
 source-repository head
-  type:     git
+  type: git
   location: git://github.com/bitemyapp/esqueleto.git
 
 library
-  exposed-modules:
-    Database.Esqueleto
-    Database.Esqueleto.MySQL
-    Database.Esqueleto.PostgreSQL
-    Database.Esqueleto.SQLite
-    Database.Esqueleto.Internal.Language
-    Database.Esqueleto.Internal.Sql
-  other-modules:
-    Database.Esqueleto.Internal.PersistentImport
+  hs-source-dirs:
+      src/
   build-depends:
-      base                 >= 4.8     && < 5.0
-    , bytestring
-    , text                 >= 0.11    && < 1.3
-    , persistent           >= 2.8.0   && < 2.9
-    , transformers         >= 0.2
-    , unordered-containers >= 0.2
-    , tagged               >= 0.2
-
-    , monad-logger
-    , conduit              >= 1.3
-    , resourcet            >= 1.2
-    , time                 >= 1.5.0.1 && <= 1.8.0.2
+      base >=4.8 && <5.0
     , blaze-html
-  hs-source-dirs: src/
-  if impl(ghc >= 8.0)
+    , bytestring
+    , conduit >=1.3
+    , monad-logger
+    , persistent >=2.8.0 && <2.9
+    , resourcet >=1.2
+    , tagged >=0.2
+    , text >=0.11 && <1.3
+    , time >=1.5.0.1 && <=1.8.0.2
+    , transformers >=0.2
+    , unordered-containers >=0.2
+  if impl(ghc >=8.0)
     ghc-options: -Wall -Wno-redundant-constraints
   else
     ghc-options: -Wall
-
-
-test-suite postgresql
-  type: exitcode-stdio-1.0
-  ghc-options:    -Wall
-  hs-source-dirs: test
-  other-modules: Common.Test
-  main-is:        PostgreSQL/Test.hs
-  build-depends:
-      -- Library dependencies used on the tests.  No need to
-      -- specify versions since they'll use the same as above.
-      base, persistent, transformers, resourcet, text
-
-      -- Test-only dependencies
-    , conduit
-    , containers
-    , HUnit
-    , QuickCheck
-    , hspec
-    , monad-control
-    , time
-
-      -- This library
-    , esqueleto
-
-    , postgresql-simple
-    , postgresql-libpq
-    , persistent-postgresql
-    -- , persistent-sqlite   >= 2.8.0
-    , persistent-template
-    , monad-control
-    , monad-logger
-    , unliftio
+  exposed-modules:
+      Database.Esqueleto
+      Database.Esqueleto.MySQL
+      Database.Esqueleto.PostgreSQL
+      Database.Esqueleto.SQLite
+      Database.Esqueleto.Internal.Language
+      Database.Esqueleto.Internal.Sql
+  other-modules:
+      Database.Esqueleto.Internal.PersistentImport
+      Paths_esqueleto
+  default-language: Haskell2010
 
 test-suite mysql
   type: exitcode-stdio-1.0
-  ghc-options:    -Wall
-  hs-source-dirs: test
-  other-modules:  Common.Test
-  main-is:        MySQL/Test.hs
+  main-is: MySQL/Test.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall
   build-depends:
-      -- Library dependencies used on the tests.  No need to
-      -- specify versions since they'll use the same as above.
-      base, persistent, transformers, resourcet, text
-
-      -- Test-only dependencies
+      HUnit
+    , QuickCheck
+    , base
     , conduit
     , containers
-    , HUnit
-    , QuickCheck
+    , esqueleto
     , hspec
     , monad-control
-    , time
-
-      -- This library
-    , esqueleto
-
-    , mysql-simple
+    , monad-logger
     , mysql
+    , mysql-simple
+    , persistent
     , persistent-mysql
     , persistent-template
+    , resourcet
+    , text
+    , time
+    , transformers
+    , unliftio
+  other-modules:
+      Common.Test
+      PostgreSQL.Test
+      SQLite.Test
+      Paths_esqueleto
+  default-language: Haskell2010
+
+test-suite postgresql
+  type: exitcode-stdio-1.0
+  main-is: PostgreSQL/Test.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall
+  build-depends:
+      HUnit
+    , QuickCheck
+    , base
+    , conduit
+    , containers
+    , esqueleto
+    , hspec
     , monad-control
     , monad-logger
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-libpq
+    , postgresql-simple
+    , resourcet
+    , text
+    , time
+    , transformers
     , unliftio
-
+  other-modules:
+      Common.Test
+      MySQL.Test
+      SQLite.Test
+      Paths_esqueleto
+  default-language: Haskell2010
 
 test-suite sqlite
   type: exitcode-stdio-1.0
-  ghc-options:    -Wall
-  hs-source-dirs: test
-  other-modules:  Common.Test
-  main-is:        SQLite/Test.hs
+  main-is: SQLite/Test.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall
   build-depends:
-      -- Library dependencies used on the tests.  No need to
-      -- specify versions since they'll use the same as above.
-      base, persistent, transformers, resourcet, text
-
-      -- Test-only dependencies
+      HUnit
+    , QuickCheck
+    , base
     , conduit
     , containers
-    , HUnit
-    , QuickCheck
+    , esqueleto
     , hspec
     , monad-control
-    , time
-
-      -- This library
-    , esqueleto
-
+    , monad-logger
+    , persistent
     , persistent-sqlite
     , persistent-template
-    , monad-logger
+    , resourcet
+    , text
+    , time
+    , transformers
     , unliftio
+  other-modules:
+      Common.Test
+      MySQL.Test
+      PostgreSQL.Test
+      Paths_esqueleto
+  default-language: Haskell2010
