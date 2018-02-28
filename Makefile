@@ -17,8 +17,11 @@ test-postgresql: reset-pgsql
 test-mysql:
 	stack test esqueleto:mysql
 
-test-ghci:
-	stack ghci esqueleto:test:test
+test-readwrite:
+	stack test esqueleto:test:read-write
+
+test-readwrite-ghci:
+	stack ghci esqueleto:test:read-write
 
 # sudo -u postgres createuser -s - esqueleto-test
 reset-pgsql:

@@ -303,10 +303,6 @@ main = do
       testPostgresqlCoalesce
       testPostgresqlTextFunctions
 
-
-
-
-
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
@@ -314,7 +310,6 @@ run =
   if verbose
   then runVerbose
   else runSilent
-
 
 verbose :: Bool
 verbose = False
@@ -324,8 +319,16 @@ migrateIt = do
   void $ runMigrationSilent migrateAll
   cleanDB
 
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
+run_worker
+  :: ( BackendCompatible backend SqlBackend
+     , RunDbMonad m
+     )
+  => ReaderT backend (R.ResourceT m) a -> m a
+run_worker act =
+  withConn $ runSqlConn (migrateIt >> (withReaderT projectBackend act))
+
+-- run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
+-- run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =

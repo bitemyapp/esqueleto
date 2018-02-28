@@ -895,10 +895,14 @@ runSource src = C.runConduit $ src C..| CL.consume
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadIO m, SqlSelect a r, BackendCompatible SqlBackend backend)
-           => Mode
-           -> SqlQuery a
-           -> R.ReaderT backend m Int64
+rawEsqueleto :: ( MonadIO m
+                , SqlSelect a r
+                , BackendCompatible SqlBackend backend
+                -- , BackendCompatible SqlBackend (BaseBackend backend)
+                )
+             => Mode
+             -> SqlQuery a
+             -> R.ReaderT backend m Int64
 rawEsqueleto mode query = do
   conn <- R.ask
   uncurry rawExecuteCount $
@@ -931,12 +935,14 @@ rawEsqueleto mode query = do
 delete :: ( MonadIO m )
        => SqlQuery ()
        -> SqlWriteT m ()
+       -- -> R.ReaderT SqlWriteBackend m ()
 delete = void . deleteCount
 
 -- | Same as 'delete', but returns the number of rows affected.
 deleteCount :: ( MonadIO m )
             => SqlQuery ()
             -> SqlWriteT m Int64
+            -- -> R.ReaderT SqlWriteBackend m Int64
 deleteCount = rawEsqueleto DELETE
 
 
@@ -953,28 +959,73 @@ deleteCount = rawEsqueleto DELETE
 -- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
 update
+  -- :: (MonadIO m,
+  --     -- BackendCompatible SqlBackend (PersistEntityBackend val),
+  --     PersistEntityBackend val ~ BaseBackend backend,
+  --     BackendCompatible SqlBackend backend,
+  --     BackendCompatible SqlBackend (BaseBackend backend),
+  --     PersistStoreWrite backend,
+  --     -- PersistEntity val,
+  --     -- PersistQueryWrite (PersistEntityBackend val),
+  --     -- PersistUniqueWrite (PersistEntityBackend val),
+  --     PersistEntity val) =>
+  --    (SqlExpr (Entity val) -> SqlQuery ())
+  --    -> R.ReaderT backend m ()
   ::
-  ( PersistEntityBackend val ~ backend
+  ( PersistEntityBackend val ~ (BaseBackend backend)
   , PersistEntity val
   , PersistUniqueWrite backend
   , PersistQueryWrite backend
   , BackendCompatible SqlBackend backend
+  , BackendCompatible SqlBackend (BaseBackend backend)
+  -- , BackendCompatible SqlBackend (PersistEntityBackend val)
   , PersistEntity val
   , MonadIO m
   )
   => (SqlExpr (Entity val) -> SqlQuery ())
   -> R.ReaderT backend m ()
+
+  -- ::
+  -- ( PersistEntityBackend val ~ backend
+  -- , PersistEntity val
+  -- , PersistUniqueWrite backend
+  -- , PersistQueryWrite backend
+  -- , BackendCompatible SqlBackend backend
+  -- , PersistEntity val
+  -- , MonadIO m
+  -- )
+  -- => (SqlExpr (Entity val) -> SqlQuery ())
+  -- -> R.ReaderT backend m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
-updateCount :: ( MonadIO m
-               , PersistEntity val
-               , PersistEntityBackend val ~ backend
-               , BackendCompatible SqlBackend backend
-               , PersistQueryWrite backend
-               , PersistUniqueWrite backend)
-            => (SqlExpr (Entity val) -> SqlQuery ())
-            -> R.ReaderT backend m Int64
+updateCount
+  -- :: (MonadIO m,
+  --     PersistEntityBackend val ~ BaseBackend backend,
+  --     BackendCompatible SqlBackend backend,
+  --     BackendCompatible SqlBackend (BaseBackend backend),
+  --     PersistStoreWrite backend,
+  --     PersistEntity val) =>
+  --    (SqlExpr (Entity val) -> SqlQuery ())
+  -- -> R.ReaderT backend m Int64
+  :: ( MonadIO m
+     , PersistEntity val
+     , PersistEntityBackend val ~ (BaseBackend backend)
+     , BackendCompatible SqlBackend backend
+     , BackendCompatible SqlBackend (BaseBackend backend)
+     -- , BackendCompatible SqlBackend (PersistEntityBackend val)
+     , PersistQueryWrite backend
+     , PersistUniqueWrite backend)
+  => (SqlExpr (Entity val) -> SqlQuery ())
+  -> R.ReaderT backend m Int64
+  -- :: ( MonadIO m
+  --    , PersistEntity val
+  --    , PersistEntityBackend val ~ backend
+  --    , BackendCompatible SqlBackend backend
+  --    , PersistQueryWrite backend
+  --    , PersistUniqueWrite backend)
+  -- => (SqlExpr (Entity val) -> SqlQuery ())
+  -- -> R.ReaderT backend m Int64
 updateCount = rawEsqueleto UPDATE . from
 
 
@@ -1780,10 +1831,14 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 --
 -- /Since: 2.4.2/
 insertSelect :: (MonadIO m, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m ()
+  SqlQuery (SqlExpr (Insertion a))
+  -> SqlWriteT m ()
+  -- -> R.ReaderT SqlWriteBackend m ()
 insertSelect = void . insertSelectCount
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
+  SqlQuery (SqlExpr (Insertion a))
+  -> SqlWriteT m Int64
+  -- -> R.ReaderT SqlWriteBackend m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal

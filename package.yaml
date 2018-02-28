@@ -77,7 +77,7 @@ library:
 
 tests:
   mysql:
-    main: 'MySQL/Test.hs'
+    main: MySQL/Test.hs
     source-dirs: test
     ghc-options: -Wall
     dependencies:
@@ -120,4 +120,22 @@ tests:
       - postgresql-simple
     other-modules:
       - Common.Test
+      - Paths_esqueleto
+
+  read-write:
+    main: ReadWrite/Test.hs
+    source-dirs: test
+    ghc-options: -Wall
+    dependencies:
+      - containers
+      - esqueleto
+      - hspec
+      - persistent-postgresql
+      - persistent-template
+      - postgresql-libpq
+      - postgresql-simple
+      - should-not-typecheck
+    other-modules:
+      - Common.Test
+      - ReadWrite.ShouldNotTypeCheck
       - Paths_esqueleto

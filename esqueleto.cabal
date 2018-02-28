@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 34b1b8836c9ae7acb038d0e808674ddb4c2ab696d37e5b117f61acad02ed6daf
+-- hash: 17ed8441729a866396754db730fda02c7e20e4dc50d0ad710e918ca43a56ad64
 
 name:           esqueleto
 version:        2.6.0
@@ -122,6 +122,40 @@ test-suite postgresql
     , unordered-containers >=0.2
   other-modules:
       Common.Test
+      Paths_esqueleto
+  default-language: Haskell2010
+
+test-suite read-write
+  type: exitcode-stdio-1.0
+  main-is: ReadWrite/Test.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall
+  build-depends:
+      base >=4.8 && <5.0
+    , blaze-html
+    , bytestring
+    , conduit >=1.3
+    , containers
+    , esqueleto
+    , hspec
+    , monad-logger
+    , persistent >=2.8.0 && <2.9
+    , persistent-postgresql
+    , persistent-template
+    , postgresql-libpq
+    , postgresql-simple
+    , resourcet >=1.2
+    , should-not-typecheck
+    , tagged >=0.2
+    , text >=0.11 && <1.3
+    , time >=1.5.0.1 && <=1.8.0.2
+    , transformers >=0.2
+    , unliftio
+    , unordered-containers >=0.2
+  other-modules:
+      Common.Test
+      ReadWrite.ShouldNotTypeCheck
       Paths_esqueleto
   default-language: Haskell2010
 

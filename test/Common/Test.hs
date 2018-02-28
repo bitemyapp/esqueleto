@@ -16,36 +16,7 @@
            , TypeSynonymInstances
  #-}
 
-module Common.Test
-    ( tests
-    , testLocking
-    , testAscRandom
-    , testRandomMath
-    , migrateAll
-    , cleanDB
-    , RunDbMonad
-    , Run
-    , p1, p2, p3, p4, p5
-    , l1, l2, l3
-    , insert'
-    , EntityField (..)
-    , Foo (..)
-    , Bar (..)
-    , Person (..)
-    , BlogPost (..)
-    , Lord (..)
-    , Deed (..)
-    , Follow (..)
-    , CcList (..)
-    , Frontcover (..)
-    , Article (..)
-    , Tag (..)
-    , ArticleTag (..)
-    , Article2 (..)
-    , Point (..)
-    , Circle (..)
-    , Numbers (..)
-    ) where
+module Common.Test where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -1400,7 +1371,22 @@ type RunDbMonad m = ( MonadUnliftIO m
                     , MonadLogger m
                     , MonadThrow m )
 
+-- type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+
+
+type Run' backend = forall a
+                  . ( forall m
+                    . (RunDbMonad m)
+                   => ReaderT backend (R.ResourceT m) a)
+                -> IO a
+
 type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+
+type RunRead = forall a. (forall m. RunDbMonad m => SqlReadT (R.ResourceT m) a) -> IO a
+
+type RunWrite = forall a. (forall m. RunDbMonad m => SqlWriteT (R.ResourceT m) a) -> IO a
+
+-- type RunWrite = forall a. (forall backend m. (backend ~ SqlBackend, SqlBackendCanWrite backend, RunDbMonad m) => ReaderT backend (R.ResourceT m) a) -> IO a
 
 type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 
