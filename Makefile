@@ -18,7 +18,10 @@ test-mysql:
 	stack test esqueleto:mysql
 
 test-ghci:
-	stack ghci esqueleto:test:test
+	stack ghci esqueleto:test:sqlite
+
+test-ghcid:
+	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto:test:sqlite"
 
 # sudo -u postgres createuser -s - esqueleto-test
 reset-pgsql:
