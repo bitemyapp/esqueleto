@@ -1,10 +1,8 @@
-build: build-7.10
+build:
+	stack build
 
-build-7.10:
-	STACK_YAML="stack-7.10.yaml" stack build
-
-build-8.0:
-	STACK_YAML="stack-8.0.yaml" stack build
+build-tests:
+	stack build --test --no-run-tests
 
 ghci:
 	stack ghci

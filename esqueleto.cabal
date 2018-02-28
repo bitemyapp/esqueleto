@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e5ab42806c413de0b3f9c18b155779bf6d71f87bcfec2fda5c109bf2f4adb4a2
+-- hash: 34b1b8836c9ae7acb038d0e808674ddb4c2ab696d37e5b117f61acad02ed6daf
 
 name:           esqueleto
 version:        2.6.0
@@ -43,6 +43,7 @@ library
     , text >=0.11 && <1.3
     , time >=1.5.0.1 && <=1.8.0.2
     , transformers >=0.2
+    , unliftio
     , unordered-containers >=0.2
   if impl(ghc >=8.0)
     ghc-options: -Wall -Wno-redundant-constraints
@@ -50,11 +51,11 @@ library
     ghc-options: -Wall
   exposed-modules:
       Database.Esqueleto
+      Database.Esqueleto.Internal.Language
+      Database.Esqueleto.Internal.Sql
       Database.Esqueleto.MySQL
       Database.Esqueleto.PostgreSQL
       Database.Esqueleto.SQLite
-      Database.Esqueleto.Internal.Language
-      Database.Esqueleto.Internal.Sql
   other-modules:
       Database.Esqueleto.Internal.PersistentImport
       Paths_esqueleto
@@ -67,29 +68,28 @@ test-suite mysql
       test
   ghc-options: -Wall
   build-depends:
-      HUnit
-    , QuickCheck
-    , base
-    , conduit
+      base >=4.8 && <5.0
+    , blaze-html
+    , bytestring
+    , conduit >=1.3
     , containers
     , esqueleto
     , hspec
-    , monad-control
     , monad-logger
     , mysql
     , mysql-simple
-    , persistent
+    , persistent >=2.8.0 && <2.9
     , persistent-mysql
     , persistent-template
-    , resourcet
-    , text
-    , time
-    , transformers
+    , resourcet >=1.2
+    , tagged >=0.2
+    , text >=0.11 && <1.3
+    , time >=1.5.0.1 && <=1.8.0.2
+    , transformers >=0.2
     , unliftio
+    , unordered-containers >=0.2
   other-modules:
       Common.Test
-      PostgreSQL.Test
-      SQLite.Test
       Paths_esqueleto
   default-language: Haskell2010
 
@@ -100,29 +100,28 @@ test-suite postgresql
       test
   ghc-options: -Wall
   build-depends:
-      HUnit
-    , QuickCheck
-    , base
-    , conduit
+      base >=4.8 && <5.0
+    , blaze-html
+    , bytestring
+    , conduit >=1.3
     , containers
     , esqueleto
     , hspec
-    , monad-control
     , monad-logger
-    , persistent
+    , persistent >=2.8.0 && <2.9
     , persistent-postgresql
     , persistent-template
     , postgresql-libpq
     , postgresql-simple
-    , resourcet
-    , text
-    , time
-    , transformers
+    , resourcet >=1.2
+    , tagged >=0.2
+    , text >=0.11 && <1.3
+    , time >=1.5.0.1 && <=1.8.0.2
+    , transformers >=0.2
     , unliftio
+    , unordered-containers >=0.2
   other-modules:
       Common.Test
-      MySQL.Test
-      SQLite.Test
       Paths_esqueleto
   default-language: Haskell2010
 
@@ -133,26 +132,25 @@ test-suite sqlite
       test
   ghc-options: -Wall
   build-depends:
-      HUnit
-    , QuickCheck
-    , base
-    , conduit
+      base >=4.8 && <5.0
+    , blaze-html
+    , bytestring
+    , conduit >=1.3
     , containers
     , esqueleto
     , hspec
-    , monad-control
     , monad-logger
-    , persistent
+    , persistent >=2.8.0 && <2.9
     , persistent-sqlite
     , persistent-template
-    , resourcet
-    , text
-    , time
-    , transformers
+    , resourcet >=1.2
+    , tagged >=0.2
+    , text >=0.11 && <1.3
+    , time >=1.5.0.1 && <=1.8.0.2
+    , transformers >=0.2
     , unliftio
+    , unordered-containers >=0.2
   other-modules:
       Common.Test
-      MySQL.Test
-      PostgreSQL.Test
       Paths_esqueleto
   default-language: Haskell2010

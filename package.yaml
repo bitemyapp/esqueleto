@@ -41,29 +41,31 @@ copyright: (c) 2012-2016 Felipe Almeida Lessa
 license: BSD3
 homepage: https://github.com/bitemyapp/esqueleto
 git: git://github.com/bitemyapp/esqueleto.git
+
 dependencies:
-- monad-logger
+  - base >=4.8 && <5.0
+  - blaze-html
+  - bytestring
+  - conduit >=1.3
+  - monad-logger
+  - persistent >=2.8.0 && <2.9
+  - resourcet >=1.2
+  - tagged >=0.2
+  - text >=0.11 && <1.3
+  - time >=1.5.0.1 && <=1.8.0.2
+  - transformers >=0.2
+  - unliftio
+  - unordered-containers >=0.2
+
 library:
   source-dirs: src/
   exposed-modules:
-  - Database.Esqueleto
-  - Database.Esqueleto.MySQL
-  - Database.Esqueleto.PostgreSQL
-  - Database.Esqueleto.SQLite
-  - Database.Esqueleto.Internal.Language
-  - Database.Esqueleto.Internal.Sql
-  dependencies:
-  - base >=4.8 && <5.0
-  - bytestring
-  - text >=0.11 && <1.3
-  - persistent >=2.8.0 && <2.9
-  - transformers >=0.2
-  - unordered-containers >=0.2
-  - tagged >=0.2
-  - conduit >=1.3
-  - resourcet >=1.2
-  - time >=1.5.0.1 && <=1.8.0.2
-  - blaze-html
+    - Database.Esqueleto
+    - Database.Esqueleto.Internal.Language
+    - Database.Esqueleto.Internal.Sql
+    - Database.Esqueleto.MySQL
+    - Database.Esqueleto.PostgreSQL
+    - Database.Esqueleto.SQLite
   when:
   - condition: impl(ghc >=8.0)
     then:
@@ -75,73 +77,47 @@ library:
 
 tests:
   mysql:
-    main: MySQL/Test.hs
+    main: 'MySQL/Test.hs'
     source-dirs: test
     ghc-options: -Wall
     dependencies:
-    - base
-    - persistent
-    - transformers
-    - resourcet
-    - text
-    - conduit
-    - containers
-    - HUnit
-    - QuickCheck
-    - hspec
-    - monad-control
-    - time
-    - esqueleto
-    - mysql-simple
-    - mysql
-    - persistent-mysql
-    - persistent-template
-    - monad-control
-    - unliftio
+      - containers
+      - esqueleto
+      - hspec
+      - mysql-simple
+      - mysql
+      - persistent-mysql
+      - persistent-template
+    other-modules:
+      - Common.Test
+      - Paths_esqueleto
 
   sqlite:
     main: SQLite/Test.hs
     source-dirs: test
     ghc-options: -Wall
     dependencies:
-    - base
-    - persistent
-    - transformers
-    - resourcet
-    - text
-    - conduit
-    - containers
-    - HUnit
-    - QuickCheck
-    - hspec
-    - monad-control
-    - time
-    - esqueleto
-    - persistent-sqlite
-    - persistent-template
-    - unliftio
+      - containers
+      - esqueleto
+      - hspec
+      - persistent-sqlite
+      - persistent-template
+    other-modules:
+      - Common.Test
+      - Paths_esqueleto
 
   postgresql:
     main: PostgreSQL/Test.hs
     source-dirs: test
     ghc-options: -Wall
     dependencies:
-    - base
-    - persistent
-    - transformers
-    - resourcet
-    - text
-    - conduit
-    - containers
-    - HUnit
-    - QuickCheck
-    - hspec
-    - monad-control
-    - time
-    - esqueleto
-    - postgresql-simple
-    - postgresql-libpq
-    - persistent-postgresql
-    - persistent-template
-    - monad-control
-    - unliftio
+      - containers
+      - esqueleto
+      - hspec
+      - persistent-postgresql
+      - persistent-template
+      - postgresql-libpq
+      - postgresql-simple
+    other-modules:
+      - Common.Test
+      - Paths_esqueleto
