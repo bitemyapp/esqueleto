@@ -19,6 +19,8 @@
 module Common.Test
     ( tests
     , testLocking
+    , testAscRandom
+    , testRandomMath
     , migrateAll
     , cleanDB
     , RunDbMonad
@@ -817,24 +819,6 @@ testSelectOrderBy run = do
                return (b ^. BlogPostId)
         liftIO $ ret `shouldBe` (Value <$> [b2k, b3k, b4k, b1k])
 
-    it "works with asc random_" $
-      run $ do
-        _p1e <- insert' p1
-        _p2e <- insert' p2
-        _p3e <- insert' p3
-        _p4e <- insert' p4
-        rets <-
-          fmap S.fromList $
-          replicateM 11 $
-          select $
-          from $ \p -> do
-          orderBy [asc (random_ :: SqlExpr (Value Double))]
-          return (p ^. PersonId :: SqlExpr (Value PersonId))
-        -- There are 2^4 = 16 possible orderings.  The chance
-        -- of 11 random samplings returning the same ordering
-        -- is 1/2^40, so this test should pass almost everytime.
-        liftIO $ S.size rets `shouldSatisfy` (>2)
-
     it "works on a composite primary key" $
       run $ do
         let ps = [Point 2 1 "", Point 1 2 ""]
@@ -845,7 +829,26 @@ testSelectOrderBy run = do
             return p'
         liftIO $ map entityVal eps `shouldBe` reverse ps
 
-
+testAscRandom :: SqlExpr (Value Double) -> Run -> Spec
+testAscRandom rand' run =
+  describe "random_" $
+    it "asc random_ works" $
+      run $ do
+        _p1e <- insert' p1
+        _p2e <- insert' p2
+        _p3e <- insert' p3
+        _p4e <- insert' p4
+        rets <-
+          fmap S.fromList $
+          replicateM 11 $
+          select $
+          from $ \p -> do
+          orderBy [asc (rand' :: SqlExpr (Value Double))]
+          return (p ^. PersonId :: SqlExpr (Value PersonId))
+        -- There are 2^4 = 16 possible orderings.  The chance
+        -- of 11 random samplings returning the same ordering
+        -- is 1/2^40, so this test should pass almost everytime.
+        liftIO $ S.size rets `shouldSatisfy` (>2)
 
 testSelectDistinct :: Run -> Spec
 testSelectDistinct run = do
@@ -1195,10 +1198,8 @@ testInsertsBySelectReturnsCount run = do
 
 
 
-
-testMathFunctions :: Run -> Spec
-testMathFunctions run = do
-  describe "Math-related functions" $ do
+testRandomMath :: Run -> Spec
+testRandomMath run = describe "random_ math" $
     it "rand returns result in random order" $
       run $ do
         replicateM_ 20 $ do
@@ -1219,6 +1220,9 @@ testMathFunctions run = do
 
         liftIO $ (ret1 == ret2) `shouldBe` False
 
+testMathFunctions :: Run -> Spec
+testMathFunctions run = do
+  describe "Math-related functions" $ do
     it "castNum works for multiplying Int and Double" $
       run $ do
         mapM_ insert [Numbers 2 3.4, Numbers 7 1.1]

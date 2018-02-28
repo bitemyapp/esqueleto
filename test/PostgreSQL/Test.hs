@@ -11,7 +11,8 @@ import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
-import Database.Esqueleto
+import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.PostgreSQL (random_)
 import Database.Persist.Postgresql (withPostgresqlConn)
 import Data.Ord (comparing)
 import Control.Arrow ((&&&))
@@ -290,6 +291,8 @@ main = do
       testLocking withConn
 
     describe "PostgreSQL specific tests" $ do
+      testAscRandom random_ run
+      testRandomMath run
       testSelectDistinctOn
       testPostgresModule
       testPostgresqlOneAscOneDesc
@@ -314,7 +317,7 @@ run =
 
 
 verbose :: Bool
-verbose = True
+verbose = False
 
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do

@@ -13,7 +13,8 @@ import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
 import Database.Persist.Sqlite (withSqliteConn)
 import Database.Sqlite (SqliteException)
-import Database.Esqueleto
+import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.SQLite (random_)
 import qualified Control.Monad.Trans.Resource as R
 import Test.Hspec
 
@@ -173,6 +174,8 @@ main = do
       testLocking withConn
 
     describe "SQLite specific tests" $ do
+      testAscRandom random_ run
+      testRandomMath run
       testSqliteRandom
       testSqliteSum
       testSqliteTwoAscFields
@@ -195,7 +198,7 @@ run =
 
 
 verbose :: Bool
-verbose = True
+verbose = False
 
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a

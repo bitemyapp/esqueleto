@@ -589,6 +589,7 @@ class (Functor query, Applicative query, Monad query) =>
   -- /Since: 2.4.3/
   toBaseId :: ToBaseId ent => expr (Value (Key ent)) -> expr (Value (Key (BaseEnt ent)))
 
+{-# DEPRECATED random_ "Since 2.6.0: `random_` is not uniform across all databases! Please use a specific one such as 'Database.Esqueleto.PostgreSQL.random_', 'Database.Esqueleto.MySQL.random_', or 'Database.Esqueleto.SQLite.random_'" #-}
 
 -- Fixity declarations
 infixl 9 ^.

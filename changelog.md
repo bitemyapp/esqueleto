@@ -1,0 +1,28 @@
+2.6.0
+========
+- @bitemyapp
+  - Reorganized dependencies, decided to break compatibility for Conduit 1.3, Persistent 2.8, and `unliftio`.
+  - Moved tests for `random()` into database-specific test suites.
+  - Deprecated Language `random_`, split it into database-specific modules.
+- @parsonsmatt
+  - Added support for `PersistQueryRead`/`PersistQueryWrite`, enabling type-safe differentation of read and write capabilities.
+    - https://github.com/bitemyapp/esqueleto/pull/66
+- @sestrella
+  - Added support for `arrayAggDistinct` and `arrayRemove`.
+    - https://github.com/bitemyapp/esqueleto/pull/65
+    - https://github.com/bitemyapp/esqueleto/pull/66
+- @mheinzel
+  - Fixed JOIN syntax in the documentation https://github.com/bitemyapp/esqueleto/pull/60
+- @illmade
+  - Added instructions for running database specific tests
+    - https://github.com/bitemyapp/esqueleto/pull/64
+- @FintanH
+  - Removed CPP from the test suite, split the database-specific tests into their own respective modules.
+    - https://github.com/bitemyapp/esqueleto/pull/48
+  - Added support for PostgreSQL's `now()`
+    - https://github.com/bitemyapp/esqueleto/pull/46
+  - Added a comprehensive examples project to make practical application of Esqueleto easier.
+    - https://github.com/bitemyapp/esqueleto/pull/40
+- @EdwardBetts
+  - Fixed a spelling error
+    - https://github.com/bitemyapp/esqueleto/pull/52

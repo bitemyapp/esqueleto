@@ -297,7 +297,6 @@ useIdent :: IdentInfo -> Ident -> TLB.Builder
 useIdent info (I ident) = fromDBName info $ DBName ident
 
 
-----------------------------------------------------------------------
 
 
 -- | An expression on the SQL backend.
