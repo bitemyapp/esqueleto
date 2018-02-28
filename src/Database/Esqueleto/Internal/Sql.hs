@@ -1159,6 +1159,7 @@ makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
 
+{-# DEPRECATED EOrderRandom "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 
 makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) orderByClauses =

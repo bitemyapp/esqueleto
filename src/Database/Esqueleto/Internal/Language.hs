@@ -591,6 +591,8 @@ class (Functor query, Applicative query, Monad query) =>
 
 {-# DEPRECATED random_ "Since 2.6.0: `random_` is not uniform across all databases! Please use a specific one such as 'Database.Esqueleto.PostgreSQL.random_', 'Database.Esqueleto.MySQL.random_', or 'Database.Esqueleto.SQLite.random_'" #-}
 
+{-# DEPRECATED rand "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
+
 -- Fixity declarations
 infixl 9 ^.
 infixl 7 *., /.
