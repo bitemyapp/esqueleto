@@ -32,6 +32,15 @@ module Database.Esqueleto.Internal.Language
   , LockingKind(..)
   , SqlString
   , ToBaseId(..)
+    -- ** Functions that work on lists
+  , orL
+  , andL
+  , andLMb
+  , whereL
+  , whereLMb
+  , onL
+  , onLMb
+  , offsetLimit
     -- * The guts
   , JoinKind(..)
   , IsJoinKind(..)
@@ -44,15 +53,18 @@ module Database.Esqueleto.Internal.Language
   , else_
   ) where
 
-import Control.Exception (Exception)
-import Data.Int (Int64)
-import Data.Typeable (Typeable)
-import Database.Esqueleto.Internal.PersistentImport
-import Text.Blaze.Html (Html)
+import           Control.Exception                            (Exception)
+import qualified Data.Foldable                                as Foldable
+import           Data.Int                                     (Int64)
+import qualified Data.List                                    as List
+import           Data.Maybe                                   (catMaybes)
+import           Data.Typeable                                (Typeable)
+import           Database.Esqueleto.Internal.PersistentImport
+import           Text.Blaze.Html                              (Html)
 
-import qualified Data.ByteString as B
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
+import qualified Data.ByteString                              as B
+import qualified Data.Text                                    as T
+import qualified Data.Text.Lazy                               as TL
 
 -- | Finally tagless representation of @esqueleto@'s EDSL.
 class (Functor query, Applicative query, Monad query) =>
@@ -1060,3 +1072,59 @@ instance ( Esqueleto query expr backend
     a <- fromPreprocess
     b <- fromPreprocess
     fromJoin a b
+
+----------------------------------------------------------------------
+-- Functions that Work on lists --------------------------------------
+----------------------------------------------------------------------
+
+-- | @OR@ a list of predicates. An empty list becomes 'False'
+orL :: Esqueleto query expr backend =>
+       [expr (Value Bool)]
+    -> expr (Value Bool)
+orL [] = val False
+orL (p:ps) = List.foldl' (||.) p ps
+
+-- | @AND@ a list of predicates. An Empty list becomes 'True'
+andL :: Esqueleto query expr backend =>
+        [expr (Value Bool)] -> expr (Value Bool)
+andL [] = val True
+andL (p:ps) = List.foldl' (&&.) p ps
+
+-- | @AND@ a list of predicates (ignoring Nothing values).
+andLMb :: Esqueleto query expr backend =>
+          [Maybe (expr (Value Bool))]
+       -> expr (Value Bool)
+andLMb = andL . catMaybes
+
+-- | @WHERE@ on a list of predicates (conjunction)
+whereL :: Esqueleto query expr backend => [expr (Value Bool)] -> query ()
+whereL [] = return ()
+whereL xs = where_ $ andL xs
+
+-- | WHERE on a list of optional predicates (conjunction, ignoring 'Nothing''s)
+whereLMb :: Esqueleto query expr backend =>
+            [Maybe (expr (Value Bool))] -> query ()
+whereLMb = whereL . catMaybes
+
+-- | ON on a list of predicates.
+onL :: Esqueleto query expr backend =>
+       [expr (Value Bool)]
+    -> query ()
+-- ON will be preserved even if the list is empty. This is important.
+onL = on . andL
+
+-- | ON on a list of optional predicates, ignoring Nothings
+onLMb :: Esqueleto query expr backend =>
+         [Maybe (expr (Value Bool))]
+      -> query ()
+onLMb = onL . catMaybes
+
+-- | Set offset and limit for the query.
+offsetLimit  :: (Esqueleto m expr backend ) =>
+                Maybe Int
+             -> Maybe Int
+             -> m ()
+offsetLimit os l = do
+    Foldable.forM_ os $ offset . fromIntegral
+    Foldable.forM_ l $ limit . fromIntegral
+    return ()

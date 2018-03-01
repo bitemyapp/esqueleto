@@ -51,6 +51,7 @@ dependencies:
   - persistent >=2.8.0 && <2.9
   - resourcet >=1.2
   - tagged >=0.2
+  - template-haskell
   - text >=0.11 && <1.3
   - time >=1.5.0.1 && <=1.8.0.2
   - transformers >=0.2
