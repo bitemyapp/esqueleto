@@ -64,6 +64,16 @@ module Database.Esqueleto
   , DistinctOn
   , LockingKind(..)
   , SqlString
+
+    -- ** Functions that work on lists
+  , orL
+  , andL
+  , andLMb
+  , whereL
+  , whereLMb
+  , onL
+  , onLMb
+  , offsetLimit
     -- ** Joins
   , InnerJoin(..)
   , CrossJoin(..)
@@ -86,6 +96,19 @@ module Database.Esqueleto
   , insertSelectCount
   , (<#)
   , (<&>)
+
+  -- * Foreign Keys
+  , ForeignPair
+  , ForeignKey
+  , mkForeignInstances
+  , onForeignKey
+  , foreignKey
+  , foreignKeyL
+  , foreignKeyR
+  , foreignKeyLR
+  , foreignKeyLMaybe
+  , foreignKeyRMaybe
+  , foreignKeyLRMaybe
     -- * Internal.Language
   , From
     -- * RDBMS-specific modules
@@ -94,6 +117,7 @@ module Database.Esqueleto
     -- * Helpers
   , valkey
   , valJ
+  , mbEq
 
     -- * Re-exports
     -- $reexports
@@ -105,6 +129,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Int (Int64)
 import Database.Esqueleto.Internal.Language
+import Database.Esqueleto.ForeignKey
 import Database.Esqueleto.Internal.Sql
 import Database.Esqueleto.Internal.PersistentImport
 import qualified Database.Persist
@@ -421,7 +446,6 @@ valJ :: (Esqueleto query expr backend, PersistField (Key entity)) =>
         Value (Key entity) -> expr (Value (Key entity))
 valJ = val . unValue
 
-
 ----------------------------------------------------------------------
 
 
@@ -433,3 +457,14 @@ deleteKey :: ( PersistStore backend
              , PersistEntity val )
           => Key val -> ReaderT backend m ()
 deleteKey = Database.Persist.delete
+
+
+----------------------------------------------------------------------
+
+-- | Compare an entity field to a Haskell 'Maybe' value. NOTE: Simply using
+-- @==.@ does __not__ work! @NULL ==. Nothing@ will evaluate to @NULL@!
+mbEq :: (PersistField typ, Esqueleto query expr backend) =>
+        expr (Value (Maybe typ))
+     -> Maybe typ -> expr (Value Bool)
+mbEq v1 Nothing  = isNothing v1
+mbEq v1 (Just v2)  = v1 ==. just (val v2)
