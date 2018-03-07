@@ -7,6 +7,7 @@ module Database.Esqueleto.PostgreSQL
   ( arrayAggDistinct
   , arrayAgg
   , arrayRemove
+  , arrayRemoveNull
   , stringAgg
   , chr
   , now_
@@ -47,6 +48,11 @@ arrayAgg = unsafeSqlFunction "array_agg"
 -- /Since: 2.5.3/
 arrayRemove :: SqlExpr (Value [a]) -> SqlExpr (Value a) -> SqlExpr (Value [a])
 arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
+
+-- | Remove @NULL@ values from an array
+arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
+arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
+
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.

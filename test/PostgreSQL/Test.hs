@@ -237,6 +237,25 @@ testSelectDistinctOn = do
 
 
 
+testArrayRemoveNull :: SpecWith (Arg (IO ()))
+testArrayRemoveNull = do
+  describe "array_remove (NULL)" $ do
+    it "removes NULL from arrays from nullable fields" $ run $ do
+      mapM_ insert [ Person "1" Nothing   Nothing 1
+                   , Person "2" (Just 7)  Nothing 1
+                   , Person "3" (Nothing) Nothing 1
+                   , Person "4" (Just 8)  Nothing 2
+                   , Person "5" (Just 9)  Nothing 2
+                   ]
+      ret <- select . from $ \(person :: SqlExpr (Entity Person)) -> do
+        groupBy (person ^. PersonFavNum)
+        return . EP.arrayRemoveNull $ EP.arrayAgg (person ^. PersonAge)
+      liftIO $ (L.sort $ map (L.sort . unValue) ret) `shouldBe` [[7], [8,9]]
+
+
+
+
+
 testPostgresModule :: Spec
 testPostgresModule = do
   describe "PostgreSQL module" $ do
@@ -317,7 +336,7 @@ run =
 
 
 verbose :: Bool
-verbose = False
+verbose = True
 
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
