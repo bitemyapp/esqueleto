@@ -17,7 +17,7 @@
 module Database.Esqueleto.Internal.Sql
   ( -- * The pretty face
     SqlQuery
-  , SqlExpr
+  , SqlExpr(..)
   , SqlEntity
   , select
   , selectSource
@@ -35,17 +35,25 @@ module Database.Esqueleto.Internal.Sql
   , unsafeSqlFunction
   , unsafeSqlExtractSubField
   , UnsafeSqlFunctionArgument
+  , OrderByClause
   , rawSelectSource
   , runSource
   , rawEsqueleto
   , toRawSql
   , Mode(..)
+  , NeedParens(..)
   , IdentState
   , initialIdentState
   , IdentInfo
   , SqlSelect(..)
   , veryUnsafeCoerceSqlExprValue
   , veryUnsafeCoerceSqlExprValueList
+  -- * Helper functions
+  , makeOrderByNoNewline
+  , uncommas'
+  , parens
+  , toArgList
+  , builderToText
   ) where
 
 import Control.Arrow ((***), first)
@@ -1145,9 +1153,10 @@ makeHaving info (Where (ERaw _ f))         = first ("\nHAVING " <>) (f info)
 makeHaving _    (Where (ECompositeKey _)) = throw (CompositeKeyErr MakeHavingError)
 
 -- makeHaving, makeWhere and makeOrderBy
-makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
-makeOrderBy _    [] = mempty
-makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
+makeOrderByNoNewline ::
+     IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
+makeOrderByNoNewline _    [] = mempty
+makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk os
   where
     mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
     mk (EOrderBy t (ERaw p f)) = [first ((<> orderByType t) . parensM p) (f info)]
@@ -1158,6 +1167,12 @@ makeOrderBy info os = first ("\nORDER BY " <>) . uncommas' $ concatMap mk os
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
+
+makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
+makeOrderBy _ [] = mempty
+makeOrderBy info is =
+  let (tlb, vals) = makeOrderByNoNewline info is
+  in ("\n" <> tlb, vals)
 
 {-# DEPRECATED EOrderRandom "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 

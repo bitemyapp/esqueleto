@@ -1,32 +1,32 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings
+           , GADTs
  #-}
 -- | This module contain PostgreSQL-specific functions.
 --
 -- /Since: 2.2.8/
 module Database.Esqueleto.PostgreSQL
-  ( arrayAggDistinct
+  ( AggMode(..)
+  , arrayAggDistinct
   , arrayAgg
+  , arrayAggWith
   , arrayRemove
   , arrayRemoveNull
   , stringAgg
+  , stringAggWith
   , chr
   , now_
   , random_
+  -- * Internal
+  , unsafeSqlAggregateFunction
   ) where
 
-import Database.Esqueleto.Internal.Language hiding (random_)
-import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Sql
-import Data.Time.Clock (UTCTime)
-
--- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
--- an array.
---
--- /Since: 2.5.3/
-arrayAggDistinct :: SqlExpr (Value a) -> SqlExpr (Value [a])
-arrayAggDistinct = arrayAgg . distinct'
-  where
-    distinct' = unsafeSqlBinOp " " (unsafeSqlValue "DISTINCT")
+import           Data.Monoid
+import qualified Data.Text.Internal.Builder                   as TLB
+import           Data.Time.Clock                              (UTCTime)
+import           Database.Esqueleto.Internal.Language         hiding (random_)
+import           Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Internal.Sql
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -35,12 +35,57 @@ arrayAggDistinct = arrayAgg . distinct'
 random_ :: (PersistField a, Num a) => SqlExpr (Value a)
 random_ = unsafeSqlValue "RANDOM()"
 
--- | (@array_agg@) Concatenate input values, including @NULL@s,
--- into an array.
+-- | Aggregate mode
+data AggMode = AggModeAll -- ^ ALL
+             | AggModeDistinct -- ^ DISTINCT
+  deriving (Show)
+
+-- | (Internal) Create a custom aggregate functions with aggregate mode
 --
--- /Since: 2.2.8/
+-- /Do/ /not/ use this function directly, instead define a new function and give
+-- it a type (see `unsafeSqlBinOp`)
+unsafeSqlAggregateFunction ::
+     UnsafeSqlFunctionArgument a
+  => TLB.Builder
+  -> AggMode
+  -> a
+  -> [OrderByClause]
+  -> SqlExpr (Value b)
+unsafeSqlAggregateFunction name mode args orderByClauses =
+  ERaw Never $ \info ->
+    let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
+        -- Don't add a space if we don't have order by clauses
+        orderTLBSpace = case orderByClauses of
+                          [] -> ""
+                          (_:_) -> " "
+        (argsTLB, argsVals) =
+          uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList args
+        aggMode = case mode of
+                    AggModeAll -> "" -- ALL is the default, so we don't need to
+                                     -- specify it
+                    AggModeDistinct -> "DISTINCT "
+    in ( name <> parens (aggMode <> argsTLB <> orderTLBSpace <> orderTLB)
+       , argsVals <> orderVals
+       )
+
+--- | (@array_agg@) Concatenate input values, including @NULL@s,
+--- into an array.
+arrayAggWith ::
+     AggMode -> SqlExpr (Value a) -> [OrderByClause] -> SqlExpr (Value [a])
+arrayAggWith = unsafeSqlAggregateFunction "array_agg"
+
+--- | (@array_agg@) Concatenate input values, including @NULL@s,
+--- into an array.
 arrayAgg :: SqlExpr (Value a) -> SqlExpr (Value [a])
-arrayAgg = unsafeSqlFunction "array_agg"
+arrayAgg x = arrayAggWith AggModeAll x []
+
+-- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
+-- an array.
+--
+-- /Since: 2.5.3/
+arrayAggDistinct :: SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayAggDistinct x = arrayAggWith AggModeDistinct x []
+
 
 -- | (@array_remove@) Remove all elements equal to the given value from the
 -- array.
@@ -51,20 +96,32 @@ arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
 
 -- | Remove @NULL@ values from an array
 arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
+-- This can't be a call to arrayRemove because it changes the value type
 arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.
+stringAggWith ::
+     SqlString s
+  => AggMode -- ^ Aggregate mode (ALL or DISTINCT)
+  -> SqlExpr (Value s) -- ^ Input values.
+  -> SqlExpr (Value s) -- ^ Delimiter.
+  -> [OrderByClause] -- ^ ORDER BY clauses
+  -> SqlExpr (Value s) -- ^ Concatenation.
+stringAggWith mode expr delim os =
+  unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
+
+-- | (@string_agg@) Concatenate input values separated by a
+-- delimiter.
 --
 -- /Since: 2.2.8/
-stringAgg
-  :: SqlString s
+stringAgg ::
+     SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> SqlExpr (Value s) -- ^ Concatenation.
-stringAgg expr delim = unsafeSqlFunction "string_agg" (expr, delim)
-
+stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
 -- depend on the character set of your database.)
