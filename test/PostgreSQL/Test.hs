@@ -4,23 +4,28 @@
            , RankNTypes
            , TypeFamilies
            , OverloadedStrings
+           , LambdaCase
  #-}
 module Main (main) where
 
+import Control.Arrow ((&&&))
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
-import Database.Esqueleto hiding (random_)
-import Database.Esqueleto.PostgreSQL (random_)
-import Database.Persist.Postgresql (withPostgresqlConn)
-import Data.Ord (comparing)
-import Control.Arrow ((&&&))
-import qualified Database.Esqueleto.PostgreSQL as EP
-import Test.Hspec
+import Control.Monad.Trans.Reader (ReaderT, ask)
 import qualified Control.Monad.Trans.Resource as R
+import qualified Data.Char as Char
 import qualified Data.List as L
+import Data.Ord (comparing)
+import qualified Data.Text as T
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Database.Esqueleto hiding (random_)
+import qualified Database.Esqueleto.Internal.Sql as ES
+import Database.Esqueleto.PostgreSQL (random_)
+import qualified Database.Esqueleto.PostgreSQL   as EP
+import Database.Persist.Postgresql (withPostgresqlConn)
+import System.Environment
+import Test.Hspec
 
 import Common.Test
 
@@ -237,27 +242,242 @@ testSelectDistinctOn = do
 
 
 
-testPostgresModule :: Spec
-testPostgresModule = do
-  describe "PostgreSQL module" $ do
-    it "arrayAgg looks sane" $
-      run $ do
-        let people = [p1, p2, p3, p4, p5]
-        mapM_ insert people
-        [Value ret] <-
-          select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
-        liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+testArrayAggWith :: Spec
+testArrayAggWith = do
+  describe "ALL, no ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge) [])
+      liftIO $ query `shouldBe`
+        "SELECT array_agg(\"Person\".\"age\")\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` []
 
-    it "stringAgg looks sane" $
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
+      liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+
+  describe "DISTINCT, no ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
+      liftIO $ query `shouldBe`
+        "SELECT array_agg(DISTINCT \"Person\".\"age\")\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` []
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
+      liftIO $ L.sort ret `shouldBe` [Nothing, Just 17, Just 36]
+
+  describe "ALL, ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge)
+                    [ asc $ p ^. PersonName
+                    , desc $ p ^. PersonFavNum
+                    ])
+      liftIO $ query `shouldBe`
+        "SELECT array_agg(\"Person\".\"age\" \
+          \ORDER BY \"Person\".\"name\" ASC, \"Person\".\"favNum\" DESC)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` []
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
+      liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+
+  describe "DISTINCT, ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+          return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
+                   [asc $ p ^. PersonAge])
+      liftIO $ query `shouldBe`
+        "SELECT array_agg(DISTINCT \"Person\".\"age\" \
+          \ORDER BY \"Person\".\"age\" ASC)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` []
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
+                   [asc $ p ^. PersonAge])
+      liftIO $ ret `shouldBe` [Just 17, Just 36, Nothing]
+
+
+
+
+
+testStringAggWith :: Spec
+testStringAggWith = do
+  describe "ALL, no ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return (EP.stringAggWith EP.AggModeAll (p ^. PersonName)
+                     (val " ") [])
+      liftIO $ query `shouldBe`
+        "SELECT string_agg(\"Person\".\"name\", ?)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` [PersistText " "]
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
+      liftIO $ (L.sort $ words ret) `shouldBe` L.sort (map personName people)
+
+    it "works with zero rows" $ run $ do
+      [Value ret] <-
+        select . from $ \p ->
+          return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
+      liftIO $ ret `shouldBe` Nothing
+
+  describe "DISTINCT, no ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
+                     (val " ") []
+      liftIO $ query `shouldBe`
+        "SELECT string_agg(DISTINCT \"Person\".\"name\", ?)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` [PersistText " "]
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3 {personName = "John"}, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
+                   []
+      liftIO $ (L.sort $ words ret) `shouldBe`
+        (L.sort . L.nub $ map personName people)
+
+  describe "ALL, ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
+                    [ asc $ p ^. PersonName
+                    , desc $ p ^. PersonFavNum
+                    ])
+      liftIO $ query `shouldBe`
+        "SELECT string_agg(\"Person\".\"name\", ? \
+          \ORDER BY \"Person\".\"name\" ASC, \"Person\".\"favNum\" DESC)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` [PersistText " "]
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return $ EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
+                    [desc $ p ^. PersonName]
+      liftIO $ (words ret)
+        `shouldBe` (L.reverse . L.sort $ map personName people)
+
+  describe "DISTINCT, ORDER BY" $ do
+    it "creates sane SQL" $ run $ do
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
+            return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
+                     (val " ") [desc $ p ^. PersonName]
+      liftIO $ query `shouldBe`
+        "SELECT string_agg(DISTINCT \"Person\".\"name\", ? \
+        \ORDER BY \"Person\".\"name\" DESC)\n\
+        \FROM \"Person\"\n"
+      liftIO $ args `shouldBe` [PersistText " "]
+
+    it "works on an example" $ run $ do
+      let people = [p1, p2, p3 {personName = "John"}, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p ->
+          return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
+                   [desc $ p ^. PersonName]
+      liftIO $ (words ret) `shouldBe`
+        (L.reverse . L.sort . L.nub $ map personName people)
+
+
+
+
+
+testAggregateFunctions :: Spec
+testAggregateFunctions = do
+  describe "arrayAgg" $ do
+    it "looks sane" $ run $ do
+      let people = [p1, p2, p3, p4, p5]
+      mapM_ insert people
+      [Value (Just ret)] <-
+        select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
+      liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+
+    it "works on zero rows" $ run $ do
+      [Value ret] <-
+        select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
+      liftIO $ ret `shouldBe` Nothing
+  describe "arrayAggWith" testArrayAggWith
+  describe "stringAgg" $ do
+    it "looks sane" $
       run $ do
         let people = [p1, p2, p3, p4, p5]
         mapM_ insert people
-        [Value ret] <-
+        [Value (Just ret)] <-
           select $
           from $ \p -> do
           return (EP.stringAgg (p ^. PersonName) (val " "))
         liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
+    it "works on zero rows" $ run $ do
+      [Value ret] <-
+        select . from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
+      liftIO $ ret `shouldBe` Nothing
+  describe "stringAggWith" testStringAggWith
 
+  describe "array_remove (NULL)" $ do
+    it "removes NULL from arrays from nullable fields" $ run $ do
+      mapM_ insert [ Person "1" Nothing   Nothing 1
+                   , Person "2" (Just 7)  Nothing 1
+                   , Person "3" (Nothing) Nothing 1
+                   , Person "4" (Just 8)  Nothing 2
+                   , Person "5" (Just 9)  Nothing 2
+                   ]
+      ret <- select . from $ \(person :: SqlExpr (Entity Person)) -> do
+        groupBy (person ^. PersonFavNum)
+        return . EP.arrayRemoveNull . EP.maybeArray . EP.arrayAgg
+          $ person ^. PersonAge
+      liftIO $ (L.sort $ map (L.sort . unValue) ret)
+        `shouldBe` [[7], [8,9]]
+
+  describe "maybeArray" $ do
+    it "Coalesces NULL into an empty array" $ run $ do
+      [Value ret] <-
+        select . from $ \p ->
+          return (EP.maybeArray $ EP.arrayAgg (p ^. PersonName))
+      liftIO $ ret `shouldBe` []
+
+
+
+
+
+testPostgresModule :: Spec
+testPostgresModule = do
+  describe "PostgreSQL module" $ do
+    describe "Aggregate functions" testAggregateFunctions
     it "chr looks sane" $
       run $ do
         [Value (ret :: String)] <- select $ return (EP.chr (val 65))
@@ -310,11 +530,15 @@ main = do
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
-run =
-  if verbose
-  then runVerbose
-  else runSilent
-
+run f = do
+  verbose' <- lookupEnv "VERBOSE" >>= \case
+    Nothing -> return verbose
+    Just x | map Char.toLower x == "true" -> return True
+           | null x -> return True
+           | otherwise -> return False
+  if verbose'
+    then runVerbose f
+    else runSilent f
 
 verbose :: Bool
 verbose = False
@@ -330,3 +554,11 @@ run_worker act = withConn $ runSqlConn (migrateIt >> act)
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
   R.runResourceT . withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+
+-- | Show the SQL generated by a query
+showQuery :: (Monad m, ES.SqlSelect a r, BackendCompatible SqlBackend backend)
+          => ES.Mode -> SqlQuery a -> ReaderT backend m (T.Text, [PersistValue])
+showQuery mode query = do
+  backend <- ask
+  let (builder, values) = ES.toRawSql mode (backend, ES.initialIdentState) query
+  return (ES.builderToText builder, values)
