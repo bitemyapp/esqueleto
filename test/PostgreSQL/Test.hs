@@ -242,25 +242,6 @@ testSelectDistinctOn = do
 
 
 
-testArrayRemoveNull :: SpecWith (Arg (IO ()))
-testArrayRemoveNull = do
-  describe "array_remove (NULL)" $ do
-    it "removes NULL from arrays from nullable fields" $ run $ do
-      mapM_ insert [ Person "1" Nothing   Nothing 1
-                   , Person "2" (Just 7)  Nothing 1
-                   , Person "3" (Nothing) Nothing 1
-                   , Person "4" (Just 8)  Nothing 2
-                   , Person "5" (Just 9)  Nothing 2
-                   ]
-      ret <- select . from $ \(person :: SqlExpr (Entity Person)) -> do
-        groupBy (person ^. PersonFavNum)
-        return . EP.arrayRemoveNull $ EP.arrayAgg (person ^. PersonAge)
-      liftIO $ (L.sort $ map (L.sort . unValue) ret) `shouldBe` [[7], [8,9]]
-
-
-
-
-
 testArrayAggWith :: Spec
 testArrayAggWith = do
   describe "ALL, no ORDER BY" $ do
@@ -275,7 +256,7 @@ testArrayAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
@@ -292,7 +273,7 @@ testArrayAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ L.sort ret `shouldBe` [Nothing, Just 17, Just 36]
@@ -313,7 +294,7 @@ testArrayAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
@@ -332,7 +313,7 @@ testArrayAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
@@ -357,7 +338,7 @@ testStringAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ (L.sort $ words ret) `shouldBe` L.sort (map personName people)
@@ -366,7 +347,7 @@ testStringAggWith = do
       [Value ret] <-
         select . from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
-      liftIO $ ret `shouldBe` ""
+      liftIO $ ret `shouldBe` Nothing
 
   describe "DISTINCT, no ORDER BY" $ do
     it "creates sane SQL" $ run $ do
@@ -381,7 +362,7 @@ testStringAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
                    []
@@ -404,7 +385,7 @@ testStringAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return $ EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
                     [desc $ p ^. PersonName]
@@ -425,7 +406,7 @@ testStringAggWith = do
     it "works on an example" $ run $ do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p ->
           return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
                    [desc $ p ^. PersonName]
@@ -442,21 +423,52 @@ testAggregateFunctions = do
     it "looks sane" $ run $ do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
-      [Value ret] <-
+      [Value (Just ret)] <-
         select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
+
+    it "works on zero rows" $ run $ do
+      [Value ret] <-
+        select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
+      liftIO $ ret `shouldBe` Nothing
   describe "arrayAggWith" testArrayAggWith
   describe "stringAgg" $ do
     it "looks sane" $
       run $ do
         let people = [p1, p2, p3, p4, p5]
         mapM_ insert people
-        [Value ret] <-
+        [Value (Just ret)] <-
           select $
           from $ \p -> do
           return (EP.stringAgg (p ^. PersonName) (val " "))
         liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
+    it "works on zero rows" $ run $ do
+      [Value ret] <-
+        select . from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
+      liftIO $ ret `shouldBe` Nothing
   describe "stringAggWith" testStringAggWith
+
+  describe "array_remove (NULL)" $ do
+    it "removes NULL from arrays from nullable fields" $ run $ do
+      mapM_ insert [ Person "1" Nothing   Nothing 1
+                   , Person "2" (Just 7)  Nothing 1
+                   , Person "3" (Nothing) Nothing 1
+                   , Person "4" (Just 8)  Nothing 2
+                   , Person "5" (Just 9)  Nothing 2
+                   ]
+      ret <- select . from $ \(person :: SqlExpr (Entity Person)) -> do
+        groupBy (person ^. PersonFavNum)
+        return . EP.arrayRemoveNull . EP.maybeArray . EP.arrayAgg
+          $ person ^. PersonAge
+      liftIO $ (L.sort $ map (L.sort . unValue) ret)
+        `shouldBe` [[7], [8,9]]
+
+  describe "maybeArray" $ do
+    it "Coalesces NULL into an empty array" $ run $ do
+      [Value ret] <-
+        select . from $ \p ->
+          return (EP.maybeArray $ EP.arrayAgg (p ^. PersonName))
+      liftIO $ ret `shouldBe` []
 
 
 

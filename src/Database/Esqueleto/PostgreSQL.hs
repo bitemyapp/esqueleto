@@ -14,6 +14,7 @@ module Database.Esqueleto.PostgreSQL
   , arrayRemoveNull
   , stringAgg
   , stringAggWith
+  , maybeArray
   , chr
   , now_
   , random_
@@ -34,6 +35,17 @@ import           Database.Esqueleto.Internal.Sql
 -- /Since: 2.6.0/
 random_ :: (PersistField a, Num a) => SqlExpr (Value a)
 random_ = unsafeSqlValue "RANDOM()"
+
+-- | Empty array literal. (@val []@) does unfortunately not work
+emptyArray :: SqlExpr (Value [a])
+emptyArray = unsafeSqlValue "'{}'"
+
+-- | Coalesce an array with an empty default value
+maybeArray ::
+     (PersistField a, PersistField [a])
+  => SqlExpr (Value (Maybe [a]))
+  -> SqlExpr (Value [a])
+maybeArray x = coalesceDefault [x] (emptyArray)
 
 -- | Aggregate mode
 data AggMode = AggModeAll -- ^ ALL
@@ -71,19 +83,25 @@ unsafeSqlAggregateFunction name mode args orderByClauses =
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
 arrayAggWith ::
-     AggMode -> SqlExpr (Value a) -> [OrderByClause] -> SqlExpr (Value [a])
+     AggMode
+  -> SqlExpr (Value a)
+  -> [OrderByClause]
+  -> SqlExpr (Value (Maybe [a]))
 arrayAggWith = unsafeSqlAggregateFunction "array_agg"
 
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
-arrayAgg :: SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe [a]))
 arrayAgg x = arrayAggWith AggModeAll x []
 
 -- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
 -- an array.
 --
 -- /Since: 2.5.3/
-arrayAggDistinct :: SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayAggDistinct ::
+     (PersistField a, PersistField [a])
+  => SqlExpr (Value a)
+  -> SqlExpr (Value (Maybe [a]))
 arrayAggDistinct x = arrayAggWith AggModeDistinct x []
 
 
@@ -108,7 +126,7 @@ stringAggWith ::
   -> SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlExpr (Value s) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
 stringAggWith mode expr delim os =
   unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
 
@@ -120,7 +138,7 @@ stringAgg ::
      SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
-  -> SqlExpr (Value s) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
