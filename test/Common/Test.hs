@@ -13,6 +13,7 @@
            , TemplateHaskell
            , TypeFamilies
            , ScopedTypeVariables
+           , TypeApplications
            , TypeSynonymInstances
  #-}
 
@@ -824,20 +825,19 @@ testAscRandom rand' run =
 testSelectDistinct :: Run -> Spec
 testSelectDistinct run = do
   describe "SELECT DISTINCT" $ do
-    let selDistTest
-          :: (   forall m. RunDbMonad m
-              => SqlQuery (SqlExpr (Value String))
-              -> SqlPersistT (R.ResourceT m) [Value String])
-          -> IO ()
+    let selDistTest :: ( forall m . RunDbMonad m
+                    => SqlQuery (SqlExpr (Value String))
+                    -> SqlPersistT (R.ResourceT m) [Value String])
+                    -> IO ()
         selDistTest q = run $ do
           p1k <- insert p1
           let (t1, t2, t3) = ("a", "b", "c")
           mapM_ (insert . flip BlogPost p1k) [t1, t3, t2, t2, t1]
           ret <- q $
-                 from $ \b -> do
-                 let title = b ^. BlogPostTitle
-                 orderBy [asc title]
-                 return title
+                   from $ \b -> do
+                   let title = b ^. BlogPostTitle
+                   orderBy [asc title]
+                   return title
           liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
     it "works on a simple example (select . distinct)" $
@@ -1374,29 +1374,51 @@ type RunDbMonad m = ( MonadUnliftIO m
 -- type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 
 
-type Run' backend = forall a
-                  . ( forall m
-                    . (RunDbMonad m)
-                   => ReaderT backend (R.ResourceT m) a)
-                -> IO a
+-- type Run' backend = forall a
+--                   . ( forall m
+--                     . (RunDbMonad m)
+--                    => ReaderT backend (R.ResourceT m) a)
+--                 -> IO a
 
-type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+-- type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 
-type RunRead = forall a. (forall m. RunDbMonad m => SqlReadT (R.ResourceT m) a) -> IO a
+-- type RunRead = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 
-type RunWrite = forall a. (forall m. RunDbMonad m => SqlWriteT (R.ResourceT m) a) -> IO a
+-- type RunWrite = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+
+type Run = forall a . (forall m . RunDbMonad m => ReaderT SqlBackend (R.ResourceT m) a) -> IO a
+type RunRead = forall m a . ReaderT SqlReadBackend m a -> m a
+type RunWrite = forall m a . ReaderT SqlWriteBackend m a -> m a
+
+-- -runRead
+-- -  :: ( R.MonadUnliftIO m
+-- -     , m ~ IO
+-- -     , MonadIO m )
+-- -  => ReaderT SqlReadBackend m a
+-- -  -> m a
+-- -runRead = undefined
+-- -
+-- -runWrite
+-- -  :: ( R.MonadUnliftIO m
+-- -     , m ~ IO
+-- -     , MonadIO m )
+-- -  => ReaderT SqlWriteBackend m a
+-- -  -> m a
+-- -runWrite = undefined
 
 -- type RunWrite = forall a. (forall backend m. (backend ~ SqlBackend, SqlBackendCanWrite backend, RunDbMonad m) => ReaderT backend (R.ResourceT m) a) -> IO a
 
-type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+type WithConn m a =
+      RunDbMonad m
+   => (SqlBackend -> R.ResourceT m a)
+   -> m a
 
 -- With SQLite and in-memory databases, a separate connection implies a
 -- separate database. With 'actual databases', the data is persistent and
 -- thus must be cleaned after each test.
 -- TODO: there is certainly a better way...
 cleanDB
-  :: (forall m. RunDbMonad m
-  => SqlPersistT (R.ResourceT m) ())
+  :: SqlPersistT (R.ResourceT IO) ()
 cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()

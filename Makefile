@@ -1,27 +1,33 @@
+package = esqueleto
+stack = STACK_YAML='stack.yaml' stack
+
 build:
-	stack build
+	$(stack) build
 
 build-tests:
-	stack build --test --no-run-tests
+	$(stack) build --test --no-run-tests
 
 ghci:
-	stack ghci
+	$(stack) ghci
+
+ghcid:
+	ghcid -c "$(stack) ghci $(package):lib --test --ghci-options='-fobject-code -fno-warn-unused-do-bind' --main-is $(package):test:read-write"
 
 test:
-	stack test
+	$(stack) test
 
 # Intended for use in local dev
 test-postgresql: reset-pgsql
-	stack test esqueleto:postgresql
+	$(stack) test $(package):postgresql
 
 test-mysql:
-	stack test esqueleto:mysql
+	$(stack) test $(package):mysql
 
 test-readwrite:
-	stack test esqueleto:test:read-write
+	$(stack) test $(package):test:read-write
 
 test-readwrite-ghci:
-	stack ghci esqueleto:test:read-write
+	$(stack) ghci $(package):test:read-write
 
 # sudo -u postgres createuser -s - esqueleto-test
 reset-pgsql:

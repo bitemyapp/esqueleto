@@ -23,11 +23,12 @@ import Common.Test
 
 testWriteFailsInRead :: Spec
 testWriteFailsInRead =
-  -- it "fails when we insert under a `RunRead`" $
-  --   -- shouldNotTypecheck <$> run $ do
-  --   --   void $ insert p1
-  --   runWrite $ do
-  --     void $ insert p1
+  it "fails when we insert under a `RunRead`" $ do
+    res <- runRead $ do
+      void $ insert p1
+    shouldNotTypecheck res
+    -- runRead $ do
+    --   void $ insert p1
 
   -- it "fails when we delete under a `RunRead`" $
   --   runWrite $ do
@@ -40,15 +41,15 @@ testWriteFailsInRead =
   --              set person [ PersonName =. val "João" ]
   --              where_ (person ^. PersonId ==. val (toSqlKey 1))
 
-insert''
-  :: ( -- PersistEntityBackend record ~ SqlBackend,
-      PersistEntityBackend record ~ BaseBackend backend,
-      -- BaseBackend SqlBackend ~ SqlBackend,
-      -- BackendCompatible SqlBackend backend,
-      PersistEntity record, PersistStoreWrite backend,
-      Control.Monad.IO.Class.MonadIO m) =>
-     record -> ReaderT backend m (Key record)
-insert'' = undefined
+-- insert''
+--   :: ( -- PersistEntityBackend record ~ SqlBackend,
+--       PersistEntityBackend record ~ BaseBackend backend,
+--       -- BaseBackend SqlBackend ~ SqlBackend,
+--       -- BackendCompatible SqlBackend backend,
+--       PersistEntity record, PersistStoreWrite backend,
+--       Control.Monad.IO.Class.MonadIO m) =>
+--      record -> ReaderT backend m (Key record)
+-- insert'' = undefined
 
 -- update''
 --   :: (MonadIO m,
@@ -63,27 +64,11 @@ insert'' = undefined
 --      -> ReaderT backend m ()
 -- update'' = undefined
 
-runRead
-  :: ( R.MonadUnliftIO m
-     , m ~ IO
-     , MonadIO m )
-  => ReaderT SqlReadBackend m a
-  -> m a
-runRead = undefined
+runRead :: RunRead
+runRead = run
 
-runWrite
-  :: ( R.MonadUnliftIO m
-     , m ~ IO
-     , MonadIO m )
-  => ReaderT SqlWriteBackend m a
-  -> m a
-runWrite = undefined
-
--- runRead :: RunRead
--- runRead = run
-
--- runWrite :: RunWrite
--- runWrite = run
+runWrite :: RunWrite
+runWrite = run
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
@@ -96,18 +81,9 @@ run =
 verbose :: Bool
 verbose = False
 
-runMigrationSilent' ::
-  (PersistUniqueWrite backend, PersistQueryWrite backend,
-    BackendCompatible SqlBackend backend, MonadIO m) =>
-  Migration -> ReaderT backend m ()
-  -- (R.MonadUnliftIO m, MonadIO m) =>
-  -- Migration -> ReaderT SqlBackend m [Data.Text.Internal.Text]
-  -- 	-- Defined in ‘persistent-2.8.1:Database.Persist.Sql.Migration’
-runMigrationSilent' = undefined
-
-migrateIt :: RunDbMonad m => SqlWriteT (R.ResourceT m) ()
+migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
-  void $ runMigrationSilent' migrateAll
+  void $ runMigrationSilent migrateAll
   -- cleanDB
 
 run_worker

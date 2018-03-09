@@ -974,8 +974,9 @@ update
   ::
   ( PersistEntityBackend val ~ (BaseBackend backend)
   , PersistEntity val
-  , PersistUniqueWrite backend
-  , PersistQueryWrite backend
+  -- , PersistUniqueWrite backend
+  -- , PersistQueryWrite backend
+  , SqlBackendCanWrite backend
   , BackendCompatible SqlBackend backend
   , BackendCompatible SqlBackend (BaseBackend backend)
   -- , BackendCompatible SqlBackend (PersistEntityBackend val)
