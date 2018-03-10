@@ -3,6 +3,10 @@ resolver: lts-10.6
 packages:
 - '.'
 - location: ../should-not-typecheck
+  extra-dep: false
+- location: ../persistent
+  subdirs:
+    - persistent-postgresql
   extra-dep: true
 
 # - examples
@@ -10,7 +14,7 @@ packages:
 extra-deps:
 - persistent-2.8.1
 - persistent-mysql-2.8.1
-- persistent-postgresql-2.8.1
+# - persistent-postgresql-2.8.1
 - persistent-sqlite-2.8.1
 - conduit-1.3.0
 - conduit-extra-1.3.0

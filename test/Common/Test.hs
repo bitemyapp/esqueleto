@@ -1356,7 +1356,6 @@ tests run = do
 
 
 
-
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
            , PersistStore backend
@@ -1418,7 +1417,7 @@ type WithConn m a =
 -- thus must be cleaned after each test.
 -- TODO: there is certainly a better way...
 cleanDB
-  :: SqlPersistT (R.ResourceT IO) ()
+  :: MonadIO m => SqlPersistT (R.ResourceT m) ()
 cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
