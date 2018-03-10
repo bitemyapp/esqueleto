@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -fdefer-type-errors #-}
+{-# OPTIONS_GHC -ddump-ds -ddump-to-file -Wno-deferred-type-errors #-}
+
 {-# LANGUAGE FlexibleContexts
            , ConstraintKinds
            , OverloadedStrings
@@ -10,6 +12,7 @@
 
 module ReadWrite.ShouldNotTypeCheck where
 
+import Control.DeepSeq
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Logger
@@ -18,142 +21,122 @@ import Control.Monad.Trans.Reader (ReaderT(..), withReaderT)
 import Database.Esqueleto hiding (random_)
 import Database.Persist.Postgresql (withPostgresqlConn)
 import Test.Hspec
-import Test.ShouldNotTypecheck
+import Test.ShouldNotTypecheck (shouldNotTypecheck, shouldNotTypecheckWith)
 import qualified Control.Monad.Trans.Resource as R
 import System.IO.Unsafe
 import Common.Test
 
-readCannotWrite =
+readCannotInsert :: String
+readCannotInsert =
   "Could not deduce (PersistStoreWrite SqlReadBackend)"
 
+readCannotUpdate :: String
+readCannotUpdate =
+  "Could not deduce (PersistQueryWrite SqlReadBackend)"
+
 testWriteFailsInRead :: Spec
-testWriteFailsInRead =
+testWriteFailsInRead = do
   it "fails when we insert under a `RunRead`" $ do
-    -- res <- runRead $ do
-    --   void $ insert p1
-    -- shouldNotTypecheck res
-    shouldNotTypecheckWith readCannotWrite $ unsafePerformIO $ runRead $ do
-    -- shouldNotTypecheck $ unsafePerformIO $ runRead $ do
+    shouldNotTypecheckWith readCannotInsert $ unsafePerformIO $ runRead $ do
       void $ insert p1
-    -- runRead $ do
-    --   void $ insert p1
 
   -- it "fails when we delete under a `RunRead`" $
-  --   runWrite $ do
-  --     void $ delete $
-  --              from $ \person ->
-  --              where_ (person ^. PersonId ==. val (toSqlKey 1))
-  -- it "fails when we update under a `RunRead`" $
-  --   runWrite $ do
-  --     void $ update $ \person -> do
-  --              set person [ PersonName =. val "João" ]
-  --              where_ (person ^. PersonId ==. val (toSqlKey 1))
+  --   shouldNotTypecheck $ unsafePerformIO $ do
+  --     res <- runRead $ do
+  --       void $ delete $
+  --                from $ \person ->
+  --                where_ (person ^. PersonId ==. val (toSqlKey 1))
+  --     deepseq res (return ())
 
--- insert''
---   :: ( -- PersistEntityBackend record ~ SqlBackend,
---       PersistEntityBackend record ~ BaseBackend backend,
---       -- BaseBackend SqlBackend ~ SqlBackend,
---       -- BackendCompatible SqlBackend backend,
---       PersistEntity record, PersistStoreWrite backend,
---       Control.Monad.IO.Class.MonadIO m) =>
---      record -> ReaderT backend m (Key record)
--- insert'' = undefined
+  it "fails when we update under a `RunRead`" $
+    shouldNotTypecheckWith readCannotUpdate $ unsafePerformIO $ do
+      -- We have to force the underlying type error
+      -- or it erroneously succeeds. Buy me (@bitemyapp)
+      -- a beer and I'll explain in more detail.
+      runRead $ do
+        let q = update $ \person -> do
+                  set person [ PersonName =. val "João" ]
+                  where_ (person ^. PersonId ==. val (toSqlKey 1))
+        deepseq q (return ())
+      -- deepseq res (return ())
 
--- update''
---   :: (MonadIO m,
---       -- BackendCompatible SqlBackend (PersistEntityBackend val),
---       PersistEntityBackend val ~ BaseBackend backend,
---       PersistStoreWrite backend,
---       -- PersistEntity val,
---       -- PersistQueryWrite (PersistEntityBackend val),
---       -- PersistUniqueWrite (PersistEntityBackend val),
---       PersistEntity val) =>
---      (SqlExpr (Entity val) -> SqlQuery ())
---      -> ReaderT backend m ()
--- update'' = undefined
+type DBM = NoLoggingT (R.ResourceT IO)
 
--- type SqlWithBackend backend a =
---   forall m . (BackendCompatible backend SqlBackend, MonadLogger m, RunDbMonad m) => ReaderT backend (R.ResourceT (NoLoggingT m)) a
-
--- runRead :: (MonadLogger m, RunDbMonad m) => SqlWithBackend SqlReadBackend a
---         -> m a
-runRead :: (RunDbMonad m) => ReaderT SqlReadBackend m a -> m a
+runRead :: ReaderT SqlReadBackend DBM a
+        -> IO a
 runRead act = run_worker act
--- runRead act = runDB act
 
-  -- withConn $ runSqlConn (migrateIt >> (withReaderT projectBackend act))
+-- runRead act = runNoLoggingT $ run_worker act
 
--- runWrite :: (RunDbMonad m)
---          => ReaderT SqlWriteBackend (R.ResourceT m) ()
---          -> m ()
--- runWrite act = logAction $ run_worker act
+runWrite :: ReaderT SqlWriteBackend DBM a -> IO a
+runWrite act = run_worker act
 
+-- runWrite :: (RunDbMonad m) => ReaderT SqlWriteBackend m a -> m a
+-- runWrite act = run_worker act
 
--- run, runSilent, runVerbose :: Run
--- run :: (RunDbMonad m) => ReaderT backend (R.ResourceT m) a -> m a
--- run :: (RunDbMonad m) => ReaderT backend (R.ResourceT (NoLoggingT m)) a -> m a
--- run act = logAction $ run_worker act
-
--- logAction :: NoLoggingT m a -> m a
--- logAction :: LoggingT m a -> m a
--- logAction = runNoLoggingT -- runStderrLoggingT
-
-type BackendConstraints backend =
-  ( BackendCompatible SqlBackend backend
-  , IsPersistBackend backend
-  )
-  -- (IsPersistBackend backend, BaseBackend backend ~ SqlBackend)
--- migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
--- migrateIt :: ( BackendConstraints backend
---              , RunDbMonad m
---              )
---           => ReaderT backend m ()
-migrateIt :: (RunDbMonad m, Functor m) => ReaderT SqlBackend m ()
--- migrateIt :: a
 -- migrateIt :: ( RunDbMonad m
---              , IsSqlBackend backend
+--              , Functor m
 --              )
---           => ReaderT backend m ()
+--           => ReaderT SqlBackend m ()
+-- migrateIt = do
+--   void $ runMigrationSilent migrateAll
+
+migrateIt :: ReaderT SqlBackend DBM ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
-  -- cleanDB
 
 run_worker
-  :: ( -- BackendCompatible backend SqlBackend
-       -- BackendCompatible SqlBackend backend
-     --   IsPersistBackend backend
-       RunDbMonad m
-     , IsSqlBackend backend
-     -- , BaseBackend backend ~ SqlBackend
+  :: ( -- RunDbMonad m
+     -- , LogIO m
+       IsSqlBackend backend
+     , BackendCompatible SqlBackend backend
      )
-  => ReaderT backend m a
-  -> m a
+  => ReaderT backend DBM a
+  -> IO a
 run_worker act = do
-  runDB migrateIt
-  runDB act
-  -- runDB (migrateIt >> (withReaderT persistBackend act))
-  -- runDB (migrateIt >> (withReaderT projectBackend act))
-  -- (withReaderT projectBackend act))
+  runDB $ do
+    withReaderT projectBackend migrateIt
+    act
 
--- withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
--- withConn =
---   R.runResourceT . withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+-- run_worker
+--   :: ( RunDbMonad m
+--      -- , LogIO m
+--      , IsSqlBackend backend
+--      , BackendCompatible SqlBackend backend
+--      )
+--   => ReaderT backend m a
+--   -> m a
+-- run_worker act = do
+--   runDB $ do
+--     withReaderT projectBackend migrateIt
+--     act
 
--- runDB :: SqlPersistM a -> IO a
--- runDB query =
---     R.runResourceT
---   $ runNoLoggingT
---   -- $ NoLoggingT
---   $ withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
---   $ runReaderT
---   $ withReaderT persistBackend query
 
 runDB
-  :: ( RunDbMonad m
-     , IsSqlBackend backend
+  :: ( -- RunDbMonad m
+     -- , LogIO m
+       IsSqlBackend backend
      )
-  => ReaderT backend m a
-  -- :: (RunDbMonad m) => ReaderT SqlBackend m a
-  -> m a
-runDB action = runNoLoggingT $ NoLoggingT $
+  => ReaderT backend DBM a
+  -> IO a
+runDB action = R.runResourceT $ runNoLoggingT $
   withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest" $ runReaderT action
+
+-- runDB
+--   :: ( RunDbMonad m
+--      -- , LogIO m
+--      , IsSqlBackend backend
+--      )
+--   => ReaderT backend m a
+--   -> m a
+-- runDB action =
+--   withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest" $ runReaderT action
+
+  -- -- R.runResourceT $
+  --   -- runNoLoggingT $
+  --   withPostgresqlPool "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest" 1
+  -- $ \pool -> liftIO $ runSqlPersistMPool action pool
+
+  -- runNoLoggingT $
+  --   withPostgresqlPool devConn 3
+  --     $ \pool -> liftIO $ runSqlPersistMPool a pool

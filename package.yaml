@@ -128,6 +128,7 @@ tests:
     ghc-options: -Wall
     dependencies:
       - containers
+      - deepseq
       - esqueleto
       - hspec
       - persistent-postgresql

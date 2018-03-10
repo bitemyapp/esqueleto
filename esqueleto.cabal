@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 17ed8441729a866396754db730fda02c7e20e4dc50d0ad710e918ca43a56ad64
+-- hash: 85ee6d5c3d1ada00e37fcb8972a10e8c2f19c3f07c72f7e97e49962527db0864
 
 name:           esqueleto
 version:        2.6.0
@@ -137,6 +137,7 @@ test-suite read-write
     , bytestring
     , conduit >=1.3
     , containers
+    , deepseq
     , esqueleto
     , hspec
     , monad-logger

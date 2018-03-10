@@ -1367,8 +1367,19 @@ insert' v = flip Entity v <$> insert v
 
 type RunDbMonad m = ( MonadUnliftIO m
                     , MonadIO m
-                    , MonadLogger m
-                    , MonadThrow m )
+                    , MonadThrow m
+                    -- , MonadLogger m
+                    -- , m ~ NoLoggingT IO
+                    )
+
+type RunDbMonad' m = ( MonadUnliftIO m
+                    , MonadIO m
+                    , MonadThrow m
+                    )
+
+-- type LogIO m = ( RunDbMonad m
+--                , MonadLogger m
+--                )
 
 -- type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
 

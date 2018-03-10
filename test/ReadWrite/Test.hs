@@ -33,26 +33,26 @@ main = do
     -- describe "Write specific tests" $ do
     --   undefined
 
-run, runSilent, runVerbose :: Run
-runSilent  act = runNoLoggingT     $ run_worker act
-runVerbose act = runStderrLoggingT $ run_worker act
-run =
-  if verbose
-  then runVerbose
-  else runSilent
+-- run, runSilent, runVerbose :: Run
+-- runSilent  act = runNoLoggingT     $ run_worker act
+-- runVerbose act = runStderrLoggingT $ run_worker act
+-- run =
+--   if verbose
+--   then runVerbose
+--   else runSilent
 
 
-verbose :: Bool
-verbose = False
+-- verbose :: Bool
+-- verbose = False
 
-migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
-migrateIt = do
-  void $ runMigrationSilent migrateAll
-  cleanDB
+-- migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
+-- migrateIt = do
+--   void $ runMigrationSilent migrateAll
+--   cleanDB
 
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
+-- run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
+-- run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn =
-  R.runResourceT . withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+-- withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+-- withConn =
+--   R.runResourceT . withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"

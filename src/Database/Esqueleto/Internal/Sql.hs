@@ -972,18 +972,26 @@ update
   --    (SqlExpr (Entity val) -> SqlQuery ())
   --    -> R.ReaderT backend m ()
   ::
-  ( PersistEntityBackend val ~ (BaseBackend backend)
-  , PersistEntity val
+  ( PersistEntityBackend record ~ (BaseBackend backend)
+  , PersistEntity record
+
   -- , PersistUniqueWrite backend
   -- , PersistQueryWrite backend
+  -- , PersistStoreWrite backend
+
   , SqlBackendCanWrite backend
   , BackendCompatible SqlBackend backend
   , BackendCompatible SqlBackend (BaseBackend backend)
   -- , BackendCompatible SqlBackend (PersistEntityBackend val)
-  , PersistEntity val
+  , PersistEntity record
   , MonadIO m
   )
-  => (SqlExpr (Entity val) -> SqlQuery ())
+  -- :: ( PersistEntityBackend record ~ BaseBackend backend
+  --    , PersistEntity record
+  --    , PersistStoreWrite backend
+  --    , MonadIO m
+  --    )
+  => (SqlExpr (Entity record) -> SqlQuery ())
   -> R.ReaderT backend m ()
 
   -- ::
@@ -1010,14 +1018,22 @@ updateCount
   --    (SqlExpr (Entity val) -> SqlQuery ())
   -- -> R.ReaderT backend m Int64
   :: ( MonadIO m
-     , PersistEntity val
-     , PersistEntityBackend val ~ (BaseBackend backend)
+     , PersistEntity record
+     , PersistEntityBackend record ~ (BaseBackend backend)
      , BackendCompatible SqlBackend backend
      , BackendCompatible SqlBackend (BaseBackend backend)
+     , SqlBackendCanWrite backend
      -- , BackendCompatible SqlBackend (PersistEntityBackend val)
-     , PersistQueryWrite backend
-     , PersistUniqueWrite backend)
-  => (SqlExpr (Entity val) -> SqlQuery ())
+     -- , PersistQueryWrite backend
+     -- , PersistUniqueWrite backend
+     -- , PersistStoreWrite backend
+     )
+  -- :: ( PersistEntityBackend record ~ BaseBackend backend
+  --    , PersistEntity record
+  --    , PersistStoreWrite backend
+  --    , MonadIO m
+  --    )
+  => (SqlExpr (Entity record) -> SqlQuery ())
   -> R.ReaderT backend m Int64
   -- :: ( MonadIO m
   --    , PersistEntity val
