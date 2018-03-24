@@ -9,7 +9,7 @@ module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT, MonadLogger)
 import Control.Monad.Trans.Reader (ReaderT)
 import Database.Persist.Sqlite (withSqliteConn)
 import Database.Sqlite (SqliteException)
@@ -201,7 +201,7 @@ verbose :: Bool
 verbose = False
 
 
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
+run_worker :: (MonadLogger m, RunDbMonad m) => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 
@@ -210,6 +210,6 @@ migrateIt = do
   void $ runMigrationSilent migrateAll
 
 
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+withConn :: (MonadLogger m, RunDbMonad m) => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
   R.runResourceT . withSqliteConn ":memory:"

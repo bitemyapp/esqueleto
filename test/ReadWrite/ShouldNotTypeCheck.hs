@@ -21,10 +21,12 @@ import Control.Monad.Trans.Reader (ReaderT(..), withReaderT)
 import Database.Esqueleto hiding (random_)
 import Database.Persist.Postgresql (withPostgresqlConn)
 import Test.Hspec
-import Test.ShouldNotTypecheck (shouldNotTypecheck, shouldNotTypecheckWith)
+import Test.ShouldNotTypecheck (shouldNotTypecheck)
 import qualified Control.Monad.Trans.Resource as R
 import System.IO.Unsafe
 import Common.Test
+
+shouldNotTypecheckWith _ = shouldNotTypecheck
 
 readCannotInsert :: String
 readCannotInsert =
@@ -38,7 +40,8 @@ testWriteFailsInRead :: Spec
 testWriteFailsInRead = do
   it "fails when we insert under a `RunRead`" $ do
     shouldNotTypecheckWith readCannotInsert $ unsafePerformIO $ runRead $ do
-      void $ insert p1
+      x <- insert p1
+      deepseq x (return ())
 
   -- it "fails when we delete under a `RunRead`" $
   --   shouldNotTypecheck $ unsafePerformIO $ do
@@ -57,8 +60,8 @@ testWriteFailsInRead = do
         let q = update $ \person -> do
                   set person [ PersonName =. val "João" ]
                   where_ (person ^. PersonId ==. val (toSqlKey 1))
-        deepseq q (return ())
-      -- deepseq res (return ())
+        x <- q
+        deepseq x (pure ())
 
 type DBM = NoLoggingT (R.ResourceT IO)
 

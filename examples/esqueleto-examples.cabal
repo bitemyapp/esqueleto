@@ -1,0 +1,50 @@
+-- This file has been generated from package.yaml by hpack version 0.20.0.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: a8700381cc0eca4599640547186b645f0d5d5a0fdf8dd1114ad8a927618a33c3
+
+name:           esqueleto-examples
+version:        0.0.0.0
+category:       Database
+homepage:       https://github.com/FintanH/esqueleto#readme
+bug-reports:    https://github.com/FintanH/esqueleto/issues
+author:         Fintan Halpenny
+maintainer:     fintan.halpenny@gmail.com
+copyright:      2017, Chris Allen
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/FintanH/esqueleto
+
+flag werror
+  description: Treat warnings as errors
+  manual: True
+  default: False
+
+executable blog-example
+  main-is: Main.hs
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , esqueleto
+    , monad-control
+    , monad-logger
+    , mtl
+    , persistent
+    , persistent-postgresql
+    , persistent-template
+    , transformers-base
+    , unliftio
+  if flag(werror)
+    ghc-options: -Werror
+  other-modules:
+      Blog
+  default-language: Haskell2010
