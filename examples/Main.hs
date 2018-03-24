@@ -21,7 +21,7 @@ import           Control.Monad               (void)
 import           Control.Monad               (forM_)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
 import           Control.Monad.Logger        (MonadLogger)
-import           Control.Monad.Reader        (MonadReader (..), runReaderT)
+import           Control.Monad.Reader        (MonadReader (..), runReaderT, ReaderT)
 import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Data.Monoid                 ((<>))
 import           Database.Esqueleto
@@ -30,6 +30,7 @@ import           Database.Persist.Postgresql (ConnectionString,
 import           Database.Persist.TH         (mkDeleteCascade, mkMigrate,
                                               mkPersist, persistLowerCase,
                                               share, sqlSettings)
+import UnliftIO
 -------------------------------------------------------------------------------
 
 
@@ -85,6 +86,12 @@ getAdults =
   from $ \p -> do
     where_ (p ^. PersonAge >=. just (val 18))
     return p
+
+-- shouldn'twork
+--   :: (MonadIO m, MonadLogger m)
+--   => SqlReadT m ()
+-- shouldn'twork = delete $ from $ \p ->
+--   where_ (p ^. PersonAge >=. just (val 18))
 
 
 -------------------------------------------------------------------------------
@@ -167,7 +174,7 @@ insertBlogPosts =
 runDB :: (MonadReader ConnectionString m,
           MonadIO m,
           MonadBaseControl IO m,
-          MonadLogger m)
+          MonadLogger m, MonadUnliftIO m)
       => SqlPersistT m a -> m a
 runDB query = do
   -- | Helper for running a query

@@ -18,6 +18,7 @@ dependencies:
 - monad-logger
 - monad-control
 - transformers-base
+- unliftio
 ghc-options:
 - -Wall
 - -threaded
@@ -30,6 +31,7 @@ when:
 executables:
   blog-example:
     main: Main.hs
+    other-modules: Blog
 
 flags:
   werror:

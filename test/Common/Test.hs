@@ -1368,7 +1368,7 @@ insert' v = flip Entity v <$> insert v
 type RunDbMonad m = ( MonadUnliftIO m
                     , MonadIO m
                     , MonadThrow m
-                    -- , MonadLogger m
+                    , MonadLogger m
                     -- , m ~ NoLoggingT IO
                     )
 

@@ -10,7 +10,7 @@ module Main (main) where
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Trans.Reader (ReaderT, withReaderT)
 import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.PostgreSQL (random_)
 import Database.Persist.Postgresql (withPostgresqlConn)

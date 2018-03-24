@@ -18,12 +18,17 @@ import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (..),
                                               defaultLiftBaseWith,
                                               defaultRestoreM)
 import           Database.Persist.Postgresql (ConnectionString)
+import UnliftIO
 -------------------------------------------------------------------------------
 
 
 newtype BlogT m a = BlogT { unBlogT :: NoLoggingT (ReaderT ConnectionString m) a }
   deriving (Functor, Applicative, Monad, MonadLogger, MonadReader ConnectionString, MonadIO)
 
+instance MonadUnliftIO m => MonadUnliftIO (BlogT m) where
+  askUnliftIO = BlogT $ do
+    UnliftIO x <- askUnliftIO
+    pure $ UnliftIO $ x . unBlogT
 
 -------------------------------------------------------------------------------
 instance MonadTrans BlogT where

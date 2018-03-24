@@ -972,77 +972,26 @@ update
   --    (SqlExpr (Entity val) -> SqlQuery ())
   --    -> R.ReaderT backend m ()
   ::
-  ( PersistEntityBackend record ~ (BaseBackend backend)
-  , PersistEntity record
-
-  -- , PersistUniqueWrite backend
-  -- , PersistQueryWrite backend
-  -- , PersistStoreWrite backend
-
-  , SqlBackendCanWrite backend
+  ( -- PersistEntityBackend record ~ backend
+  PersistEntity record
+  --, SqlBackendCanWrite backend
   , BackendCompatible SqlBackend backend
-  , BackendCompatible SqlBackend (BaseBackend backend)
-  -- , BackendCompatible SqlBackend (PersistEntityBackend val)
-  , PersistEntity record
+  , BackendCompatible SqlBackend (PersistEntityBackend record)
   , MonadIO m
   )
-  -- :: ( PersistEntityBackend record ~ BaseBackend backend
-  --    , PersistEntity record
-  --    , PersistStoreWrite backend
-  --    , MonadIO m
-  --    )
   => (SqlExpr (Entity record) -> SqlQuery ())
   -> R.ReaderT backend m ()
-
-  -- ::
-  -- ( PersistEntityBackend val ~ backend
-  -- , PersistEntity val
-  -- , PersistUniqueWrite backend
-  -- , PersistQueryWrite backend
-  -- , BackendCompatible SqlBackend backend
-  -- , PersistEntity val
-  -- , MonadIO m
-  -- )
-  -- => (SqlExpr (Entity val) -> SqlQuery ())
-  -- -> R.ReaderT backend m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
 updateCount
-  -- :: (MonadIO m,
-  --     PersistEntityBackend val ~ BaseBackend backend,
-  --     BackendCompatible SqlBackend backend,
-  --     BackendCompatible SqlBackend (BaseBackend backend),
-  --     PersistStoreWrite backend,
-  --     PersistEntity val) =>
-  --    (SqlExpr (Entity val) -> SqlQuery ())
-  -- -> R.ReaderT backend m Int64
-  :: ( MonadIO m
-     , PersistEntity record
-     , PersistEntityBackend record ~ (BaseBackend backend)
+  :: ( BackendCompatible SqlBackend (PersistEntityBackend record)
      , BackendCompatible SqlBackend backend
-     , BackendCompatible SqlBackend (BaseBackend backend)
-     , SqlBackendCanWrite backend
-     -- , BackendCompatible SqlBackend (PersistEntityBackend val)
-     -- , PersistQueryWrite backend
-     -- , PersistUniqueWrite backend
-     -- , PersistStoreWrite backend
+     , PersistEntity record
+     , MonadIO m
      )
-  -- :: ( PersistEntityBackend record ~ BaseBackend backend
-  --    , PersistEntity record
-  --    , PersistStoreWrite backend
-  --    , MonadIO m
-  --    )
   => (SqlExpr (Entity record) -> SqlQuery ())
   -> R.ReaderT backend m Int64
-  -- :: ( MonadIO m
-  --    , PersistEntity val
-  --    , PersistEntityBackend val ~ backend
-  --    , BackendCompatible SqlBackend backend
-  --    , PersistQueryWrite backend
-  --    , PersistUniqueWrite backend)
-  -- => (SqlExpr (Entity val) -> SqlQuery ())
-  -- -> R.ReaderT backend m Int64
 updateCount = rawEsqueleto UPDATE . from
 
 
