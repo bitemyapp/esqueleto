@@ -10,6 +10,7 @@
            , ScopedTypeVariables
            , InstanceSigs
            , Rank2Types
+           , CPP
  #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -65,7 +66,10 @@ import Control.Monad.Trans.Resource (MonadResource, release)
 import Data.Acquire (with, allocateAcquire, Acquire)
 import Data.Int (Int64)
 import Data.List (intersperse)
-import Data.Monoid (Last(..), (<>))
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup
+#endif
+import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
@@ -157,11 +161,13 @@ data SideData = SideData { sdDistinctClause :: !DistinctClause
                          , sdLockingClause  :: !LockingClause
                          }
 
-instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty
-  SideData d f s w g h o l k `mappend` SideData d' f' s' w' g' h' o' l' k' =
+instance Semigroup SideData where
+  SideData d f s w g h o l k <> SideData d' f' s' w' g' h' o' l' k' =
     SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k')
 
+instance Monoid SideData where
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
 data DistinctClause =
@@ -169,13 +175,15 @@ data DistinctClause =
   | DistinctStandard                -- ^ Only @DISTINCT@, SQL standard.
   | DistinctOn [SqlExpr DistinctOn] -- ^ @DISTINCT ON@, PostgreSQL extension.
 
+instance Semigroup DistinctClause where
+  DistinctOn a     <> DistinctOn b = DistinctOn (a <> b)
+  DistinctOn a     <> _            = DistinctOn a
+  DistinctStandard <> _            = DistinctStandard
+  DistinctAll      <> b            = b
+
 instance Monoid DistinctClause where
   mempty = DistinctAll
-  DistinctOn a     `mappend` DistinctOn b = DistinctOn (a <> b)
-  DistinctOn a     `mappend` _            = DistinctOn a
-  DistinctStandard `mappend` _            = DistinctStandard
-  DistinctAll      `mappend` b            = b
-
+  mappend = (<>)
 
 -- | A part of a @FROM@ clause.
 data FromClause =
@@ -222,19 +230,24 @@ collectOnClauses = go []
 data WhereClause = Where (SqlExpr (Value Bool))
                  | NoWhere
 
+instance Semigroup WhereClause where
+  NoWhere  <> w        = w
+  w        <> NoWhere  = w
+  Where e1 <> Where e2 = Where (e1 &&. e2)
+
 instance Monoid WhereClause where
   mempty = NoWhere
-  NoWhere  `mappend` w        = w
-  w        `mappend` NoWhere  = w
-  Where e1 `mappend` Where e2 = Where (e1 &&. e2)
-
+  mappend = (<>)
 
 -- | A @GROUP BY@ clause.
 newtype GroupByClause = GroupBy [SomeValue SqlExpr]
 
+instance Semigroup GroupByClause where
+  GroupBy fs <> GroupBy fs' = GroupBy (fs <> fs')
+
 instance Monoid GroupByClause where
   mempty = GroupBy []
-  GroupBy fs `mappend` GroupBy fs' = GroupBy (fs <> fs')
+  mappend = (<>)
 
 -- | A @HAVING@ cause.
 type HavingClause = WhereClause
@@ -246,17 +259,19 @@ type OrderByClause = SqlExpr OrderBy
 -- | A @LIMIT@ clause.
 data LimitClause = Limit (Maybe Int64) (Maybe Int64)
 
-instance Monoid LimitClause where
-  mempty = Limit mzero mzero
-  Limit l1 o1 `mappend` Limit l2 o2 =
+instance Semigroup LimitClause where
+  Limit l1 o1 <> Limit l2 o2 =
     Limit (l2 `mplus` l1) (o2 `mplus` o1)
     -- More than one 'limit' or 'offset' is issued, we want to
     -- keep the latest one.  That's why we use mplus with
     -- "reversed" arguments.
 
+instance Monoid LimitClause where
+  mempty = Limit mzero mzero
+  mappend = (<>)
 
 -- | A locking clause.
-type LockingClause = Last LockingKind
+type LockingClause = Monoid.Last LockingKind
 
 
 ----------------------------------------------------------------------
@@ -439,7 +454,7 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
 
   having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
-  locking kind = Q $ W.tell mempty { sdLockingClause = Last (Just kind) }
+  locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 
   orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
   asc  = EOrderBy ASC
@@ -1185,7 +1200,7 @@ makeLimit (conn, _) (Limit ml mo) orderByClauses =
 
 
 makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking = flip (,) [] . maybe mempty toTLB . getLast
+makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
   where
     toTLB ForUpdate       = "\nFOR UPDATE"
     toTLB ForShare        = "\nFOR SHARE"

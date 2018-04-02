@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings
-           , GADTs
+           , GADTs, CPP
  #-}
 -- | This module contain PostgreSQL-specific functions.
 --
@@ -22,7 +22,9 @@ module Database.Esqueleto.PostgreSQL
   , unsafeSqlAggregateFunction
   ) where
 
-import           Data.Monoid
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup
+#endif
 import qualified Data.Text.Internal.Builder                   as TLB
 import           Data.Time.Clock                              (UTCTime)
 import           Database.Esqueleto.Internal.Language         hiding (random_)
