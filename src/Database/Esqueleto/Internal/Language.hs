@@ -630,6 +630,9 @@ newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
 instance Functor Value where
   fmap f (Value a) = Value (f a)
 
+instance Applicative Value where
+  (<*>) (Value f) (Value a) = Value (f a)
+  pure = Value
 
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
