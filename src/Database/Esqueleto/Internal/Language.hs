@@ -634,6 +634,10 @@ instance Applicative Value where
   (<*>) (Value f) (Value a) = Value (f a)
   pure = Value
 
+instance Monad Value where
+  (>>=) x f = valueJoin $ fmap f x
+    where valueJoin (Value v) = v
+
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
