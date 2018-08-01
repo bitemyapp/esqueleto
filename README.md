@@ -262,7 +262,7 @@ brew install postgresql
 brew install libpq
 ```
 
-Detailed instructions on the Postgres wike [here](https://wiki.postgresql.org/wiki/Detailed_installation_guides) 
+Detailed instructions on the Postgres wiki [here](https://wiki.postgresql.org/wiki/Detailed_installation_guides)
 
 The connection details are located near the bottom of the [test/Test.hs](test/Test.hs) file:
 
@@ -295,4 +295,4 @@ postgres=# \password esqutest
 ```
 
 
-Now ```stack test --flag esqueleto:postgresql``` should envoke and pass all the Postgres tests.
+Now ```stack test --flag esqueleto:postgresql``` should invoke and pass all the Postgres tests.
