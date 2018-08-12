@@ -31,6 +31,7 @@ module Database.Esqueleto.Internal.Sql
     -- * The guts
   , unsafeSqlCase
   , unsafeSqlBinOp
+  , unsafeSqlAppend
   , unsafeSqlBinOpComposite
   , unsafeSqlValue
   , unsafeSqlCastAs
@@ -672,14 +673,27 @@ unsafeSqlCase _ (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
 -- In the example above, we constraint the arguments to be of the
 -- same type and constraint the result to be a boolean value.
 unsafeSqlBinOp :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
+unsafeSqlBinOp = unsafeSqlAppend' Parens
+{-# INLINE unsafeSqlBinOp #-}
+
+-- | (Internal) Similar to `unsafeSqlBinOp`, except that the
+-- resulting `SqlExpr` won't be enclosed by parentheses.
+-- Essentilly appends two `SqlExprs` with a seperator.
+-- /VERY UNSAFE/! Only use if you know what you're doing!
+unsafeSqlAppend :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlAppend = unsafeSqlAppend' Never
+{-# INLINE unsafeSqlAppend #-}
+
+-- | (Internal) Base description of an `append`-like operation over `SqlExprs`.
+unsafeSqlAppend' :: NeedParens -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlAppend' need op (ERaw p1 f1) (ERaw p2 f2) = ERaw need f
   where
     f info = let (b1, vals1) = f1 info
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp _ _ _ = throw (CompositeKeyErr SqlBinOpError)
-{-# INLINE unsafeSqlBinOp #-}
+unsafeSqlAppend' _ _ _ _ = throw (CompositeKeyErr SqlBinOpError)
+{-# INLINE unsafeSqlAppend' #-}
 
 
 -- | Similar to 'unsafeSqlBinOp', but may also be applied to
