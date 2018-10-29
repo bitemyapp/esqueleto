@@ -829,6 +829,11 @@ data LockingKind =
     -- PostgreSQL.
     --
     -- /Since: 2.2.7/
+  | ForUpdateSkipLocked
+    -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
+    -- PostgreSQL.
+    --
+    -- /Since: 2.2.7/
   | ForShare
     -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
     --
