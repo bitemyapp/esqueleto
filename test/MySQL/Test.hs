@@ -212,7 +212,7 @@ withConn =
   R.runResourceT .
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
-    , connectUser     = "esqutest"
-    , connectPassword = "esqutest"
+    , connectUser     = "travis"
+    , connectPassword = ""
     , connectDatabase = "esqutest"
     }
