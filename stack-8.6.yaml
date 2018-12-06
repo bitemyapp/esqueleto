@@ -1,0 +1,5 @@
+# TODO: switch resolver to lts-13.x once that is released
+resolver: nightly-2018-12-05
+
+packages:
+- '.'
