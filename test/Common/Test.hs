@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
 {-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
+           , CPP
            , EmptyDataDecls
            , FlexibleContexts
            , FlexibleInstances
@@ -49,6 +50,9 @@ module Common.Test
     ) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
+#if __GLASGOW_HASKELL__ >= 806
+import Control.Monad.Fail (MonadFail)
+#endif
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (MonadLogger (..), NoLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
@@ -1401,7 +1405,11 @@ type RunDbMonad m = ( MonadUnliftIO m
                     , MonadLogger m
                     , MonadThrow m )
 
-type Run = forall a. (forall m. RunDbMonad m => SqlPersistT (R.ResourceT m) a) -> IO a
+#if __GLASGOW_HASKELL__ >= 806
+type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a
+#else
+type Run = forall a. (forall m. (RunDbMonad m) => SqlPersistT (R.ResourceT m) a) -> IO a
+#endif
 
 type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 
