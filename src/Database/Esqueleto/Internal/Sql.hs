@@ -1212,9 +1212,10 @@ makeLimit (conn, _) (Limit ml mo) orderByClauses =
 makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
 makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
   where
-    toTLB ForUpdate       = "\nFOR UPDATE"
-    toTLB ForShare        = "\nFOR SHARE"
-    toTLB LockInShareMode = "\nLOCK IN SHARE MODE"
+    toTLB ForUpdate           = "\nFOR UPDATE"
+    toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
+    toTLB ForShare            = "\nFOR SHARE"
+    toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
 
 
 

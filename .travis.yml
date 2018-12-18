@@ -28,6 +28,7 @@ install:
   - stack --version
   - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | psql postgres
   - createdb -O esqutest esqutest
+  - mysql -e 'CREATE DATABASE esqutest;'
 
 script:
   - stack setup

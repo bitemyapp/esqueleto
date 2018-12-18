@@ -1337,9 +1337,10 @@ testLocking withConn = do
           let expected = complex <> "\n" <> syntax
           (with1, with2, with3) `shouldBe` (expected, expected, expected)
 
-    it "looks sane for ForUpdate"       $ sanityCheck ForUpdate       "FOR UPDATE"
-    it "looks sane for ForShare"        $ sanityCheck ForShare        "FOR SHARE"
-    it "looks sane for LockInShareMode" $ sanityCheck LockInShareMode "LOCK IN SHARE MODE"
+    it "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
+    it "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
+    it "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
+    it "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
 
 
