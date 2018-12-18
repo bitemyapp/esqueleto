@@ -23,7 +23,9 @@ test-ghci:
 test-ghcid:
 	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto:test:sqlite"
 
-# sudo -u postgres createuser -s - esqueleto-test
+init-pgsql:
+	sudo -u postgres -- createuser -s esqutest
+
 reset-pgsql:
 	-sudo -u postgres dropdb esqutest
 	-sudo -u postgres dropuser esqutest
