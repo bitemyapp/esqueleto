@@ -2,17 +2,18 @@
 
 module Main where
 
-import Control.Monad.IO.Class (MonadIO)
-import Database.Persist.Sql (SqlReadT)
+import           Control.Monad.IO.Class               (MonadIO)
 import           Database.Esqueleto                   (SqlExpr, SqlQuery, from,
-                                                       val, (<#), insertSelect, (<&>), (^.))
+                                                       insertSelect, val, (<#),
+                                                       (<&>), (^.))
 import           Database.Esqueleto.Internal.Language (Insertion)
+import           Database.Persist.Sql                 (SqlReadT)
 import           Database.Persist.TH                  (mkDeleteCascade,
                                                        mkMigrate, mkPersist,
                                                        persistLowerCase, share,
                                                        sqlSettings)
 
-import Lib
+import           Lib
 
 main :: IO ()
 main = pure ()
