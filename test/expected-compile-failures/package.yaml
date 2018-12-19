@@ -18,10 +18,33 @@ dependencies:
 - persistent
 - persistent-template
 
+default-extensions:
+- FlexibleContexts
+- FlexibleInstances
+- GADTs
+- GeneralizedNewtypeDeriving
+- MultiParamTypeClasses
+- NoMonomorphismRestriction
+- OverloadedStrings
+- QuasiQuotes
+- ScopedTypeVariables
+- StandaloneDeriving
+- TemplateHaskell
+- TypeFamilies
+
 library:
   source-dirs: src
 
 executables:
+  update-with-read-role:
+    main:                Main.hs
+    source-dirs:         update-read-role
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - expected-compile-failures
   write-with-read-role:
     main:                Main.hs
     source-dirs:         write-read-role

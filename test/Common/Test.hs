@@ -219,7 +219,6 @@ testSelect run = do
         liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
 
-
 testSelectSource :: Run -> Spec
 testSelectSource run = do
   describe "selectSource" $ do
@@ -1057,6 +1056,31 @@ testUpdate run = do
                                 , (Entity p3k p3, Value 7) ]
 
 
+-- we only care that this compiles. check that SqlWriteT doesn't fail on
+-- updates.
+testSqlWriteT :: MonadIO m => SqlWriteT m ()
+testSqlWriteT =
+  update $ \p -> do
+    set p [ PersonAge =. just (val 6) ]
+
+-- we only care that this compiles. checks that the SqlWriteT monad can run
+-- select queries.
+testSqlWriteTRead :: MonadIO m => SqlWriteT m [(Value (Key Lord), Value Int)]
+testSqlWriteTRead =
+  select $
+  from $ \ ( lord `InnerJoin` deed ) -> do
+  on $ lord ^. LordId ==. deed ^. DeedOwnerId
+  groupBy (lord ^. LordId)
+  return (lord ^. LordId, count $ deed ^. DeedId)
+
+-- we only care that this compiles checks that SqlReadT allows
+testSqlReadT :: MonadIO m => SqlReadT m [(Value (Key Lord), Value Int)]
+testSqlReadT =
+  select $
+  from $ \ ( lord `InnerJoin` deed ) -> do
+  on $ lord ^. LordId ==. deed ^. DeedOwnerId
+  groupBy (lord ^. LordId)
+  return (lord ^. LordId, count $ deed ^. DeedId)
 
 testListOfValues :: Run -> Spec
 testListOfValues run = do
