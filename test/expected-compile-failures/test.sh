@@ -1,5 +1,7 @@
 #!/bin/env bash
 
-STACK_YAML=stack.yaml
-
-stack build --fast expected-compile-failures:exe:write-with-read-role && exit 1
+if stack build --fast expected-compile-failures:exe:write-with-read-role; then
+    exit 1
+else
+    exit 0
+fi
