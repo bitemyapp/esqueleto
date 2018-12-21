@@ -533,6 +533,12 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (/.)  = unsafeSqlBinOp " / "
   (*.)  = unsafeSqlBinOp " * "
 
+  between a@(ERaw _ _) (ERaw _ f) (ERaw _ g) = unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
+    let (_, fv) = f x
+        (_, gv) = g x
+    in  (" ? AND ? ", fv ++ gv)
+  between _ _ _                              = throw (CompositeKeyErr NotError)
+
   random_  = unsafeSqlValue "RANDOM()"
   round_   = unsafeSqlFunction "ROUND"
   ceiling_ = unsafeSqlFunction "CEILING"

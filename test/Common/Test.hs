@@ -630,6 +630,16 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p3e ]
 
+    it "works for a simple example with between and [uses just . val]" $
+      run $ do
+        p1e  <- insert' p1
+        _    <- insert' p2
+        _    <- insert' p3
+        ret  <- select $
+          from $ \p -> do
+            where_ (between (p ^. PersonAge) (just $ val 20) (just $ val 40))
+            return p
+        liftIO $ ret `shouldBe` [ p1e ]
     it "works with avg_" $
       run $ do
         _ <- insert' p1
