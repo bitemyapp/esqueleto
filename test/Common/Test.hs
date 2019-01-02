@@ -637,7 +637,7 @@ testSelectWhere run = do
         _    <- insert' p3
         ret  <- select $
           from $ \p -> do
-            where_ (between (p ^. PersonAge) (just $ val 20) (just $ val 40))
+            where_ ((p ^. PersonAge) `between` (just $ val 20, just $ val 40))
             return p
         liftIO $ ret `shouldBe` [ p1e ]
     it "works with avg_" $
