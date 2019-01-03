@@ -1,0 +1,11 @@
+resolver: nightly-2018-12-18
+
+extra-deps:
+- persistent-postgresql-2.8.2.0
+- postgresql-simple-0.5.4.0
+
+allow-newer: true
+
+packages:
+- .
+- ../../../esqueleto

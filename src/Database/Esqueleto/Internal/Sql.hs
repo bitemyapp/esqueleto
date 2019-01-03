@@ -987,27 +987,21 @@ deleteCount = rawEsqueleto DELETE
 -- @
 update
   ::
-  ( PersistEntityBackend val ~ backend
-  , PersistEntity val
-  , PersistUniqueWrite backend
-  , PersistQueryWrite backend
-  , BackendCompatible SqlBackend backend
-  , PersistEntity val
-  , MonadIO m
+  ( MonadIO m, PersistEntity val
+  , BackendCompatible SqlBackend (PersistEntityBackend val)
   )
   => (SqlExpr (Entity val) -> SqlQuery ())
-  -> R.ReaderT backend m ()
+  -> SqlWriteT m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
-updateCount :: ( MonadIO m
-               , PersistEntity val
-               , PersistEntityBackend val ~ backend
-               , BackendCompatible SqlBackend backend
-               , PersistQueryWrite backend
-               , PersistUniqueWrite backend)
-            => (SqlExpr (Entity val) -> SqlQuery ())
-            -> R.ReaderT backend m Int64
+updateCount
+  ::
+  ( MonadIO m, PersistEntity val
+  , BackendCompatible SqlBackend (PersistEntityBackend val)
+  )
+  => (SqlExpr (Entity val) -> SqlQuery ())
+  -> SqlWriteT m Int64
 updateCount = rawEsqueleto UPDATE . from
 
 

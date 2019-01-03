@@ -1,0 +1,55 @@
+name:                expected-compile-failures
+version:             0.1.0.0
+github:              bitemyapp/esqueleto
+license:             BSD3
+author:              Matt Parsons
+maintainer:          parsonsmatt@gmail.com
+copyright:           2018 Matt Parsons
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub at <https://github.com/bitemyapp/esqueleto/test/expected-compile-failures#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- esqueleto
+- persistent
+- persistent-template
+
+default-extensions:
+- FlexibleContexts
+- FlexibleInstances
+- GADTs
+- GeneralizedNewtypeDeriving
+- MultiParamTypeClasses
+- NoMonomorphismRestriction
+- OverloadedStrings
+- QuasiQuotes
+- ScopedTypeVariables
+- StandaloneDeriving
+- TemplateHaskell
+- TypeFamilies
+
+library:
+  source-dirs: src
+
+executables:
+  update-with-read-role:
+    main:                Main.hs
+    source-dirs:         update-read-role
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - expected-compile-failures
+  write-with-read-role:
+    main:                Main.hs
+    source-dirs:         write-read-role
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - expected-compile-failures

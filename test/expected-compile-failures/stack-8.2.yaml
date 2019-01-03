@@ -1,0 +1,14 @@
+resolver: lts-10.6
+
+extra-deps:
+- persistent-2.8.1
+- persistent-mysql-2.8.1
+- persistent-postgresql-2.8.1
+- persistent-sqlite-2.8.1
+- conduit-1.3.0
+- conduit-extra-1.3.0
+- resourcet-1.2.0
+
+packages:
+- .
+- ../../../esqueleto

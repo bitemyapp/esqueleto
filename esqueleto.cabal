@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e6538d431870626b3bae78c5b1550ed237765c220c20c8eecd207e4dcd901a16
+-- hash: c5408ff1923a2a70cf9c7b5590f83d724453768845c1dd1d92888c177dfad357
 
 name:           esqueleto
 version:        2.6.0
@@ -30,6 +30,16 @@ source-repository head
   location: git://github.com/bitemyapp/esqueleto.git
 
 library
+  exposed-modules:
+      Database.Esqueleto
+      Database.Esqueleto.Internal.Language
+      Database.Esqueleto.Internal.Sql
+      Database.Esqueleto.MySQL
+      Database.Esqueleto.PostgreSQL
+      Database.Esqueleto.SQLite
+  other-modules:
+      Database.Esqueleto.Internal.PersistentImport
+      Paths_esqueleto
   hs-source-dirs:
       src/
   build-depends:
@@ -50,21 +60,14 @@ library
     ghc-options: -Wall -Wno-redundant-constraints
   else
     ghc-options: -Wall
-  exposed-modules:
-      Database.Esqueleto
-      Database.Esqueleto.Internal.Language
-      Database.Esqueleto.Internal.Sql
-      Database.Esqueleto.MySQL
-      Database.Esqueleto.PostgreSQL
-      Database.Esqueleto.SQLite
-  other-modules:
-      Database.Esqueleto.Internal.PersistentImport
-      Paths_esqueleto
   default-language: Haskell2010
 
 test-suite mysql
   type: exitcode-stdio-1.0
   main-is: MySQL/Test.hs
+  other-modules:
+      Common.Test
+      Paths_esqueleto
   hs-source-dirs:
       test
   ghc-options: -Wall
@@ -89,14 +92,14 @@ test-suite mysql
     , transformers >=0.2
     , unliftio
     , unordered-containers >=0.2
-  other-modules:
-      Common.Test
-      Paths_esqueleto
   default-language: Haskell2010
 
 test-suite postgresql
   type: exitcode-stdio-1.0
   main-is: PostgreSQL/Test.hs
+  other-modules:
+      Common.Test
+      Paths_esqueleto
   hs-source-dirs:
       test
   ghc-options: -Wall
@@ -121,14 +124,14 @@ test-suite postgresql
     , transformers >=0.2
     , unliftio
     , unordered-containers >=0.2
-  other-modules:
-      Common.Test
-      Paths_esqueleto
   default-language: Haskell2010
 
 test-suite sqlite
   type: exitcode-stdio-1.0
   main-is: SQLite/Test.hs
+  other-modules:
+      Common.Test
+      Paths_esqueleto
   hs-source-dirs:
       test
   ghc-options: -Wall
@@ -151,7 +154,4 @@ test-suite sqlite
     , transformers >=0.2
     , unliftio
     , unordered-containers >=0.2
-  other-modules:
-      Common.Test
-      Paths_esqueleto
   default-language: Haskell2010
