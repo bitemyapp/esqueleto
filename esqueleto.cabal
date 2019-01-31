@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.31.0.
+-- This file has been generated from package.yaml by hpack version 0.31.1.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c5408ff1923a2a70cf9c7b5590f83d724453768845c1dd1d92888c177dfad357
+-- hash: 3a3f42ca57c8ee2f4d01724057ff86b8867202c138e6f03cd8c23000da1fbaa3
 
 name:           esqueleto
 version:        2.6.0
@@ -24,6 +24,9 @@ copyright:      (c) 2012-2016 Felipe Almeida Lessa
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
+extra-source-files:
+    README.md
+    changelog.md
 
 source-repository head
   type: git
