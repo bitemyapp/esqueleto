@@ -41,6 +41,9 @@ copyright: (c) 2012-2016 Felipe Almeida Lessa
 license: BSD3
 homepage: https://github.com/bitemyapp/esqueleto
 git: git://github.com/bitemyapp/esqueleto.git
+extra-source-files:
+- README.md
+- changelog.md
 
 dependencies:
   - base >=4.8 && <5.0
