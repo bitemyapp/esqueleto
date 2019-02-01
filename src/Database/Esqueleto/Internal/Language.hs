@@ -41,6 +41,21 @@ module Database.Esqueleto.Internal.Language
   , when_
   , then_
   , else_
+  , where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
+             , distinct, distinctOn, don, distinctOnOrderBy, having, locking
+             , sub_select, (^.), (?.)
+             , val, isNothing, just, nothing, joinV, withNonNull
+             , countRows, count, countDistinct
+             , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
+             , (+.), (-.), (/.), (*.)
+             , random_, round_, ceiling_, floor_
+             , min_, max_, sum_, avg_, castNum, castNumM
+             , coalesce, coalesceDefault
+             , lower_, like, ilike, (%), concat_, (++.), castString
+             , subList_select, valList, justList
+             , in_, notIn, exists, notExists
+             , set, (=.), (+=.), (-=.), (*=.), (/=.)
+             , case_, toBaseId, (<#), (<&>)
   ) where
 
 import Database.Esqueleto.Internal.PersistentImport
