@@ -1,6 +1,8 @@
 -- | Re-export "Database.Persist.Sql" without any clashes with
 -- @esqueleto@.
 module Database.Esqueleto.Internal.PersistentImport
+-- NOTE: switch back to a module export once https://gitlab.haskell.org/ghc/ghc/merge_requests/276
+-- has been merged. See https://github.com/bitemyapp/esqueleto/issues/110 for more details
   ( toJsonText,
   entityIdFromJSON,
   entityIdToJSON,
