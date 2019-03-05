@@ -1,6 +1,12 @@
 Unreleased
 ========
 
+2.6.2
+=======
+
+- @parsonsmatt
+  - [#117](https://github.com/bitemyapp/esqueleto/pull/117): Removed `sqlQQ` and `executeQQ` functions from export, fixing doc build and building with `persistent` >= 2.9
+
 2.6.1
 =======
 
