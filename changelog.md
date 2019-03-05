@@ -1,6 +1,13 @@
 Unreleased
 ========
 
+2.6.1
+=======
+
+- @ChrisCoffey
+  - [#114](https://github.com/bitemyapp/esqueleto/pull/114): Fix Haddock by
+    working around an upstream bug.
+
 2.6.0
 ========
 - @bitemyapp
