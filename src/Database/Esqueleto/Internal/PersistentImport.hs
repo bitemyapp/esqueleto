@@ -53,8 +53,6 @@ module Database.Esqueleto.Internal.PersistentImport
   rawQuery,
   rawQueryRes,
   rawSql,
-  executeQQ,
-  sqlQQ,
   askLogFunc,
   close',
   createSqlPool,
