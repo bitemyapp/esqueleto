@@ -4,10 +4,10 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b9e04d2f75b2f0eaebcef3906057ae77f42a6455f7bd453c3f7ed399b1669e8e
+-- hash: 079b7696691db785c8028b0c1fad5239285ea361eed8a8f3c05d8a42250dc541
 
 name:           esqueleto
-version:        2.6.2
+version:        2.7.0
 synopsis:       Type-safe EDSL for SQL queries on persistent backends.
 description:    @esqueleto@ is a bare bones, type-safe EDSL for SQL queries that works with unmodified @persistent@ SQL backends.  Its language closely resembles SQL, so you don't have to learn new concepts, just new syntax, and it's fairly easy to predict the generated SQL and optimize it for your backend. Most kinds of errors committed when writing SQL are caught as compile-time errors---although it is possible to write type-checked @esqueleto@ queries that fail at runtime.
                 .
