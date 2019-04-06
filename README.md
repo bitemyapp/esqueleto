@@ -158,7 +158,7 @@ However, you may want your results to include people who don't have any blog pos
 ```haskell
 select $
 from $ \(p `LeftOuterJoin`` mb) -> do
-on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+on (p ^. PersonId ==. mb ?. BlogPostAuthorId)
 orderBy [asc (p ^. PersonName), asc (mb ?. BlogPostTitle)]
 return (p, mb)
 ```
