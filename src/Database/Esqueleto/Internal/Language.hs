@@ -354,7 +354,7 @@ class (Functor query, Applicative query, Monad query) =>
 
   -- | @BETWEEN@ operator
   --
-  -- /Since: 2.6.0/
+  -- /Since: 2.8.0/
   between :: PersistField typ => expr (Value typ) -> (expr (Value typ), expr (Value typ)) -> expr (Value Bool)
 
 
