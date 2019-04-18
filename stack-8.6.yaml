@@ -1,5 +1,8 @@
-# TODO: switch resolver to lts-13.x once that is released
-resolver: nightly-2018-12-05
+resolver: lts-13.6
 
 packages:
 - '.'
+
+extra-deps:
+- persistent-2.10.0
+- persistent-template-2.7.0

@@ -1,6 +1,13 @@
 Unreleased
 ========
 
+2.8.0
+=======
+
+- @parsonsmatt
+  - [](): Support `persistent-2.10.0`. This is a breaking change due to the
+    removal of deprecated exports from the `persistent` library.
+
 2.7.0
 =======
 
