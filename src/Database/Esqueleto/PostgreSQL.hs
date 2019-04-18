@@ -143,7 +143,9 @@ stringAgg ::
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
-
+-- | Full text search operator.
+--
+-- @since 2.8.0
 (@@.) ::
      SqlString s
   => SqlExpr (Value s)
