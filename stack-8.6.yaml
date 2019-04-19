@@ -8,3 +8,5 @@ extra-deps:
 - persistent-template-2.7.0
 - persistent-mysql-2.10.0
 - persistent-postgresql-2.10.0
+- postgresql-simple-0.6.1
+- persistent-sqlite-2.10.0

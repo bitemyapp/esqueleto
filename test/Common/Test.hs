@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
+           , UndecidableInstances
            , EmptyDataDecls
            , FlexibleContexts
            , FlexibleInstances
