@@ -1,5 +1,5 @@
 name: esqueleto
-version: '2.6.0'
+version: 2.7.0
 synopsis: Type-safe EDSL for SQL queries on persistent backends.
 description: ! '@esqueleto@ is a bare bones, type-safe EDSL for SQL queries
   that works with unmodified @persistent@ SQL backends.  Its
@@ -41,6 +41,9 @@ copyright: (c) 2012-2016 Felipe Almeida Lessa
 license: BSD3
 homepage: https://github.com/bitemyapp/esqueleto
 git: git://github.com/bitemyapp/esqueleto.git
+extra-source-files:
+- README.md
+- changelog.md
 
 dependencies:
   - base >=4.8 && <5.0

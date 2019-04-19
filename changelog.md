@@ -1,3 +1,19 @@
+Unreleased
+========
+
+2.7.0
+=======
+
+- @parsonsmatt
+  - [#117](https://github.com/bitemyapp/esqueleto/pull/117): Removed `sqlQQ` and `executeQQ` functions from export, fixing doc build and building with `persistent` >= 2.9
+
+2.6.1
+=======
+
+- @ChrisCoffey
+  - [#114](https://github.com/bitemyapp/esqueleto/pull/114): Fix Haddock by
+    working around an upstream bug.
+
 2.6.0
 ========
 - @bitemyapp
