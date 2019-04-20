@@ -97,7 +97,6 @@ instance Exception EsqueletoError
 
 data CompositeKeyError =
     NotError
-  | BetweenError
   | ToInsertionError
   | CombineInsertionError
   | FoldHelpError
@@ -533,12 +532,6 @@ instance Esqueleto SqlQuery SqlExpr SqlBackend where
   (-.)  = unsafeSqlBinOp " - "
   (/.)  = unsafeSqlBinOp " / "
   (*.)  = unsafeSqlBinOp " * "
-
-  a `between` (ERaw _ f, ERaw _ g) = unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
-    let (_, fv) = f x
-        (_, gv) = g x
-    in  (" ? AND ? ", fv ++ gv)
-  _ `between` _                    = throw $ CompositeKeyErr BetweenError
 
   random_  = unsafeSqlValue "RANDOM()"
   round_   = unsafeSqlFunction "ROUND"
