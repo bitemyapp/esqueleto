@@ -352,6 +352,11 @@ class (Functor query, Applicative query, Monad query) =>
   (/.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
   (*.)  :: PersistField a => expr (Value a) -> expr (Value a) -> expr (Value a)
 
+  -- | @BETWEEN@ operator
+  --
+  -- /Since: 2.8.0/
+  between :: PersistField typ => expr (Value typ) -> (expr (Value typ), expr (Value typ)) -> expr (Value Bool)
+
 
   random_  :: (PersistField a, Num a) => expr (Value a)
   round_   :: (PersistField a, Num a, PersistField b, Num b) => expr (Value a) -> expr (Value b)
