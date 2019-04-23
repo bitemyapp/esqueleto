@@ -132,11 +132,11 @@ testSqliteUpdate = do
 
 nameContains :: (BaseBackend backend ~ SqlBackend,
                  BackendCompatible SqlBackend backend,
-                 Esqueleto query expr backend, MonadIO m, SqlString s,
+                 MonadIO m, SqlString s,
                  IsPersistBackend backend, PersistQueryRead backend,
                  PersistUniqueRead backend)
              => (SqlExpr (Value [Char])
-             -> expr (Value s)
+             -> SqlExpr (Value s)
              -> SqlExpr (Value Bool))
              -> s
              -> [Entity Person]

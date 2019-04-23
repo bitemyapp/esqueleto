@@ -38,7 +38,7 @@ module Database.Esqueleto
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    Esqueleto( where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
+    where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , sub_select, (^.), (?.)
              , val, isNothing, just, nothing, joinV, withNonNull
@@ -52,7 +52,7 @@ module Database.Esqueleto
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId)
+             , case_, toBaseId
   , ToBaseId(..)
   , when_
   , then_
@@ -402,8 +402,8 @@ import qualified Database.Persist
 
 -- | @valkey i = 'val' . 'toSqlKey'@
 -- (<https://github.com/prowdsponsor/esqueleto/issues/9>).
-valkey :: (Esqueleto query expr backend, ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
-          Int64 -> expr (Value (Key entity))
+valkey :: (ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
+          Int64 -> SqlExpr (Value (Key entity))
 valkey = val . toSqlKey
 
 
@@ -417,8 +417,8 @@ valkey = val . toSqlKey
 -- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
 --
 -- /Since: 1.4.2/
-valJ :: (Esqueleto query expr backend, PersistField (Key entity)) =>
-        Value (Key entity) -> expr (Value (Key entity))
+valJ :: (PersistField (Key entity)) =>
+        Value (Key entity) -> SqlExpr (Value (Key entity))
 valJ = val . unValue
 
 
