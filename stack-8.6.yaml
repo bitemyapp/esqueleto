@@ -1,5 +1,12 @@
-# TODO: switch resolver to lts-13.x once that is released
-resolver: nightly-2018-12-05
+resolver: lts-13.6
 
 packages:
 - '.'
+
+extra-deps:
+- persistent-2.10.0
+- persistent-template-2.7.0
+- persistent-mysql-2.10.0
+- persistent-postgresql-2.10.0
+- postgresql-simple-0.6.1
+- persistent-sqlite-2.10.0

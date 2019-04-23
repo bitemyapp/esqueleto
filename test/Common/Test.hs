@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
+           , UndecidableInstances
            , EmptyDataDecls
            , FlexibleContexts
            , FlexibleInstances
@@ -88,7 +89,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     age Int Maybe
     weight Int Maybe
     favNum Int
-    deriving Eq Show
+    deriving Eq Show Ord
   BlogPost
     title String
     authorId PersonId
@@ -1123,8 +1124,7 @@ testListOfValues run = do
                      return (bp ^. BlogPostAuthorId)
                where_ (p ^. PersonId `in_` subList_select subquery)
                return p
-        liftIO $ ret `shouldBe` [ Entity p1k p1
-                                , Entity p3k p3 ]
+        liftIO $ L.sort ret `shouldBe` L.sort [Entity p1k p1, Entity p3k p3]
 
     it "NOT IN works for subList_select" $
       run $ do
