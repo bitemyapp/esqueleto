@@ -1,12 +1,12 @@
 Unreleased
 ========
 
-2.8.0
+3.0.0
 =======
 
 - @parsonsmatt
-  - [](): Support `persistent-2.10.0`. This is a breaking change due to the
-    removal of deprecated exports from the `persistent` library.
+  - [#122](https://github.com/bitemyapp/esqueleto/pull/122): Support `persistent-2.10.0`. This is a breaking change due to the removal of deprecated exports from the `persistent` library.
+  - [#113](https://github.com/bitemyapp/esqueleto/pull/113): Remove the `esqueleto` type class. To migrate here, use `SqlExpr`, `SqlQuery`, and `SqlBackend` instead of using the polymorphic `Esqueleto sqlExpr sqlQuery sqlBackend => ...` types.
 
 2.7.0
 =======
