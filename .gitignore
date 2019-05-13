@@ -4,4 +4,3 @@
 .cabal-sandbox/
 cabal.sandbox.config
 .hspec-failures
-esqueleto.cabal
