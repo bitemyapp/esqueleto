@@ -295,4 +295,4 @@ postgres=# \password esqutest
 ```
 
 
-Now ```stack test --flag esqueleto:postgresql``` should invoke and pass all the Postgres tests.
+Now ```stack build --fast --test esqueleto:test:postgresql``` should invoke and pass all the Postgres tests.
