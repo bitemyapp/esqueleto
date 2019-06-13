@@ -264,11 +264,11 @@ brew install libpq
 
 Detailed instructions on the Postgres wiki [here](https://wiki.postgresql.org/wiki/Detailed_installation_guides)
 
-The connection details are located near the bottom of the [test/Test.hs](test/Test.hs) file:
+The connection details are located near the bottom of the [test/PostgreSQL/Test.hs](test/PostgreSQL/Test.hs) file:
 
 ```
-#if defined(WITH_POSTGRESQL)
-  withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+withConn =
+  R.runResourceT . withPostgresqlConn "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
 ```
 
 You can change these if you like but to just get them working set up as follows on linux:
@@ -295,4 +295,4 @@ postgres=# \password esqutest
 ```
 
 
-Now ```stack test --flag esqueleto:postgresql``` should invoke and pass all the Postgres tests.
+Now ```stack build --fast --test esqueleto:test:postgresql``` should invoke and pass all the Postgres tests.
