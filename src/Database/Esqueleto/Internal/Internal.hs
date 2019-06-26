@@ -455,6 +455,16 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 (*.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
+-- | @BETWEEN@.
+--
+-- /Since: 3.0.0/
+between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
+a `between` (ERaw p1 f, ERaw p2 g) = unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
+  let (v1, fv) = f x
+      (v2, gv) = g x
+  in  (parensM p1 v1 <> " AND " <> parensM p2 v2, fv ++ gv)
+_ `between` _                      = throw $ CompositeKeyErr BetweenError
+
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
@@ -1249,6 +1259,7 @@ data CompositeKeyError =
   | MakeSetError
   | MakeWhereError
   | MakeHavingError
+  | BetweenError
   deriving (Show)
 
 data UnexpectedCaseError =
@@ -2785,4 +2796,3 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
-
