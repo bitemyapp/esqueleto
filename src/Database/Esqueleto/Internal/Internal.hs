@@ -466,7 +466,7 @@ a@ERaw{} `between` (ERaw p1 f, ERaw p2 g) =
     in  (parensM p1 v1 <> " AND " <> parensM p2 v2, fv ++ gv)
 a `between` (b, c)                        =
   let construct :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a)
-      construct (ERaw p f) = throw $ CompositeKeyErr BetweenError
+      construct ERaw{}            = throw $ CompositeKeyErr BetweenError
       construct (ECompositeKey f) = ERaw Parens $ \i -> (uncommas $ f i, mempty)
       valA = construct a
       valB = construct b
