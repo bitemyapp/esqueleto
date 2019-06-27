@@ -459,12 +459,19 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 --
 -- /Since: 3.0.0/
 between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
-a `between` (ERaw p1 f, ERaw p2 g) = unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
-  let (v1, fv) = f x
-      (v2, gv) = g x
-  in  (parensM p1 v1 <> " AND " <> parensM p2 v2, fv ++ gv)
-_ `between` _                      = throw $ CompositeKeyErr BetweenError
-
+a@ERaw{} `between` (ERaw p1 f, ERaw p2 g) =
+  unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
+    let (v1, fv) = f x
+        (v2, gv) = g x
+    in  (parensM p1 v1 <> " AND " <> parensM p2 v2, fv ++ gv)
+a `between` (b, c)                        =
+  let construct :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a)
+      construct (ERaw p f) = throw $ CompositeKeyErr BetweenError
+      construct (ECompositeKey f) = ERaw Parens $ \i -> (uncommas $ f i, mempty)
+      valA = construct a
+      valB = construct b
+      valC = construct c
+   in valA >=. valB &&. valA <=. valC
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
