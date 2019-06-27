@@ -459,19 +459,7 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 --
 -- /Since: 3.0.0/
 between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
-a@ERaw{} `between` (ERaw p1 f, ERaw p2 g) =
-  unsafeSqlBinOp " BETWEEN " a $ ERaw Never $ \x ->
-    let (v1, fv) = f x
-        (v2, gv) = g x
-    in  (parensM p1 v1 <> " AND " <> parensM p2 v2, fv ++ gv)
-a `between` (b, c)                        =
-  let construct :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a)
-      construct ERaw{}            = throw $ CompositeKeyErr BetweenError
-      construct (ECompositeKey f) = ERaw Parens $ \i -> (uncommas $ f i, mempty)
-      valA = construct a
-      valB = construct b
-      valC = construct c
-   in valA >=. valB &&. valA <=. valC
+a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
@@ -1259,14 +1247,12 @@ data CompositeKeyError =
   | CombineInsertionError
   | FoldHelpError
   | SqlCaseError
-  | SqlBinOpError
   | SqlCastAsError
   | MakeOnClauseError
   | MakeExcError
   | MakeSetError
   | MakeWhereError
   | MakeHavingError
-  | BetweenError
   deriving (Show)
 
 data UnexpectedCaseError =
@@ -1659,7 +1645,13 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp _ _ _ = throw (CompositeKeyErr SqlBinOpError)
+unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
+    where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
+          construct (ERaw p f)        = ERaw Never $ \info ->
+            let (b1, vals) = f info
+             in (parensM p b1, vals)
+          construct (ECompositeKey f) =
+            ERaw Parens $ \info -> (uncommas $ f info, mempty)
 {-# INLINE unsafeSqlBinOp #-}
 
 
