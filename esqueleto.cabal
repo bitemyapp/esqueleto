@@ -33,6 +33,7 @@ library
       Database.Esqueleto.Internal.Sql
       Database.Esqueleto.MySQL
       Database.Esqueleto.PostgreSQL
+      Database.Esqueleto.PostgreSQL.JSON
       Database.Esqueleto.SQLite
   other-modules:
       Database.Esqueleto.Internal.Internal
@@ -42,6 +43,7 @@ library
       src/
   build-depends:
       base >=4.8 && <5.0
+    , aeson >=1.0
     , blaze-html
     , bytestring
     , conduit >=1.3
