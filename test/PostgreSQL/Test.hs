@@ -1,10 +1,10 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# LANGUAGE ScopedTypeVariables
-           , FlexibleContexts
-           , RankNTypes
-           , TypeFamilies
-           , OverloadedStrings
+{-# LANGUAGE FlexibleContexts
            , LambdaCase
+           , OverloadedStrings
+           , RankNTypes
+           , ScopedTypeVariables
+           , TypeFamilies
  #-}
 module Main (main) where
 
@@ -14,21 +14,26 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT, ask)
 import qualified Control.Monad.Trans.Resource as R
+import Data.Aeson hiding (Value)
+import qualified Data.Aeson as A (Value)
 import qualified Data.Char as Char
 import qualified Data.List as L
 import Data.Ord (comparing)
 import qualified Data.Text as T
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import qualified Data.Vector as V
 import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
+import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
+import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import qualified Database.Esqueleto.PostgreSQL   as EP
 import Database.Persist.Postgresql (withPostgresqlConn)
 import System.Environment
 import Test.Hspec
 
 import Common.Test
-
+import PostgreSQL.MigrateJSON
 
 
 
@@ -499,32 +504,272 @@ testPostgresModule = do
         liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
 
 
+--------------- JSON --------------- JSON --------------- JSON ---------------
+--------------- JSON --------------- JSON --------------- JSON ---------------
+--------------- JSON --------------- JSON --------------- JSON ---------------
+
+testJSONInsertions :: Spec
+testJSONInsertions =
+  describe "JSON Insertions" $ do
+    it "adds scalar values" $ do
+      run $ do
+        insertIt Null
+        insertIt $ Bool True
+        insertIt $ Number 1
+        insertIt $ String "test"
+    it "adds arrays" $ do
+      run $ do
+        insertIt $ Array $ V.fromList []
+        insertIt $ Array $ V.fromList [Number 1, Bool True, Null]
+        insertIt $ Array $ V.fromList [String "test",object ["a" .= Number 3.14]]
+    it "adds objects" $ do
+      run $ do
+        insertIt $ object ["a" .= (1 :: Int), "b" .= False]
+        insertIt $ object ["a" .= object ["b" .= object ["c" .= String "message"]]]
+  where insertIt :: MonadIO m => A.Value -> SqlPersistT m ()
+        insertIt = insert_ . Json
+
+
+testJSONOperators :: Spec
+testJSONOperators =
+  describe "JSON Operators" $ do
+    -- testArrowOperators
+    testFilterOperators
+    -- testConcatDeleteOperators
+
+testArrowOperators :: Spec
+testArrowOperators =
+  describe "Arrow Operators" $ do
+    testArrowJSONB
+    testArrowText
+    testHashArrowJSONB
+    testHashArrowText
+
+testArrowJSONB :: Spec
+testArrowJSONB =
+  describe "Single Arrow (JSONB)" $ do
+    it "creates sane SQL" $
+      createSaneSQL
+        (val (Just $ object ["a" .= True]) ->. Right "a")
+        "SELECT (? -> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":true}", PersistText "a"]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [1 :: Int,2,3]]
+      createSaneSQL
+        (val (Just obj) ->. Right "a" ->. Left 1)
+        "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":[1,2,3]}",PersistText "a",PersistInt64 1]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v ->. Right "b" ==. val (Just $ Bool False)
+      y <- selectJSONwhere $ \v -> v ->. Left 1 ==. val (Just $ Bool True)
+      z <- selectJSONwhere $ \v -> not_ . isNothing $ v ->. Right "a" ->. Right "b" ->. Right "c"
+      liftIO $ length x `shouldBe` 1
+      liftIO $ length y `shouldBe` 1
+      liftIO $ length z `shouldBe` 1
+
+testArrowText :: Spec
+testArrowText =
+  describe "Single Arrow (Text)" $ do
+    it "creates sane SQL" $
+      createSaneSQL
+        (val (Just $ object ["a" .= True]) ->>. Right "a")
+        "SELECT (? ->> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":true}", PersistText "a"]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [1 :: Int,2,3]]
+      createSaneSQL
+        (val (Just obj) ->. Right "a" ->>. Left 1)
+        "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":[1,2,3]}",PersistText "a",PersistInt64 1]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v ->>. Right "b" ==. val (Just "false")
+      y <- selectJSONwhere $ \v -> v ->>. Left 1 ==. val (Just "true")
+      liftIO $ length x `shouldBe` 1
+      liftIO $ length y `shouldBe` 1
+
+testHashArrowJSONB :: Spec
+testHashArrowJSONB =
+  describe "Double Arrow (JSONB)" $ do
+    it "creates sane SQL" $ do
+      let list = ["a","b","c"]
+      createSaneSQL
+        (val (Just $ object ["a" .= True]) #>. list)
+        "SELECT (? #> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":true}", PersistArray $ fmap PersistText list]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [object ["b" .= True]]]
+      createSaneSQL
+        (val (Just obj) #>. ["a","1"] #>. ["b"])
+        "SELECT ((? #> ?) #> ?)\nFROM \"Json\"\n"
+        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+          , PersistArray [PersistText "a", PersistText "1"]
+          , PersistArray [PersistText "b"]
+          ]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v #>. ["a","b","c"] ==. val (Just $ String "message")
+      y <- selectJSONwhere $ \v -> v #>. ["1","a"] ==. val (Just $ Number 3.14)
+      liftIO $ length x `shouldBe` 1
+      liftIO $ length y `shouldBe` 1
+
+
+testHashArrowText :: Spec
+testHashArrowText =
+  describe "Double Arrow (Text)" $ do
+    it "creates sane SQL" $ do
+      let list = ["a","b","c"]
+      createSaneSQL
+        (val (Just $ object ["a" .= True]) #>>. list)
+        "SELECT (? #>> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":true}", PersistArray $ fmap PersistText list]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [object ["b" .= True]]]
+      createSaneSQL
+        (val (Just obj) #>. ["a","1"] #>>. ["b"])
+        "SELECT ((? #> ?) #>> ?)\nFROM \"Json\"\n"
+        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+          , PersistArray [PersistText "a", PersistText "1"]
+          , PersistArray [PersistText "b"]
+          ]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v #>>. ["a","b","c"] ==. val (Just "message")
+      y <- selectJSONwhere $ \v -> v #>>. ["1","a"] ==. val (Just "3.14")
+      liftIO $ length x `shouldBe` 1
+      liftIO $ length y `shouldBe` 1
+
+
+testFilterOperators :: Spec
+testFilterOperators =
+  describe "Filter Operators" $ do
+    testInclusion
+    -- testQMark
+    -- testQMarkAny
+    -- testQMarkAll
+
+testInclusion :: Spec
+testInclusion = do
+  describe "@>" $ do
+    it "creates sane SQL" $ do
+      createSaneSQL
+        (val (Just $ object ["a" .= False, "b" .= True]) @>. val (Just $ object ["a" .= False]))
+        "SELECT (? @> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":false,\"b\":true}", PersistDbSpecific "{\"a\":false}"]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [object ["b" .= True]]]
+      createSaneSQL
+        (val (Just obj) ->. Right "a" @>. val (Just $ object ["b" .= True]))
+        "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":[{\"b\":true}]}", PersistText "a", PersistDbSpecific "{\"b\":true}"]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v @>. val (Just $ Number 1)
+      y <- selectJSONwhere $ \v -> v @>. val (Just $ Array $ V.fromList [object ["a" .= Number 3.14]])
+      liftIO $ length x `shouldBe` 2
+      liftIO $ length y `shouldBe` 1
+  describe "<@" $ do
+    it "creates sane SQL" $ do
+      createSaneSQL
+        (val (Just $ object ["a" .= False]) <@. val (Just $ object ["a" .= False, "b" .= True]))
+        "SELECT (? <@ ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":false}", PersistDbSpecific "{\"a\":false,\"b\":true}"]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [object ["b" .= True]]]
+      createSaneSQL
+        (val (Just obj) ->. Right "a" <@. val (Just $ object ["b" .= True, "c" .= Null]))
+        "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
+        [PersistDbSpecific "{\"a\":[{\"b\":true}]}", PersistText "a", PersistDbSpecific "{\"b\":true,\"c\":null}"]
+    it "works as expected" $ run $ do
+      x <- selectJSONwhere $ \v -> v <@. val (Just $ Array $ V.fromList [Number 1])
+      y <- selectJSONwhere $ \v -> v <@. val (Just $ object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
+      liftIO $ length x `shouldBe` 2
+      liftIO $ length y `shouldBe` 1
+
+{-
+testQMark :: Spec
+testQMark =
+  describe "Question Mark" $ do
+
+testQMarkAny :: Spec
+testQMarkAny =
+  describe "Question Mark (Any)" $ do
+
+testQMarkAll :: Spec
+testQMarkAll =
+  describe "Question Mark (All)" $ do
+
+
+testConcatDeleteOperators :: Spec
+testConcatDeleteOperators = do
+  describe "Concatenation Operator"
+    testConcatenationOperator
+  describe "Deletion Operators" $ do
+    testMinusOperator
+    testHashMinusOperator
+
+testConcatenationOperator :: Spec
+testConcatenationOperator =
+  describe "Concatenation"
+
+testMinusOperator :: Spec
+testMinusOperator =
+  describe "Minus Operator"
+
+testHashMinusOperator :: Spec
+testHashMinusOperator =
+  describe "Hash-Minus Operator"
+
+-}
+
+createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
+createSaneSQL act q vals = run $ do
+    (query, args) <- showQuery ES.SELECT $ fromValue act
+    liftIO $ query `shouldBe` q
+    liftIO $ args `shouldBe` vals
+
+fromValue :: (PersistField a) => SqlExpr (Value a) -> SqlQuery (SqlExpr (Value a))
+fromValue act = from $ \x -> do
+    let _ = x :: SqlExpr (Entity Json)
+    return act
+
+selectJSONwhere
+  :: MonadIO m
+  => (SqlExpr (Value (Maybe A.Value)) -> SqlExpr (Value Bool))
+  -> SqlPersistT m [Entity Json]
+selectJSONwhere f = select $ from $ \v -> do
+    where_ $ f $ just (v ^. JsonValue)
+    return v
+--------------- JSON --------------- JSON --------------- JSON ---------------
+--------------- JSON --------------- JSON --------------- JSON ---------------
+--------------- JSON --------------- JSON --------------- JSON ---------------
 
 
 
 main :: IO ()
 main = do
   hspec $ do
-    tests run
+    -- tests run
 
-    describe "Test PostgreSQL locking" $ do
-      testLocking withConn
+    -- describe "Test PostgreSQL locking" $ do
+      -- testLocking withConn
 
     describe "PostgreSQL specific tests" $ do
-      testAscRandom random_ run
-      testRandomMath run
-      testSelectDistinctOn
-      testPostgresModule
-      testPostgresqlOneAscOneDesc
-      testPostgresqlTwoAscFields
-      testPostgresqlSum
-      testPostgresqlRandom
-      testPostgresqlUpdate
-      testPostgresqlCoalesce
-      testPostgresqlTextFunctions
-
-
-
+      -- testAscRandom random_ run
+      -- testRandomMath run
+      -- testSelectDistinctOn
+      -- testPostgresModule
+      -- testPostgresqlOneAscOneDesc
+      -- testPostgresqlTwoAscFields
+      -- testPostgresqlSum
+      -- testPostgresqlRandom
+      -- testPostgresqlUpdate
+      -- testPostgresqlCoalesce
+      -- testPostgresqlTextFunctions
+      describe "PostgreSQL JSON tests" $ do
+        -- NOTE: We only clean the table once, so we
+        -- can use its contents across all JSON tests
+        it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
+          void $ runMigrationSilent migrateJSON
+          cleanJSON
+        testJSONInsertions
+        testJSONOperators
 
 
 run, runSilent, runVerbose :: Run
@@ -543,13 +788,13 @@ run f = do
 verbose :: Bool
 verbose = False
 
+run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
+run_worker act = withConn $ runSqlConn (migrateIt >> act)
+
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
   cleanDB
-
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =

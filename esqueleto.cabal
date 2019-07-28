@@ -99,12 +99,14 @@ test-suite postgresql
   main-is: PostgreSQL/Test.hs
   other-modules:
       Common.Test
+      PostgreSQL.MigrateJSON
       Paths_esqueleto
   hs-source-dirs:
       test
   ghc-options: -Wall
   build-depends:
       base >=4.8 && <5.0
+    , aeson
     , blaze-html
     , bytestring
     , conduit >=1.3
@@ -124,6 +126,7 @@ test-suite postgresql
     , transformers >=0.2
     , unliftio
     , unordered-containers >=0.2
+    , vector
   default-language: Haskell2010
 
 test-suite sqlite
