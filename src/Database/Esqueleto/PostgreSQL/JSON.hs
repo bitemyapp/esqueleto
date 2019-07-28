@@ -106,14 +106,14 @@ import qualified Data.ByteString.Lazy as BSL (toStrict)
 import Data.Text (Text)
 import qualified Data.Text as T (concat, intercalate, pack)
 import qualified Data.Text.Encoding as TE (decodeUtf8, encodeUtf8)
-import Database.Esqueleto.Internal.Language hiding ((?.), (-.), random_)
+import Database.Esqueleto.Internal.Language hiding ((?.), (-.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Sql
 
 
 infixl 6 ->., ->>., #>., #>>.
 infixl 6 @>., <@., ?., ?|., ?&.
-infixl 6 -., #-.
+infixl 6 ||., -., #-.
 
 
 -- | This function extracts the jsonb value from a JSON array or object,
@@ -124,7 +124,6 @@ infixl 6 -., #-.
 -- throw an exception, but will return @NULL@ when an @int@ is used on
 -- anything other than a JSON array, or a @text@ is used on anything
 -- other than a JSON object.
--- This does mean you can use the 'isNothing' function.
 --
 -- === __PostgreSQL Documentation__
 --
@@ -146,6 +145,11 @@ infixl 6 -., #-.
 
 -- | Identical to '->.', but the resulting DB type is a @text@,
 -- so it could be chained with anything that uses @text@.
+--
+-- __CAUTION: if the "scalar" JSON value @null@ is the result__
+-- __of this function, PostgreSQL will interpret it as a__
+-- __PostgreSQL @NULL@ value, and will therefore be 'Nothing'__
+-- __instead of (Just "null")__
 --
 -- === __PostgreSQL Documentation__
 --
@@ -210,6 +214,11 @@ infixl 6 -., #-.
 
 
 -- | This function is to '#>.' as '->>.' is to '->.'
+--
+-- __CAUTION: if the "scalar" JSON value @null@ is the result__
+-- __of this function, PostgreSQL will interpret it as a__
+-- __PostgreSQL @NULL@ value, and will therefore be 'Nothing'__
+-- __instead of (Just "null")__
 --
 -- === __PostgreSQL Documentation__
 --
@@ -519,8 +528,8 @@ infixl 6 -., #-.
       -> SqlExpr (Value (Maybe Aeson.Value))
 (#-.) value = unsafeSqlBinOp " #- " value . mkTextArray
 
-mkTextArray :: [Text] -> SqlExpr (Value Text)
-mkTextArray xs = val $ "{" <> T.intercalate "," xs <> "}" <> "::text[]"
+mkTextArray :: [Text] -> SqlExpr (Value PersistValue)
+mkTextArray = val . PersistArray . fmap toPersistValue
 
 
 
