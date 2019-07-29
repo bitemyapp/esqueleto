@@ -6,5 +6,7 @@ packages:
 extra-deps:
 - persistent-2.10.0
 - persistent-postgresql-2.10.0
-- postgresql-simple-0.5.4.0
+- persistent-sqlite-2.9.0
+- postgresql-libpq-0.9.4.2
+- postgresql-simple-0.6.1
 allow-newer: true
