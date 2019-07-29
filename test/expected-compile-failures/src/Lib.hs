@@ -1,6 +1,8 @@
+{-# LANGUAGE UndecidableInstances #-}
 module Lib where
 
 import Control.Monad.IO.Class (MonadIO)
+import Database.Persist
 import Database.Persist.Sql (SqlReadT)
 import           Database.Esqueleto                   (SqlExpr, SqlQuery, from,
                                                        val, (<#), insertSelect, (<&>), (^.))
