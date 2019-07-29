@@ -112,6 +112,7 @@ test-suite postgresql
     , conduit >=1.3
     , containers
     , esqueleto
+    , exceptions
     , hspec
     , monad-logger
     , persistent >=2.8.0 && <2.11
