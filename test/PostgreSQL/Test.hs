@@ -792,6 +792,7 @@ testConcatDeleteOperators = do
   describe "Concatenation Operator" testConcatenationOperator
   describe "Deletion Operators" $ do
     testMinusOperator
+    testMinusOperatorV10
     testHashMinusOperator
 
 testConcatenationOperator :: Spec
@@ -839,10 +840,10 @@ testMinusOperator =
   describe "Minus Operator" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) JSON.-. Right ["a"])
+        (just (val $ object ["a" .= False, "b" .= True]) JSON.-. Right "a")
         "SELECT (? - ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
-        , persistTextArray ["a"] ]
+        , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
@@ -858,15 +859,53 @@ testMinusOperator =
       y <- selectJSON $ \v -> do
           where_ $ v @>. just (val $ toJSON ([] :: [Int]))
           where_ $ v JSON.-. Left (-1) @>. just (val $ toJSON [Null])
-      z <- selectJSON_ $ \v -> v JSON.-. Right ["b"] ?&. ["a", "b"]
+      z <- selectJSON_ $ \v -> v JSON.-. Right "b" ?&. ["a", "b"]
       w <- selectJSON_ $ \v -> do
-          v JSON.-. Right ["test"] @>. just (val $ toJSON [String "test"])
+          v JSON.-. Right "test" @>. just (val $ toJSON [String "test"])
       liftIO $ length x `shouldBe` 2
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 0
       liftIO $ length w `shouldBe` 0
       sqlFailWith "22023" $ selectJSONwhere $ \v ->
           v JSON.-. Left 0 @>. just (val $ toJSON ([] :: [Int]))
+  where selectJSON_ f = selectJSON $ \v -> do
+          where_ $ v @>. just (val $ object [])
+               ||. v @>. just (val $ toJSON ([] :: [Int]))
+          where_ $ f v
+
+testMinusOperatorV10 :: Spec
+testMinusOperatorV10 =
+  describe "Minus Operator (PSQL >= v10)" $ do
+    it "creates sane SQL" $
+      createSaneSQL
+        (just (val $ object ["a" .= False, "b" .= True]) --. ["a","b"])
+        "SELECT (? - ?)\nFROM \"Json\"\n"
+        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        , persistTextArray ["a","b"] ]
+    it "creates sane SQL (chained)" $ do
+      let obj = object ["a" .= [object ["b" .= True]]]
+      createSaneSQL
+        (just (val obj) #>. ["a","0"] --. ["b"])
+        "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
+        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        , persistTextArray ["a","0"]
+        , persistTextArray ["b"] ]
+    it "works as expected" $ run $ do
+      x <- selectJSON $ \v -> do
+          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
+          where_ $ v --. ["test","a"] @>. just (val $ toJSON [String "test"])
+      y <- selectJSON $ \v -> do
+          where_ $ v @>. just (val $ object [])
+          where_ $ v --. ["a","b"] <@. just (val $ object [])
+      z <- selectJSON_ $ \v -> v --. ["b"] <@. just (val $ object ["a" .= (1 :: Int)])
+      w <- selectJSON_ $ \v -> do
+          v --. ["test"] @>. just (val $ toJSON [String "test"])
+      liftIO $ length x `shouldBe` 0
+      liftIO $ length y `shouldBe` 2
+      liftIO $ length z `shouldBe` 1
+      liftIO $ length w `shouldBe` 0
+      sqlFailWith "22023" $ selectJSONwhere $ \v ->
+          v --. ["a"] @>. just (val $ toJSON ([] :: [Int]))
   where selectJSON_ f = selectJSON $ \v -> do
           where_ $ v @>. just (val $ object [])
                ||. v @>. just (val $ toJSON ([] :: [Int]))

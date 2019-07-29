@@ -86,15 +86,21 @@ module Database.Esqueleto.PostgreSQL.JSON
   --  || | jsonb   | Concatenate two jsonb values into a new jsonb value                    | '["a", "b"]'::jsonb || '["c", "d"]'::jsonb
   --  -  | text    | Delete key/value pair or string element from left operand.             | '{"a": "b"}'::jsonb - 'a'
   --     |         | Key/value pairs are matched based on their key value.                  |
-  --  -  | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
-  --     |         | Key/value pairs are matched based on their key value.                  |
   --  -  | integer | Delete the array element with specified index (Negative integers count | '["a", "b"]'::jsonb - 1
   --     |         | from the end). Throws an error if top level container is not an array. |
   --  #- | text[]  | Delete the field or element with specified path                        | '["a", {"b":1}]'::jsonb #- '{1,b}'
   --     |         | (for JSON arrays, negative integers count from the end)                |
+  --
+  -- /Works with any PostgreSQL of version >= 10/
+  --
+  --     | Type    | Description                                                            |  Example
+  -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
+  --  -  | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
+  --     |         | Key/value pairs are matched based on their key value.                  |
   -- @
   , (||.)
   , (-.)
+  , (--.)
   , (#-.)
   ) where
 
@@ -114,7 +120,7 @@ import Database.Esqueleto.Internal.Sql
 
 infixl 6 ->., ->>., #>., #>>.
 infixl 6 @>., <@., ?., ?|., ?&.
-infixl 6 ||., -., #-.
+infixl 6 ||., -., --., #-.
 
 
 -- | This function extracts the jsonb value from a JSON array or object,
@@ -427,9 +433,9 @@ infixl 6 ||., -., #-.
       -> SqlExpr (Value (Maybe Aeson.Value))
 (||.) = unsafeSqlBinOp " || "
 
--- | This operator can remove keys from an object or string elements from an array
--- when using text, and remove certain elements by index when using integers.
--- Negative integers delete counting from the end of the array.
+-- | This operator can remove a key from an object or a string element from an array
+-- when using text, and remove certain elements by index from an array when using
+-- integers. Negative integers delete counting from the end of the array.
 -- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
 -- __CAUTION: THIS FUNCTION THROWS AN EXCEPTION WHEN USED ON ANYTHING OTHER__
@@ -439,12 +445,11 @@ infixl 6 ||., -., #-.
 -- === __Objects and arrays__
 --
 -- @
--- {"a": 3.14}            - []          == {"a": 3.14}
--- {"a": 3.14}            - ["a"]       == {}
--- {"a": "b"}             - ["b"]       == {"a": "b"}
--- {"a": 3.14}            - ["a","b"]   == {}
--- {"a": 3.14, "c": true} - ["a","b"]   == {"c": true}
--- ["a", 2, "c"]          - ["a","b"]   == [2, "c"] -- can remove strings from arrays
+-- {"a": 3.14}            - "a"         == {}
+-- {"a": "b"}             - "b"         == {"a": "b"}
+-- {"a": 3.14}            - "a"         == {}
+-- {"a": 3.14, "c": true} - "a"         == {"c": true}
+-- ["a", 2, "c"]          - "a"         == [2, "c"] -- can remove strings from arrays
 -- [true, "b", 5]         - 0           == ["b", 5]
 -- [true, "b", 5]         - 3           == [true, "b", 5]
 -- [true, "b", 5]         - -1          == [true, "b"]
@@ -466,18 +471,42 @@ infixl 6 ||., -., #-.
 -- ---+---------+------------------------------------------------------------------------+-------------------------------------------------
 --  - | text    | Delete key/value pair or string element from left operand.             | '{"a": "b"}'::jsonb - 'a'
 --    |         | Key/value pairs are matched based on their key value.                  |
---  - | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
---    |         | Key/value pairs are matched based on their key value.                  |
 --  - | integer | Delete the array element with specified index (Negative integers count | '["a", "b"]'::jsonb - 1
 --    |         | from the end). Throws an error if top level container is not an array. |
 -- @
 --
 -- /Since: 3.1.0/
 (-.) :: SqlExpr (Value (Maybe Aeson.Value))
-     -> Either Int [Text]
+     -> Either Int Text
      -> SqlExpr (Value (Maybe Aeson.Value))
-(-.) value (Right ts) = unsafeSqlBinOp " - " value $ mkTextArray ts
+(-.) value (Right t) = unsafeSqlBinOp " - " value $ val t
 (-.) value (Left i) = unsafeSqlBinOp " - " value $ val i
+
+-- | Removes a set of keys from an object, or string elements from an array.
+-- This is the same operator internally as `-.`, but the option to use a @text
+-- array@, instead of @text@ or @integer@ was only added in version 10.
+-- That's why this function is seperate from `-.`.
+--
+-- NOTE: The following is equivalent:
+--
+-- @{some JSON expression} -. Right "a" -. Right "b"@
+--
+-- is equivalent to
+--
+-- @{some JSON expression} --. ["a","b"]@
+--
+-- === __PostgreSQL Documentation__
+--
+-- /Works with any PostgreSQL of version >= 10/
+--
+--    | Type    | Description                                                            |  Example
+-- ---+---------+------------------------------------------------------------------------+-------------------------------------------------
+--  - | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
+--    |         | Key/value pairs are matched based on their key value.                  |
+(--.) :: SqlExpr (Value (Maybe Aeson.Value))
+      -> [Text]
+      -> SqlExpr (Value (Maybe Aeson.Value))
+(--.) value = unsafeSqlBinOp " - " value . mkTextArray
 
 -- | This operator can remove elements nested in an object.
 -- If a 'Text' is not parsable as a number when selecting in an array
