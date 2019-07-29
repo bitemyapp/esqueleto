@@ -25,11 +25,9 @@ install:
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
-  - mysql -e 'CREATE DATABASE esqutest;'
-
-before_script:
-  - psql -U postgres -c "CREATE USER esqutest WITH PASSWORD 'esqutest';"
+  - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | psql postgres
   - createdb -O esqutest esqutest
+  - mysql -e 'CREATE DATABASE esqutest;'
 
 script:
   - stack setup
