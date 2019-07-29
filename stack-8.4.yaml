@@ -4,6 +4,7 @@ packages:
 - '.'
 
 extra-deps:
+- aeson-1.4.1.0
 - persistent-2.10.0
 - persistent-postgresql-2.10.0
 - persistent-sqlite-2.9.0
