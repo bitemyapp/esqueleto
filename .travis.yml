@@ -3,6 +3,7 @@ language: c
 sudo: false
 
 services:
+  - postgresql
   - mysql
 
 addons:
@@ -10,8 +11,7 @@ addons:
   apt:
     packages:
       - libgmp-dev
-      - postgresql-10
-      - postgresql-client-10
+      - postgresql-client
       - postgresql-server-dev-all
 
 env:
