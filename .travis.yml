@@ -7,13 +7,12 @@ services:
   - mysql
 
 addons:
+  postgresql: "10"
   apt:
     packages:
       - libgmp-dev
-      - postgresql-client
+      - postgresql-client-10
       - postgresql-server-dev-all
-
-  postgresql: "10"
 
 env:
  - GHCVER=8.2
