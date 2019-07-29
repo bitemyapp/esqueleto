@@ -573,7 +573,6 @@ mkTextArray = val . PersistArray . fmap toPersistValue
 --- ORPHAN INSTANCES ---
 
 
-
 -- Mainly copied over from Database.Persist.Postgresql.JSON
 -- Since we don't need anything else and adding another dependency
 -- just for these two instances is a bit overkill.
