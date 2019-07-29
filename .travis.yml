@@ -10,6 +10,7 @@ addons:
   apt:
     packages:
       - libgmp-dev
+      - postgresql-10
       - postgresql-client-10
       - postgresql-server-dev-all
 
