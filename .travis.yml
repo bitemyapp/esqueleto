@@ -3,7 +3,6 @@ language: c
 sudo: false
 
 services:
-  - postgresql
   - mysql
 
 addons:
@@ -11,15 +10,14 @@ addons:
   apt:
     packages:
       - libgmp-dev
-      - postgresql-client
+      - postgresql-10
+      - postgresql-client-10
       - postgresql-server-dev-all
 
 env:
-  global:
-  - GHCVER=8.2
-  - GHCVER=8.4
-  - GHCVER=8.6
-  - PGPORT=5433
+  - GHCVER=8.2 PGPORT=5433
+  - GHCVER=8.4 PGPORT=5433
+  - GHCVER=8.6 PGPORT=5433
 
 install:
   - export STACK_YAML=stack-$GHCVER.yaml
@@ -27,9 +25,11 @@ install:
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
-  - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | psql postgres
-  - createdb -O esqutest esqutest
   - mysql -e 'CREATE DATABASE esqutest;'
+
+before_script:
+  - psql -U postgres -c "CREATE USER esqutest WITH PASSWORD 'esqutest';"
+  - createdb -O esqutest esqutest
 
 script:
   - stack setup
