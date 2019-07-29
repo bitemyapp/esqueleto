@@ -48,7 +48,7 @@ library
     , bytestring
     , conduit >=1.3
     , monad-logger
-    , persistent >=2.8.0 && <2.11
+    , persistent >=2.10.0 && <2.11
     , resourcet >=1.2
     , tagged >=0.2
     , text >=0.11 && <1.3
@@ -78,6 +78,7 @@ test-suite mysql
     , conduit >=1.3
     , containers
     , esqueleto
+    , exceptions
     , hspec
     , monad-logger
     , mysql
@@ -115,7 +116,7 @@ test-suite postgresql
     , exceptions
     , hspec
     , monad-logger
-    , persistent >=2.8.0 && <2.11
+    , persistent >=2.10.0 && <2.11
     , persistent-postgresql
     , persistent-template
     , postgresql-libpq
@@ -146,6 +147,7 @@ test-suite sqlite
     , conduit >=1.3
     , containers
     , esqueleto
+    , exceptions
     , hspec
     , monad-logger
     , persistent >=2.8.0 && <2.11

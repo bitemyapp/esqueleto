@@ -5,7 +5,7 @@ packages:
 # - examples
 
 extra-deps:
-- persistent-2.8.1
+- persistent-2.10.0
 - persistent-mysql-2.8.1
 - persistent-postgresql-2.8.1
 - persistent-sqlite-2.8.1
