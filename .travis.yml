@@ -15,9 +15,11 @@ addons:
       - postgresql-server-dev-all
 
 env:
- - GHCVER=8.2
- - GHCVER=8.4
- - GHCVER=8.6
+  global:
+  - GHCVER=8.2
+  - GHCVER=8.4
+  - GHCVER=8.6
+  - PGPORT=5433
 
 install:
   - export STACK_YAML=stack-$GHCVER.yaml
