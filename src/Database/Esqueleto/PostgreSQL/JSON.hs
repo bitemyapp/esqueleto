@@ -24,7 +24,7 @@
   /The PostgreSQL version the functions work with are included/
   /in their description./
 
-  /Since: 3.1.0/
+  @since 3.1.0
 -}
 module Database.Esqueleto.PostgreSQL.JSON
   ( -- * Arrow operators
@@ -143,7 +143,7 @@ infixl 6 ||., -., --., #-.
 --  -> | text | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (->.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> Either Int Text
       -> SqlExpr (Value (Maybe Aeson.Value))
@@ -169,7 +169,7 @@ infixl 6 ||., -., --., #-.
 --  ->> | text | Get JSON object field as text  | '{"a":1,"b":2}'::json->>'b' | 2
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (->>.) :: SqlExpr (Value (Maybe Aeson.Value))
        -> Either Int Text
        -> SqlExpr (Value (Maybe Text))
@@ -213,7 +213,7 @@ infixl 6 ||., -., --., #-.
 --  #>  | text[] | Get JSON object at specified path | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}' | {"c": "foo"}
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (#>.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> [Text]
       -> SqlExpr (Value (Maybe Aeson.Value))
@@ -237,7 +237,7 @@ infixl 6 ||., -., --., #-.
 --  #>> | text[] | Get JSON object at specified path as text | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}' | 3
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (#>>.) :: SqlExpr (Value (Maybe Aeson.Value))
        -> [Text]
        -> SqlExpr (Value (Maybe Text))
@@ -260,7 +260,7 @@ infixl 6 ||., -., --., #-.
 --  @> | jsonb | Does the left JSON value contain within it the right value? | '{"a":1, "b":2}'::jsonb @> '{"b":2}'::jsonb
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (@>.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> SqlExpr (Value (Maybe Aeson.Value))
       -> SqlExpr (Value Bool)
@@ -283,7 +283,7 @@ infixl 6 ||., -., --., #-.
 --  <@ | jsonb | Is the left JSON value contained within the right value? | '{"b":2}'::jsonb <@ '{"a":1, "b":2}'::jsonb
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (<@.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> SqlExpr (Value (Maybe Aeson.Value))
       -> SqlExpr (Value Bool)
@@ -307,7 +307,7 @@ infixl 6 ||., -., --., #-.
 --  ? | text | Does the string exist as a top-level key within the JSON value? | '{"a":1, "b":2}'::jsonb ? 'b'
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (?.) :: SqlExpr (Value (Maybe Aeson.Value))
      -> Text
      -> SqlExpr (Value Bool)
@@ -331,7 +331,7 @@ infixl 6 ||., -., --., #-.
 --  ?| | text[] | Do any of these array strings exist as top-level keys? | '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (?|.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> [Text]
       -> SqlExpr (Value Bool)
@@ -355,7 +355,7 @@ infixl 6 ||., -., --., #-.
 --  ?& | text[] | Do all of these array strings exist as top-level keys? | '["a", "b"]'::jsonb ?& array['a', 'b']
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (?&.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> [Text]
       -> SqlExpr (Value Bool)
@@ -475,7 +475,7 @@ infixl 6 ||., -., --., #-.
 --    |         | from the end). Throws an error if top level container is not an array. |
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (-.) :: SqlExpr (Value (Maybe Aeson.Value))
      -> Either Int Text
      -> SqlExpr (Value (Maybe Aeson.Value))
@@ -557,7 +557,7 @@ infixl 6 ||., -., --., #-.
 --     |        | (for JSON arrays, negative integers count from the end) |
 -- @
 --
--- /Since: 3.1.0/
+-- @since 3.1.0
 (#-.) :: SqlExpr (Value (Maybe Aeson.Value))
       -> [Text]
       -> SqlExpr (Value (Maybe Aeson.Value))
@@ -578,7 +578,7 @@ mkTextArray = val . PersistArray . fmap toPersistValue
 -- Since we don't need anything else and adding another dependency
 -- just for these two instances is a bit overkill.
 
--- | /Since: 3.1.0/
+-- | @since 3.1.0
 instance PersistField Aeson.Value where
   toPersistValue = PersistDbSpecific . BSL.toStrict . encode
   fromPersistValue pVal = case pVal of
@@ -586,7 +586,7 @@ instance PersistField Aeson.Value where
       PersistText t -> fromLeft (badParse t) $ eitherDecodeStrict (TE.encodeUtf8 t)
       x -> Left $ fromPersistValueError "string or bytea" x
 
--- | jsonb - /Since: 3.1.0/
+-- | jsonb - @since 3.1.0
 instance PersistFieldSql Aeson.Value where
   sqlType _ = SqlOther "JSONB"
 
