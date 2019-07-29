@@ -3,3 +3,9 @@ resolver: lts-12.24
 packages:
 - .
 - ../../../esqueleto
+
+extra-deps:
+- persistent-2.10.0
+- persistent-postgresql-2.10.0
+- postgresql-simple-0.5.4.0
+allow-newer: true
