@@ -19,6 +19,7 @@
       * As long as the previous operator's resulting value is
       'Maybe' 'Data.Aeson.Value', any other JSON operator can be
       used to transform the JSON further.
+      (e.g. @'[1,2,3]' -> 1 \@> 2@)
 
   /The PostgreSQL version the functions work with are included/
   /in their description./
@@ -104,7 +105,7 @@ import Data.Aeson (encode, eitherDecodeStrict)
 import qualified Data.Aeson as Aeson (Value)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import Data.Text (Text)
-import qualified Data.Text as T (concat, intercalate, pack)
+import qualified Data.Text as T (concat, pack)
 import qualified Data.Text.Encoding as TE (decodeUtf8, encodeUtf8)
 import Database.Esqueleto.Internal.Language hiding ((?.), (-.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
@@ -426,14 +427,16 @@ infixl 6 ||., -., #-.
       -> SqlExpr (Value (Maybe Aeson.Value))
 (||.) = unsafeSqlBinOp " || "
 
--- | This operator can remove keys from an object, or string elements from an array
+-- | This operator can remove keys from an object or string elements from an array
 -- when using text, and remove certain elements by index when using integers.
+-- Negative integers delete counting from the end of the array.
+-- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
 -- __CAUTION: THIS FUNCTION THROWS AN EXCEPTION WHEN USED ON ANYTHING OTHER__
 -- __THAN OBJECTS OR ARRAYS WHEN USING TEXT, AND ANYTHING OTHER THAN ARRAYS__
 -- __WHEN USING INTEGERS!__
 --
--- === __Objects__
+-- === __Objects and arrays__
 --
 -- @
 -- {"a": 3.14}            - []          == {"a": 3.14}
@@ -478,7 +481,9 @@ infixl 6 ||., -., #-.
 
 -- | This operator can remove elements nested in an object.
 -- If a 'Text' is not parsable as a number when selecting in an array
--- (even when halfway through the selection)
+-- (even when halfway through the selection).
+-- Negative integers delete counting from the end of an array.
+-- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
 -- __CAUTION: THIS FUNCTION THROWS AN EXCEPTION WHEN USED__
 -- __ON ANYTHING OTHER THAN OBJECTS OR ARRAYS, AND WILL__
@@ -499,7 +504,8 @@ infixl 6 ||., -., #-.
 -- [true, {"b":null}, 5]       #- []            == [true, {"b":null}, 5]
 -- [true, {"b":null}, 5]       #- ["0"]         == [{"b":null}, 5]
 -- [true, {"b":null}, 5]       #- ["b"]         == ERROR: path element at position 1 is not an integer: "b"
--- [true, {"b":null}, 5]       #- ["0","b"]     == [true, {}, 5]
+-- [true, {"b":null}, 5]       #- ["1","b"]     == [true, {}, 5]
+-- [true, {"b":null}, 5]       #- ["-2","b"]    == [true, {}, 5]
 -- {"a": {"b":[false,4,null]}} #- ["a","b","2"] == {"a": {"b":[false,4]}}
 -- {"a": {"b":[false,4,null]}} #- ["a","b","c"] == ERROR: path element at position 3 is not an integer: "c"
 --
