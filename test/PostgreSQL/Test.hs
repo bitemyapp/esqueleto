@@ -28,9 +28,9 @@ import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
-import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.), Value)
+import qualified Database.Esqueleto.PostgreSQL as EP
+import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import qualified Database.Esqueleto.PostgreSQL   as EP
 import Database.Persist.Postgresql (withPostgresqlConn)
 import Database.PostgreSQL.Simple (SqlError(..))
 import System.Environment

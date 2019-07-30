@@ -15,7 +15,7 @@ module PostgreSQL.MigrateJSON where
 import Control.Monad.Trans.Resource (ResourceT)
 import qualified Data.Aeson as A
 import Database.Esqueleto (SqlExpr, delete, from)
-import Database.Esqueleto.PostgreSQL.JSON()
+import Database.Esqueleto.PostgreSQL.JSON.Instances()
 import Database.Persist (Entity)
 import Database.Persist.Sql (SqlPersistT)
 import Database.Persist.TH

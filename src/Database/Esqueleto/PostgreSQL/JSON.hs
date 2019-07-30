@@ -102,8 +102,6 @@ module Database.Esqueleto.PostgreSQL.JSON
   , (-.)
   , (--.)
   , (#-.)
-  -- * Re-export of Value for PersistField(Sql) instances
-  , Aeson.Value()
   ) where
 
 #if __GLASGOW_HASKELL__ < 804
@@ -114,7 +112,6 @@ import Data.Text (Text)
 import Database.Esqueleto.Internal.Language hiding ((?.), (-.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Sql
-import Database.Persist.Postgresql.JSON()
 
 
 infixl 6 ->., ->>., #>., #>>.
