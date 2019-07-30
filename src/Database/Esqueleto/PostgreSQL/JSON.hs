@@ -509,7 +509,7 @@ infixl 6 ||., -., --., #-.
 
 -- | This operator can remove elements nested in an object.
 -- If a 'Text' is not parsable as a number when selecting in an array
--- (even when halfway through the selection).
+-- (even when halfway through the selection) an exception will be thrown.
 -- Negative integers delete counting from the end of an array.
 -- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
