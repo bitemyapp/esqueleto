@@ -16,7 +16,7 @@ addons:
 
 env:
   global:
-    - PGPORT=5432
+    - PGPORT=5433
   matrix:
     - GHCVER=8.2
     - GHCVER=8.4
