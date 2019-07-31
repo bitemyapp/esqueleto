@@ -5,6 +5,7 @@
            , OverloadedStrings
            , RankNTypes
            , ScopedTypeVariables
+           , TypeApplications
            , TypeFamilies
  #-}
 module Main (main) where
@@ -531,7 +532,7 @@ testJSONInsertions =
         insertIt $ object ["a" .= (1 :: Int), "b" .= False]
         insertIt $ object ["a" .= object ["b" .= object ["c" .= String "message"]]]
   where insertIt :: MonadIO m => A.Value -> SqlPersistT m ()
-        insertIt = insert_ . Json
+        insertIt = insert_ . Json . JSONB
 
 
 testJSONOperators :: Spec
@@ -553,23 +554,23 @@ testArrowJSONB :: Spec
 testArrowJSONB =
   describe "Single Arrow (JSONB)" $ do
     it "creates sane SQL" $
-      createSaneSQL
-        (just (val $ object ["a" .= True]) ->. Right "a")
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= True]) ->. Right "a")
         "SELECT (? -> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [1 :: Int,2,3]]
-      createSaneSQL
-        (just (val obj) ->. Right "a" ->. Left 1)
+      createSaneSQL @JSONValue
+        (jsonbVal obj ->. Right "a" ->. Left 1)
         "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[1,2,3]}"
         , PersistText "a"
         , PersistInt64 1 ]
     it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v ->. Right "b" ==. just (val $ Bool False)
-      y <- selectJSONwhere $ \v -> v ->. Left 1 ==. just (val $ Bool True)
-      z <- selectJSONwhere $ \v -> v ->. Right "a" ->. Right "b" ->. Right "c" ==. just (val "message")
+      x <- selectJSONwhere $ \v -> v ->. Right "b" ==. jsonbVal (Bool False)
+      y <- selectJSONwhere $ \v -> v ->. Left 1 ==. jsonbVal (Bool True)
+      z <- selectJSONwhere $ \v -> v ->. Right "a" ->. Right "b" ->. Right "c" ==. jsonbVal (String "message")
       liftIO $ length x `shouldBe` 1
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 1
@@ -579,14 +580,14 @@ testArrowText =
   describe "Single Arrow (Text)" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= True]) ->>. Right "a")
+        (jsonbVal (object ["a" .= True]) ->>. Right "a")
         "SELECT (? ->> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [1 :: Int,2,3]]
       createSaneSQL
-        (just (val obj) ->. Right "a" ->>. Left 1)
+        (jsonbVal obj ->. Right "a" ->>. Left 1)
         "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[1,2,3]}"
         , PersistText "a"
@@ -604,23 +605,23 @@ testHashArrowJSONB =
   describe "Double Arrow (JSONB)" $ do
     it "creates sane SQL" $ do
       let list = ["a","b","c"]
-      createSaneSQL
-        (just (val $ object ["a" .= True]) #>. list)
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= True]) #>. list)
         "SELECT (? #> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":true}"
         , persistTextArray list ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (just (val obj) #>. ["a","1"] #>. ["b"])
+      createSaneSQL @JSONValue
+        (jsonbVal obj #>. ["a","1"] #>. ["b"])
         "SELECT ((? #> ?) #> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
     it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v #>. ["a","b","c"] ==. just (val $ String "message")
-      y <- selectJSONwhere $ \v -> v #>. ["1","a"] ==. just (val $ Number 3.14)
-      z <- selectJSONwhere $ \v -> v #>. ["1"] #>. ["a"] ==. just (val $ Number 3.14)
+      x <- selectJSONwhere $ \v -> v #>. ["a","b","c"] ==. jsonbVal (String "message")
+      y <- selectJSONwhere $ \v -> v #>. ["1","a"] ==. jsonbVal (Number 3.14)
+      z <- selectJSONwhere $ \v -> v #>. ["1"] #>. ["a"] ==. jsonbVal (Number 3.14)
       liftIO $ length x `shouldBe` 1
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 1
@@ -631,14 +632,14 @@ testHashArrowText =
     it "creates sane SQL" $ do
       let list = ["a","b","c"]
       createSaneSQL
-        (just (val $ object ["a" .= True]) #>>. list)
+        (jsonbVal (object ["a" .= True]) #>>. list)
         "SELECT (? #>> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":true}"
         , persistTextArray list ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) #>. ["a","1"] #>>. ["b"])
+        (jsonbVal obj #>. ["a","1"] #>>. ["b"])
         "SELECT ((? #> ?) #>> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
@@ -665,44 +666,44 @@ testInclusion = do
   describe "@>" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) @>. just (val $ object ["a" .= False]))
+        (jsonbVal (object ["a" .= False, "b" .= True]) @>. jsonbVal (object ["a" .= False]))
         "SELECT (? @> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , PersistDbSpecific "{\"a\":false}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) ->. Right "a" @>. just (val $ object ["b" .= True]))
+        (jsonbVal obj ->. Right "a" @>. jsonbVal (object ["b" .= True]))
         "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , PersistDbSpecific "{\"b\":true}" ]
     it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v @>. just (val $ Number 1)
-      y <- selectJSONwhere $ \v -> v @>. just (val $ toJSON [object ["a" .= Number 3.14]])
-      z <- selectJSONwhere $ \v -> v ->. Left 1 @>. just (val $ object ["a" .= Number 3.14])
+      x <- selectJSONwhere $ \v -> v @>. jsonbVal (Number 1)
+      y <- selectJSONwhere $ \v -> v @>. jsonbVal (toJSON [object ["a" .= Number 3.14]])
+      z <- selectJSONwhere $ \v -> v ->. Left 1 @>. jsonbVal (object ["a" .= Number 3.14])
       liftIO $ length x `shouldBe` 2
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 1
   describe "<@" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False]) <@. just (val $ object ["a" .= False, "b" .= True]))
+        (jsonbVal (object ["a" .= False]) <@. jsonbVal (object ["a" .= False, "b" .= True]))
         "SELECT (? <@ ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false}"
         , PersistDbSpecific "{\"a\":false,\"b\":true}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) ->. Right "a" <@. just (val $ object ["b" .= True, "c" .= Null]))
+        (jsonbVal obj ->. Right "a" <@. jsonbVal (object ["b" .= True, "c" .= Null]))
         "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , PersistDbSpecific "{\"b\":true,\"c\":null}" ]
     it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v <@. just (val $ toJSON [Number 1])
-      y <- selectJSONwhere $ \v -> v <@. just (val $ object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
-      z <- selectJSONwhere $ \v -> v #>. ["a","b"] <@. just (val $ object ["b" .= False, "c" .= String "message"])
+      x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
+      y <- selectJSONwhere $ \v -> v <@. jsonbVal (object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
+      z <- selectJSONwhere $ \v -> v #>. ["a","b"] <@. jsonbVal (object ["b" .= False, "c" .= String "message"])
       liftIO $ length x `shouldBe` 2
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 1
@@ -712,14 +713,14 @@ testQMark =
   describe "Question Mark" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) JSON.?. "a")
+        (jsonbVal (object ["a" .= False, "b" .= True]) JSON.?. "a")
         "SELECT (? ?? ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) #>. ["a","0"] JSON.?. "b")
+        (jsonbVal obj #>. ["a","0"] JSON.?. "b")
         "SELECT ((? #> ?) ?? ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
@@ -737,14 +738,14 @@ testQMarkAny =
   describe "Question Mark (Any)" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) ?|. ["a","c"])
+        (jsonbVal (object ["a" .= False, "b" .= True]) ?|. ["a","c"])
         "SELECT (? ??| ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","c"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) #>. ["a","0"] ?|. ["b","c"])
+        (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
         "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
@@ -764,14 +765,14 @@ testQMarkAll =
   describe "Question Mark (All)" $ do
     it "creates sane SQL" $
       createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) ?&. ["a","c"])
+        (jsonbVal (object ["a" .= False, "b" .= True]) ?&. ["a","c"])
         "SELECT (? ??& ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","c"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
-        (just (val obj) #>. ["a","0"] ?&. ["b","c"])
+        (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
         "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
@@ -799,155 +800,157 @@ testConcatenationOperator :: Spec
 testConcatenationOperator =
   describe "Concatenation" $ do
     it "creates sane SQL" $
-      createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True])
-            JSON.||. just (val $ object ["c" .= Null]))
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= False, "b" .= True])
+            JSON.||. jsonbVal (object ["c" .= Null]))
         "SELECT (? || ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , PersistDbSpecific "{\"c\":null}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (just (val obj) ->. Right "a" JSON.||. just (val $ toJSON [Null]))
+      createSaneSQL @JSONValue
+        (jsonbVal obj ->. Right "a" JSON.||. jsonbVal (toJSON [Null]))
         "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , PersistDbSpecific "[null]" ]
     it "works as expected" $ run $ do
       x <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ object [])
-          where_ $ v JSON.||. just (val $ object ["x" .= True])
-                          @>. just (val $ object ["x" .= True])
+          where_ $ v @>. jsonbVal (object [])
+          where_ $ v JSON.||. jsonbVal (object ["x" .= True])
+                          @>. jsonbVal (object ["x" .= True])
       y <- selectJSONwhere $ \v ->
-          v JSON.||. just (val $ toJSON [String "a", String "b"])
+          v JSON.||. jsonbVal (toJSON [String "a", String "b"])
                 ->>. Left 4 ==. just (val "b")
       z <- selectJSONwhere $ \v ->
-          v JSON.||. just (val $ toJSON [Bool False])
-                 ->. Left 0 JSON.@>. just (val $ Number 1)
+          v JSON.||. jsonbVal (toJSON [Bool False])
+                 ->. Left 0 JSON.@>. jsonbVal (Number 1)
       w <- selectJSON $ \v -> do
-          where_ . not_ $ v @>. just (val $ object [])
-          where_ $ just (val $ String "test1") JSON.||. v ->>. Left 0 ==. just (val "test1")
+          where_ . not_ $ v @>. jsonbVal (object [])
+          where_ $ jsonbVal (String "test1") JSON.||. v ->>. Left 0 ==. just (val "test1")
       liftIO $ length x `shouldBe` 2
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 2
       liftIO $ length w `shouldBe` 7
       sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v JSON.||. just (val $ toJSON $ String "test")
-                 @>. just (val $ String "test")
+          v JSON.||. jsonbVal (toJSON $ String "test")
+                 @>. jsonbVal (String "test")
 
 testMinusOperator :: Spec
 testMinusOperator =
   describe "Minus Operator" $ do
     it "creates sane SQL" $
-      createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) JSON.-. Right "a")
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= False, "b" .= True]) JSON.-. Right "a")
         "SELECT (? - ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (just (val obj) ->. Right "a" JSON.-. Left 0)
+      createSaneSQL @JSONValue
+        (jsonbVal obj ->. Right "a" JSON.-. Left 0)
         "SELECT ((? -> ?) - ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , PersistInt64 0 ]
     it "works as expected" $ run $ do
       x <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
-          where_ $ v JSON.-. Left 0 @>. just (val $ toJSON [Bool True])
+          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+          where_ $ v JSON.-. Left 0 @>. jsonbVal (toJSON [Bool True])
       y <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
-          where_ $ v JSON.-. Left (-1) @>. just (val $ toJSON [Null])
+          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+          where_ $ v JSON.-. Left (-1) @>. jsonbVal (toJSON [Null])
       z <- selectJSON_ $ \v -> v JSON.-. Right "b" ?&. ["a", "b"]
       w <- selectJSON_ $ \v -> do
-          v JSON.-. Right "test" @>. just (val $ toJSON [String "test"])
+          v JSON.-. Right "test" @>. jsonbVal (toJSON [String "test"])
       liftIO $ length x `shouldBe` 2
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 0
       liftIO $ length w `shouldBe` 0
       sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v JSON.-. Left 0 @>. just (val $ toJSON ([] :: [Int]))
+          v JSON.-. Left 0 @>. jsonbVal (toJSON ([] :: [Int]))
   where selectJSON_ f = selectJSON $ \v -> do
-          where_ $ v @>. just (val $ object [])
-               ||. v @>. just (val $ toJSON ([] :: [Int]))
+          where_ $ v @>. jsonbVal (object [])
+               ||. v @>. jsonbVal (toJSON ([] :: [Int]))
           where_ $ f v
 
 testMinusOperatorV10 :: Spec
 testMinusOperatorV10 =
   describe "Minus Operator (PSQL >= v10)" $ do
     it "creates sane SQL" $
-      createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) --. ["a","b"])
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= False, "b" .= True]) --. ["a","b"])
         "SELECT (? - ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","b"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (just (val obj) #>. ["a","0"] --. ["b"])
+      createSaneSQL @JSONValue
+        (jsonbVal obj #>. ["a","0"] --. ["b"])
         "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
         , persistTextArray ["b"] ]
     it "works as expected" $ run $ do
       x <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
-          where_ $ v --. ["test","a"] @>. just (val $ toJSON [String "test"])
+          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+          where_ $ v --. ["test","a"] @>. jsonbVal (toJSON [String "test"])
       y <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ object [])
-          where_ $ v --. ["a","b"] <@. just (val $ object [])
-      z <- selectJSON_ $ \v -> v --. ["b"] <@. just (val $ object ["a" .= (1 :: Int)])
+          where_ $ v @>. jsonbVal (object [])
+          where_ $ v --. ["a","b"] <@. jsonbVal (object [])
+      z <- selectJSON_ $ \v -> v --. ["b"] <@. jsonbVal (object ["a" .= (1 :: Int)])
       w <- selectJSON_ $ \v -> do
-          v --. ["test"] @>. just (val $ toJSON [String "test"])
+          v --. ["test"] @>. jsonbVal (toJSON [String "test"])
       liftIO $ length x `shouldBe` 0
       liftIO $ length y `shouldBe` 2
       liftIO $ length z `shouldBe` 1
       liftIO $ length w `shouldBe` 0
       sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v --. ["a"] @>. just (val $ toJSON ([] :: [Int]))
+          v --. ["a"] @>. jsonbVal (toJSON ([] :: [Int]))
   where selectJSON_ f = selectJSON $ \v -> do
-          where_ $ v @>. just (val $ object [])
-               ||. v @>. just (val $ toJSON ([] :: [Int]))
+          where_ $ v @>. jsonbVal (object [])
+               ||. v @>. jsonbVal (toJSON ([] :: [Int]))
           where_ $ f v
 
 testHashMinusOperator :: Spec
 testHashMinusOperator =
   describe "Hash-Minus Operator" $ do
     it "creates sane SQL" $
-      createSaneSQL
-        (just (val $ object ["a" .= False, "b" .= True]) #-. ["a"])
+      createSaneSQL @JSONValue
+        (jsonbVal (object ["a" .= False, "b" .= True]) #-. ["a"])
         "SELECT (? #- ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":false,\"b\":true}"
         , persistTextArray ["a"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (just (val obj) ->. Right "a" #-. ["0","b"])
+      createSaneSQL @JSONValue
+        (jsonbVal obj ->. Right "a" #-. ["0","b"])
         "SELECT ((? -> ?) #- ?)\nFROM \"Json\"\n"
         [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , persistTextArray ["0","b"] ]
     it "works as expected" $ run $ do
       x <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
-          where_ $ v #-. ["1","a"] @>. just (val $ toJSON [object []])
+          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+          where_ $ v #-. ["1","a"] @>. jsonbVal (toJSON [object []])
       y <- selectJSON $ \v -> do
-          where_ $ v @>. just (val $ toJSON ([] :: [Int]))
-          where_ $ v #-. ["-3","a"] @>. just (val $ toJSON [object []])
+          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+          where_ $ v #-. ["-3","a"] @>. jsonbVal (toJSON [object []])
       z <- selectJSON_ $ \v -> v #-. ["a","b","c"]
-              @>. just (val $ object ["a" .= object ["b" .= object ["c" .= String "message"]]])
+              @>. jsonbVal (object ["a" .= object ["b" .= object ["c" .= String "message"]]])
       w <- selectJSON_ $ \v -> v #-. ["a","b"] JSON.?. "b"
       liftIO $ length x `shouldBe` 1
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 0
       liftIO $ length w `shouldBe` 1
       sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v #-. ["0"] @>. just (val $ toJSON ([] :: [Int]))
+          v #-. ["0"] @>. jsonbVal (toJSON ([] :: [Int]))
   where selectJSON_ f = selectJSON $ \v -> do
-          where_ $ v @>. just (val $ object [])
+          where_ $ v @>. jsonbVal (object [])
           where_ $ f v
 
+
+type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
 createSaneSQL act q vals = run $ do
@@ -980,13 +983,13 @@ sqlFailWith errState f = do
 
 selectJSONwhere
   :: MonadIO m
-  => (SqlExpr (Value (Maybe A.Value)) -> SqlExpr (Value Bool))
+  => (JSONExpr A.Value -> SqlExpr (Value Bool))
   -> SqlPersistT m [Entity Json]
 selectJSONwhere f = selectJSON $ where_ . f
 
 selectJSON
   :: MonadIO m
-  => (SqlExpr (Value (Maybe A.Value)) -> SqlQuery ())
+  => (JSONExpr A.Value -> SqlQuery ())
   -> SqlPersistT m [Entity Json]
 selectJSON f = select $ from $ \v -> do
     f $ just (v ^. JsonValue)

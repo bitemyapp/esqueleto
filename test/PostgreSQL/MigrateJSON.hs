@@ -13,21 +13,19 @@
 module PostgreSQL.MigrateJSON where
 
 import Control.Monad.Trans.Resource (ResourceT)
-import qualified Data.Aeson as A
+import Data.Aeson (Value)
 import Database.Esqueleto (SqlExpr, delete, from)
-import Database.Esqueleto.PostgreSQL.JSON.Instances()
+import Database.Esqueleto.PostgreSQL.JSON (JSONB)
 import Database.Persist (Entity)
 import Database.Persist.Sql (SqlPersistT)
 import Database.Persist.TH
 
 import Common.Test (RunDbMonad)
 
-type JSONValue = A.Value
-
 -- JSON Table for PostgreSQL
 share [mkPersist sqlSettings, mkMigrate "migrateJSON"] [persistUpperCase|
 Json
-  value JSONValue
+  value (JSONB Value)
 |]
 
 cleanJSON
