@@ -1,6 +1,4 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 {-|
   This module contains PostgreSQL-specific JSON functions.
 
@@ -8,18 +6,15 @@
 
       * The @Type@ column in the PostgreSQL documentation tables
       are the types of the right operand, the left is always @jsonb@.
-      * This module also exports 'PersistField' and 'PersistFieldSql'
-      orphan instances for 'Data.Aeson.Value'
       * Since these operators can all take @NULL@ values as their input,
       and most can also output @NULL@ values (even when the inputs are
-      guaranteed to not be NULL), all 'Data.Aeson.Value's are wrapped in
-      'Maybe'. This also makes it easier to chain them.
-      Just use the 'just' function to lift any non-'Maybe' JSON values
+      guaranteed to not be NULL), all 'JSONB' values are wrapped in
+      'Maybe'. This also makes it easier to chain them. (cf. 'JSONExpr')
+      Just use the 'just' function to lift any non-'Maybe' JSONB values
       in case it doesn't type check.
       * As long as the previous operator's resulting value is
-      'Maybe' 'Data.Aeson.Value', any other JSON operator can be
-      used to transform the JSON further.
-      (e.g. @'[1,2,3]' -> 1 \@> 2@)
+      a 'JSONExpr', any other JSON operator can be used to transform
+      the JSON further. (e.g. @'[1,2,3]' -> 1 \@> '2'@)
 
   /The PostgreSQL version the functions work with are included/
   /in their description./
@@ -27,26 +22,47 @@
   @since 3.1.0
 -}
 module Database.Esqueleto.PostgreSQL.JSON
-  ( -- * Arrow operators
+  ( -- * JSONB Newtype
     --
-    -- /Better documentation included with individual functions/
-    --
-    -- === __PostgreSQL Documentation__
-    --
-    -- /Works with any PostgreSQL of version >= 9.3/
+    -- With 'JSONB', you can use your Haskell types in your
+    -- database table models as long as your type has 'FromJSON'
+    -- and 'ToJSON' instances.
     --
     -- @
-    --      | Type   | Description                                |  Example                                         | Example Result
-    -- -----+--------+--------------------------------------------+--------------------------------------------------+----------------
-    --  ->  | int    | Get JSON array element (indexed from zero, | '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json->2 | {"c":"baz"}
-    --      |        | negative integers count from the end)      |                                                  |
-    --  ->  | text   | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
-    --  ->> | int    | Get JSON array element as text             | '[1,2,3]'::json->>2                              | 3
-    --  ->> | text   | Get JSON object field as text              | '{"a":1,"b":2}'::json->>'b'                      | 2
-    --  #>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
-    --  #>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
+    -- import Database.Persist.TH
+    --
+    -- share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
+    --   Example
+    --     json (JSONB MyType)
+    -- |]
     -- @
-    (->.)
+    --
+    -- CAUTION: Remember that changing the 'FromJSON' instance
+    -- of your type might result in old data becoming unparsable!
+    -- You can use (@JSONB Data.Aeson.Value@) for unstructured/variable JSON.
+    JSONB(..)
+  , JSONExpr
+  , jsonbVal
+  -- * Arrow operators
+  --
+  -- /Better documentation included with individual functions/
+  --
+  -- === __PostgreSQL Documentation__
+  --
+  -- /Works with any PostgreSQL of version >= 9.3/
+  --
+  -- @
+  --      | Type   | Description                                |  Example                                         | Example Result
+  -- -----+--------+--------------------------------------------+--------------------------------------------------+----------------
+  --  ->  | int    | Get JSON array element (indexed from zero, | '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json->2 | {"c":"baz"}
+  --      |        | negative integers count from the end)      |                                                  |
+  --  ->  | text   | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
+  --  ->> | int    | Get JSON array element as text             | '[1,2,3]'::json->>2                              | 3
+  --  ->> | text   | Get JSON object field as text              | '{"a":1,"b":2}'::json->>'b'                      | 2
+  --  #>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
+  --  #>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
+  -- @
+  , (->.)
   , (->>.)
   , (#>.)
   , (#>>.)
@@ -104,14 +120,11 @@ module Database.Esqueleto.PostgreSQL.JSON
   , (#-.)
   ) where
 
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
-import qualified Data.Aeson as Aeson (Value)
 import Data.Text (Text)
 import Database.Esqueleto.Internal.Language hiding ((?.), (-.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Sql
+import Database.Esqueleto.PostgreSQL.JSON.Instances
 
 
 infixl 6 ->., ->>., #>., #>>.
@@ -140,9 +153,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(->.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> Either Int Text
-      -> SqlExpr (Value (Maybe Aeson.Value))
+(->.) :: JSONExpr a -> Either Int Text -> JSONExpr b
 (->.) value (Right txt) = unsafeSqlBinOp " -> " value $ val txt
 (->.) value (Left i)    = unsafeSqlBinOp " -> " value $ val i
 
@@ -166,9 +177,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(->>.) :: SqlExpr (Value (Maybe Aeson.Value))
-       -> Either Int Text
-       -> SqlExpr (Value (Maybe Text))
+(->>.) :: JSONExpr a -> Either Int Text -> SqlExpr (Value (Maybe Text))
 (->>.) value (Right txt) = unsafeSqlBinOp " ->> " value $ val txt
 (->>.) value (Left i)    = unsafeSqlBinOp " ->> " value $ val i
 
@@ -210,9 +219,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(#>.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> [Text]
-      -> SqlExpr (Value (Maybe Aeson.Value))
+(#>.) :: JSONExpr a -> [Text] -> JSONExpr b
 (#>.) value = unsafeSqlBinOp " #> " value . mkTextArray
 
 
@@ -234,9 +241,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(#>>.) :: SqlExpr (Value (Maybe Aeson.Value))
-       -> [Text]
-       -> SqlExpr (Value (Maybe Text))
+(#>>.) :: JSONExpr a -> [Text] -> SqlExpr (Value (Maybe Text))
 (#>>.)  value = unsafeSqlBinOp " #>> " value . mkTextArray
 
 -- | This operator checks for the JSON value on the right to be a subset
@@ -257,9 +262,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(@>.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value Bool)
+(@>.) :: JSONExpr a -> JSONExpr b -> SqlExpr (Value Bool)
 (@>.) = unsafeSqlBinOp " @> "
 
 -- | This operator works the same as '@>.', just with the arguments flipped.
@@ -280,9 +283,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(<@.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value Bool)
+(<@.) :: JSONExpr a -> JSONExpr b -> SqlExpr (Value Bool)
 (<@.) = unsafeSqlBinOp " <@ "
 
 -- | This operator checks if the given text is a top-level member of the
@@ -304,9 +305,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?.) :: SqlExpr (Value (Maybe Aeson.Value))
-     -> Text
-     -> SqlExpr (Value Bool)
+(?.) :: JSONExpr a -> Text -> SqlExpr (Value Bool)
 (?.) value = unsafeSqlBinOp " ?? " value . val
 
 -- | This operator checks if __ANY__ of the given texts is a top-level member
@@ -328,9 +327,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?|.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> [Text]
-      -> SqlExpr (Value Bool)
+(?|.) :: JSONExpr a -> [Text] -> SqlExpr (Value Bool)
 (?|.) value = unsafeSqlBinOp " ??| " value . mkTextArray
 
 -- | This operator checks if __ALL__ of the given texts are top-level members
@@ -352,9 +349,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?&.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> [Text]
-      -> SqlExpr (Value Bool)
+(?&.) :: JSONExpr a -> [Text] -> SqlExpr (Value Bool)
 (?&.) value = unsafeSqlBinOp " ??& " value . mkTextArray
 
 -- | This operator concatenates two JSON values. The behaviour is
@@ -424,9 +419,7 @@ infixl 6 ||., -., --., #-.
 -- /field in the result will just be the value from the right hand operand./
 --
 -- @since 3.1.0
-(||.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value (Maybe Aeson.Value))
-      -> SqlExpr (Value (Maybe Aeson.Value))
+(||.) :: JSONExpr a -> JSONExpr b -> JSONExpr c
 (||.) = unsafeSqlBinOp " || "
 
 -- | This operator can remove a key from an object or a string element from an array
@@ -472,9 +465,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(-.) :: SqlExpr (Value (Maybe Aeson.Value))
-     -> Either Int Text
-     -> SqlExpr (Value (Maybe Aeson.Value))
+(-.) :: JSONExpr a -> Either Int Text -> JSONExpr b
 (-.) value (Right t) = unsafeSqlBinOp " - " value $ val t
 (-.) value (Left i) = unsafeSqlBinOp " - " value $ val i
 
@@ -499,9 +490,7 @@ infixl 6 ||., -., --., #-.
 -- ---+---------+------------------------------------------------------------------------+-------------------------------------------------
 --  - | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
 --    |         | Key/value pairs are matched based on their key value.                  |
-(--.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> [Text]
-      -> SqlExpr (Value (Maybe Aeson.Value))
+(--.) :: JSONExpr a -> [Text] -> JSONExpr b
 (--.) value = unsafeSqlBinOp " - " value . mkTextArray
 
 -- | This operator can remove elements nested in an object.
@@ -554,9 +543,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(#-.) :: SqlExpr (Value (Maybe Aeson.Value))
-      -> [Text]
-      -> SqlExpr (Value (Maybe Aeson.Value))
+(#-.) :: JSONExpr a -> [Text] -> JSONExpr b
 (#-.) value = unsafeSqlBinOp " #- " value . mkTextArray
 
 mkTextArray :: [Text] -> SqlExpr (Value PersistValue)
