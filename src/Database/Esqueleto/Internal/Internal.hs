@@ -1647,9 +1647,12 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 , vals1 <> vals2 )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
     where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
-          construct (ERaw p f)        = ERaw Never $ \info ->
+          construct (ERaw p f)        = ERaw Parens $ \info ->
             let (b1, vals) = f info
-             in (parensM p b1, vals)
+                build ("?", [PersistList vals']) =
+                  (uncommas $ replicate (length vals') "?", vals')
+                build expr = expr
+             in  build (parensM p b1, vals)
           construct (ECompositeKey f) =
             ERaw Parens $ \info -> (uncommas $ f info, mempty)
 {-# INLINE unsafeSqlBinOp #-}
