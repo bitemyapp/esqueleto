@@ -36,12 +36,14 @@ newtype JSONB a = JSONB { unJSONB :: a }
     , Traversable
     )
 
--- | 'SqlExpr' of a NULL-able 'JSONB' value.
-type JSONExpr a = SqlExpr (Value (Maybe (JSONB a)))
+-- | 'SqlExpr' of a NULL-able 'JSONB' value. Hence the 'Maybe'.
+--
+-- Note: NULL here is a PostgreSQL NULL, not a JSON 'null'
+type JSONBExpr a = SqlExpr (Value (Maybe (JSONB a)))
 
 -- | Convenience function to lift a regular value into
 -- a 'JSONB' expression.
-jsonbVal :: (FromJSON a, ToJSON a) => a -> JSONExpr a
+jsonbVal :: (FromJSON a, ToJSON a) => a -> JSONBExpr a
 jsonbVal = just . val . JSONB
 
 -- | Used with certain JSON operators.
