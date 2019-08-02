@@ -1,6 +1,12 @@
 Unreleased
 ========
 
+3.1.0
+=======
+
+- @Vlix
+  - [#128](https://github.com/bitemyapp/esqueleto/pull/128): Added `Database.Esqueleto.PostgreSQL.JSON` module with JSON operators and `JSONB` data type.
+
 3.0.0
 =======
 
