@@ -14,7 +14,7 @@
       in case it doesn't type check.
       * As long as the previous operator's resulting value is
       a 'JSONExpr', any other JSON operator can be used to transform
-      the JSON further. (e.g. @'[1,2,3]' -> 1 \@> '2'@)
+      the JSON further. (e.g. @[1,2,3] -> 1 \@> 2@)
 
   /The PostgreSQL version the functions work with are included/
   /in their description./
@@ -24,7 +24,7 @@
 module Database.Esqueleto.PostgreSQL.JSON
   ( -- * JSONB Newtype
     --
-    -- With 'JSONB', you can use your Haskell types in your
+    -- | With 'JSONB', you can use your Haskell types in your
     -- database table models as long as your type has 'FromJSON'
     -- and 'ToJSON' instances.
     --
@@ -41,15 +41,19 @@ module Database.Esqueleto.PostgreSQL.JSON
     -- of your type might result in old data becoming unparsable!
     -- You can use (@JSONB Data.Aeson.Value@) for unstructured/variable JSON.
     JSONB(..)
+
   , JSONExpr
   , jsonbVal
   -- * Arrow operators
   --
-  -- /Better documentation included with individual functions/
+  -- | /Better documentation included with individual functions/
   --
-  -- === __PostgreSQL Documentation__
+  -- The arrow operators are selection functions to select values
+  -- from JSON arrays or objects.
   --
-  -- /Works with any PostgreSQL of version >= 9.3/
+  -- === PostgreSQL Documentation
+  --
+  -- /Requires PostgreSQL version >= 9.3/
   --
   -- @
   --      | Type   | Description                                |  Example                                         | Example Result
@@ -59,8 +63,8 @@ module Database.Esqueleto.PostgreSQL.JSON
   --  ->  | text   | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
   --  ->> | int    | Get JSON array element as text             | '[1,2,3]'::json->>2                              | 3
   --  ->> | text   | Get JSON object field as text              | '{"a":1,"b":2}'::json->>'b'                      | 2
-  --  #>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
-  --  #>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
+  --  \#>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
+  --  \#>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
   -- @
   , (->.)
   , (->>.)
@@ -68,17 +72,20 @@ module Database.Esqueleto.PostgreSQL.JSON
   , (#>>.)
   -- * Filter operators
   --
-  -- /Better documentation included with individual functions/
+  -- | /Better documentation included with individual functions/
   --
-  -- === __PostgreSQL Documentation__
+  -- These functions test certain properties of JSON values
+  -- and return booleans, so are mainly used in WHERE clauses.
   --
-  -- /Works with any PostgreSQL of version >= 9.4/
+  -- === PostgreSQL Documentation
+  --
+  -- /Requires PostgreSQL version >= 9.4/
   --
   -- @
   --     | Type   | Description                                                     |  Example
   -- ----+--------+-----------------------------------------------------------------+---------------------------------------------------
-  --  @> | jsonb  | Does the left JSON value contain within it the right value?     | '{"a":1, "b":2}'::jsonb @> '{"b":2}'::jsonb
-  --  <@ | jsonb  | Is the left JSON value contained within the right value?        | '{"b":2}'::jsonb <@ '{"a":1, "b":2}'::jsonb
+  --  \@> | jsonb  | Does the left JSON value contain within it the right value?     | '{"a":1, "b":2}'::jsonb \@> '{"b":2}'::jsonb
+  --  <\@ | jsonb  | Is the left JSON value contained within the right value?        | '{"b":2}'::jsonb <\@ '{"a":1, "b":2}'::jsonb
   --  ?  | text   | Does the string exist as a top-level key within the JSON value? | '{"a":1, "b":2}'::jsonb ? 'b'
   --  ?| | text[] | Do any of these array strings exist as top-level keys?          | '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']
   --  ?& | text[] | Do all of these array strings exist as top-level keys?          | '["a", "b"]'::jsonb ?& array['a', 'b']
@@ -90,11 +97,15 @@ module Database.Esqueleto.PostgreSQL.JSON
   , (?&.)
   -- * Deletion and concatenation operators
   --
-  -- /Better documentation included with individual functions/
+  -- | /Better documentation included with individual functions/
   --
-  -- === __PostgreSQL Documentation__
+  -- These operators change the shape of the JSON value and
+  -- also have the highest risk of throwing an exception.
+  -- Please read the descriptions carefully before using these functions.
   --
-  -- /Works with any PostgreSQL of version >= 9.5/
+  -- === PostgreSQL Documentation
+  --
+  -- /Requires PostgreSQL version >= 9.5/
   --
   -- @
   --     | Type    | Description                                                            |  Example
@@ -104,20 +115,22 @@ module Database.Esqueleto.PostgreSQL.JSON
   --     |         | Key/value pairs are matched based on their key value.                  |
   --  -  | integer | Delete the array element with specified index (Negative integers count | '["a", "b"]'::jsonb - 1
   --     |         | from the end). Throws an error if top level container is not an array. |
-  --  #- | text[]  | Delete the field or element with specified path                        | '["a", {"b":1}]'::jsonb #- '{1,b}'
+  --  \#- | text[]  | Delete the field or element with specified path                        | '["a", {"b":1}]'::jsonb \#- '{1,b}'
   --     |         | (for JSON arrays, negative integers count from the end)                |
+  -- @
   --
-  -- /Works with any PostgreSQL of version >= 10/
+  -- /Requires PostgreSQL version >= 10/
   --
+  -- @
   --     | Type    | Description                                                            |  Example
   -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
   --  -  | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
   --     |         | Key/value pairs are matched based on their key value.                  |
   -- @
-  , (||.)
   , (-.)
   , (--.)
   , (#-.)
+  , (||.)
   ) where
 
 import Data.Text (Text)
@@ -132,7 +145,9 @@ infixl 6 @>., <@., ?., ?|., ?&.
 infixl 6 ||., -., --., #-.
 
 
--- | This function extracts the jsonb value from a JSON array or object,
+-- | /Requires PostgreSQL version >= 9.3/
+--
+-- This function extracts the jsonb value from a JSON array or object,
 -- depending on whether you use an @int@ (@Left i@ in Haskell) or a
 -- @text@ (@Right t@ in Haskell).
 --
@@ -142,8 +157,6 @@ infixl 6 ||., -., --., #-.
 -- other than a JSON object.
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.3/
 --
 -- @
 --     | Type | Description                                |  Example                                         | Example Result
@@ -157,7 +170,9 @@ infixl 6 ||., -., --., #-.
 (->.) value (Right txt) = unsafeSqlBinOp " -> " value $ val txt
 (->.) value (Left i)    = unsafeSqlBinOp " -> " value $ val i
 
--- | Identical to '->.', but the resulting DB type is a @text@,
+-- | /Requires PostgreSQL version >= 9.3/
+--
+-- Identical to '->.', but the resulting DB type is a @text@,
 -- so it could be chained with anything that uses @text@.
 --
 -- __CAUTION: if the "scalar" JSON value @null@ is the result__
@@ -166,8 +181,6 @@ infixl 6 ||., -., --., #-.
 -- __instead of (Just "null")__
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.3/
 --
 -- @
 --      | Type | Description                    |  Example                    | Example Result
@@ -181,7 +194,9 @@ infixl 6 ||., -., --., #-.
 (->>.) value (Right txt) = unsafeSqlBinOp " ->> " value $ val txt
 (->>.) value (Left i)    = unsafeSqlBinOp " ->> " value $ val i
 
--- | This operator can be used to select a JSON value from deep inside another one.
+-- | /Requires PostgreSQL version >= 9.3/
+--
+-- This operator can be used to select a JSON value from deep inside another one.
 -- It only works on objects and arrays and will result in @NULL@ ('Nothing') when
 -- encountering any other JSON type.
 --
@@ -194,15 +209,15 @@ infixl 6 ||., -., --., #-.
 -- x ^. TestBody #>. ["0","1"]
 -- @
 --
--- The following JSON values in the @x@ table's @body@ column will be affected:
+-- The following JSON values in the @test@ table's @body@ column will be affected:
 --
 -- @
---  Value in row                         | Resulting value
+--  Values in column                     | Resulting value
 -- --------------------------------------+----------------------------
 -- {"0":{"1":"Got it!"}}                 | "Got it!"
 -- {"0":[null,["Got it!","Even here!"]]} | ["Got it!", "Even here!"]
 -- [{"1":"Got it again!"}]               | "Got it again!"
--- [[null,{"Wow":"so deep!"}]]           | {"Wow": "so deep!"}
+-- [[null,{\"Wow\":"so deep!"}]]           | {\"Wow\": "so deep!"}
 -- false                                 | NULL
 -- "nope"                                | NULL
 -- 3.14                                  | NULL
@@ -210,12 +225,10 @@ infixl 6 ||., -., --., #-.
 --
 -- === __PostgreSQL Documentation__
 --
--- /Works with any PostgreSQL of version >= 9.3/
---
 -- @
 --      | Type   | Description                       |  Example                                   | Example Result
 -- -----+--------+-----------------------------------+--------------------------------------------+----------------
---  #>  | text[] | Get JSON object at specified path | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}' | {"c": "foo"}
+--  \#>  | text[] | Get JSON object at specified path | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}' | {"c": "foo"}
 -- @
 --
 -- @since 3.1.0
@@ -223,7 +236,9 @@ infixl 6 ||., -., --., #-.
 (#>.) value = unsafeSqlBinOp " #> " value . mkTextArray
 
 
--- | This function is to '#>.' as '->>.' is to '->.'
+-- | /Requires PostgreSQL version >= 9.3/
+--
+-- This function is to '#>.' as '->>.' is to '->.'
 --
 -- __CAUTION: if the "scalar" JSON value @null@ is the result__
 -- __of this function, PostgreSQL will interpret it as a__
@@ -232,71 +247,72 @@ infixl 6 ||., -., --., #-.
 --
 -- === __PostgreSQL Documentation__
 --
--- /Works with any PostgreSQL of version >= 9.3/
---
 -- @
 --      | Type   | Description                               |  Example                                    | Example Result
 -- -----+--------+-------------------------------------------+---------------------------------------------+----------------
---  #>> | text[] | Get JSON object at specified path as text | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}' | 3
+--  \#>> | text[] | Get JSON object at specified path as text | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}' | 3
 -- @
 --
 -- @since 3.1.0
 (#>>.) :: JSONExpr a -> [Text] -> SqlExpr (Value (Maybe Text))
 (#>>.)  value = unsafeSqlBinOp " #>> " value . mkTextArray
 
--- | This operator checks for the JSON value on the right to be a subset
+-- | /Requires PostgreSQL version >= 9.4/
+--
+-- This operator checks for the JSON value on the right to be a subset
 -- of the JSON value on the left.
 --
 -- Examples of the usage of this operator can be found in
--- the Database.Persist.Postgresql.JSON module. (here:
--- <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
+-- the Database.Persist.Postgresql.JSON module.
+--
+-- (here: <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.4/
 --
 -- @
 --     | Type  | Description                                                 |  Example
 -- ----+-------+-------------------------------------------------------------+---------------------------------------------
---  @> | jsonb | Does the left JSON value contain within it the right value? | '{"a":1, "b":2}'::jsonb @> '{"b":2}'::jsonb
+--  \@> | jsonb | Does the left JSON value contain within it the right value? | '{"a":1, "b":2}'::jsonb \@> '{"b":2}'::jsonb
 -- @
 --
 -- @since 3.1.0
 (@>.) :: JSONExpr a -> JSONExpr b -> SqlExpr (Value Bool)
 (@>.) = unsafeSqlBinOp " @> "
 
--- | This operator works the same as '@>.', just with the arguments flipped.
+-- | /Requires PostgreSQL version >= 9.4/
+--
+-- This operator works the same as '@>.', just with the arguments flipped.
 -- So it checks for the JSON value on the left to be a subset of JSON value on the right.
 --
 -- Examples of the usage of this operator can be found in
--- the Database.Persist.Postgresql.JSON module. (here:
--- <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
+-- the Database.Persist.Postgresql.JSON module.
+--
+-- (here: <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.4/
 --
 -- @
 --     | Type  | Description                                              |  Example
 -- ----+-------+----------------------------------------------------------+---------------------------------------------
---  <@ | jsonb | Is the left JSON value contained within the right value? | '{"b":2}'::jsonb <@ '{"a":1, "b":2}'::jsonb
+--  <\@ | jsonb | Is the left JSON value contained within the right value? | '{"b":2}'::jsonb <\@ '{"a":1, "b":2}'::jsonb
 -- @
 --
 -- @since 3.1.0
 (<@.) :: JSONExpr a -> JSONExpr b -> SqlExpr (Value Bool)
 (<@.) = unsafeSqlBinOp " <@ "
 
--- | This operator checks if the given text is a top-level member of the
+-- | /Requires PostgreSQL version >= 9.4/
+--
+-- This operator checks if the given text is a top-level member of the
 -- JSON value on the left. This means a top-level field in an object, a
 -- top-level string in an array or just a string value.
 --
 -- Examples of the usage of this operator can be found in
--- the Database.Persist.Postgresql.JSON module. (here:
--- <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
+-- the Database.Persist.Postgresql.JSON module.
+--
+-- (here: <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.4/
 --
 -- @
 --    | Type | Description                                                     |  Example
@@ -308,17 +324,18 @@ infixl 6 ||., -., --., #-.
 (?.) :: JSONExpr a -> Text -> SqlExpr (Value Bool)
 (?.) value = unsafeSqlBinOp " ?? " value . val
 
--- | This operator checks if __ANY__ of the given texts is a top-level member
+-- | /Requires PostgreSQL version >= 9.4/
+--
+-- This operator checks if __ANY__ of the given texts is a top-level member
 -- of the JSON value on the left. This means any top-level field in an object,
 -- any top-level string in an array or just a string value.
 --
 -- Examples of the usage of this operator can be found in
--- the Database.Persist.Postgresql.JSON module. (here:
--- <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
+-- the Database.Persist.Postgresql.JSON module.
+--
+-- (here: <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.4/
 --
 -- @
 --     | Type   | Description                                            |  Example
@@ -330,17 +347,18 @@ infixl 6 ||., -., --., #-.
 (?|.) :: JSONExpr a -> [Text] -> SqlExpr (Value Bool)
 (?|.) value = unsafeSqlBinOp " ??| " value . mkTextArray
 
--- | This operator checks if __ALL__ of the given texts are top-level members
+-- | /Requires PostgreSQL version >= 9.4/
+--
+-- This operator checks if __ALL__ of the given texts are top-level members
 -- of the JSON value on the left. This means a top-level field in an object,
 -- a top-level string in an array or just a string value.
 --
 -- Examples of the usage of this operator can be found in
--- the Database.Persist.Postgresql.JSON module. (here:
--- <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
+-- the Database.Persist.Postgresql.JSON module.
+--
+-- (here: <https://hackage.haskell.org/package/persistent-postgresql-2.10.0/docs/Database-Persist-Postgresql-JSON.html>)
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.4/
 --
 -- @
 --     | Type   | Description                                            |  Example
@@ -352,7 +370,9 @@ infixl 6 ||., -., --., #-.
 (?&.) :: JSONExpr a -> [Text] -> SqlExpr (Value Bool)
 (?&.) value = unsafeSqlBinOp " ??& " value . mkTextArray
 
--- | This operator concatenates two JSON values. The behaviour is
+-- | /Requires PostgreSQL version >= 9.5/
+--
+-- This operator concatenates two JSON values. The behaviour is
 -- self-evident when used on two arrays, but the behaviour on different
 -- combinations of JSON values might behave unexpectedly.
 --
@@ -385,6 +405,7 @@ infixl 6 ||., -., --., #-.
 -- {"a": 3.14}                    || [1,null]            == [{"a": 3.14},1,null]
 -- [1,null]                       || {"a": 3.14}         == [1,null,{"a": 3.14}]
 -- 1                              || {"a": 3.14}         == ERROR: invalid concatenation of jsonb objects
+-- {"a": 3.14}                    || false               == ERROR: invalid concatenation of jsonb objects
 -- @
 --
 -- === __Scalar values__
@@ -399,13 +420,12 @@ infixl 6 ||., -., --., #-.
 -- [1,2]      || false      == [1,2,false]
 -- null       || [1,"a"]    == [null,1,"a"]
 -- {"a":3.14} || true       == ERROR: invalid concatenation of jsonb objects
+-- 3.14       || {"a":3.14} == ERROR: invalid concatenation of jsonb objects
 -- {"a":3.14} || [true]     == [{"a":3.14},true]
 -- [false]    || {"a":3.14} == [false,{"a":3.14}]
 -- @
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.5/
 --
 -- @
 --     | Type  | Description                                         |  Example
@@ -414,17 +434,23 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- /Note: The @||@ operator concatenates the elements at the top level of/
--- /each of its operands. It does not operate recursively. For example, if/
--- /both operands are objects with a common key field name, the value of the/
--- /field in the result will just be the value from the right hand operand./
+-- /each of its operands. It does not operate recursively./
+--
+-- /For example, if both operands are objects with a common key field name,/
+-- /the value of the field in the result will just be the value from the right/
+-- /hand operand./
 --
 -- @since 3.1.0
 (||.) :: JSONExpr a -> JSONExpr b -> JSONExpr c
 (||.) = unsafeSqlBinOp " || "
 
--- | This operator can remove a key from an object or a string element from an array
+-- | /Requires PostgreSQL version >= 9.5/
+--
+-- This operator can remove a key from an object or a string element from an array
 -- when using text, and remove certain elements by index from an array when using
--- integers. Negative integers delete counting from the end of the array.
+-- integers.
+--
+-- Negative integers delete counting from the end of the array.
 -- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
 -- __CAUTION: THIS FUNCTION THROWS AN EXCEPTION WHEN USED ON ANYTHING OTHER__
@@ -445,15 +471,13 @@ infixl 6 ||., -., --., #-.
 -- [true, "b", 5]         - -4          == [true, "b", 5]
 -- []                     - 1           == []
 -- {"1": true}            - 1           == ERROR: cannot delete from object using integer index
--- 1                      - <anything>  == ERROR: cannot delete from scalar
--- "a"                    - <anything>  == ERROR: cannot delete from scalar
--- true                   - <anything>  == ERROR: cannot delete from scalar
--- null                   - <anything>  == ERROR: cannot delete from scalar
+-- 1                      - \<anything\>  == ERROR: cannot delete from scalar
+-- "a"                    - \<anything\>  == ERROR: cannot delete from scalar
+-- true                   - \<anything\>  == ERROR: cannot delete from scalar
+-- null                   - \<anything\>  == ERROR: cannot delete from scalar
 -- @
 --
 -- === __PostgreSQL Documentation__
---
--- /Works with any PostgreSQL of version >= 9.5/
 --
 -- @
 --    | Type    | Description                                                            |  Example
@@ -469,10 +493,13 @@ infixl 6 ||., -., --., #-.
 (-.) value (Right t) = unsafeSqlBinOp " - " value $ val t
 (-.) value (Left i) = unsafeSqlBinOp " - " value $ val i
 
--- | Removes a set of keys from an object, or string elements from an array.
+-- | /Requires PostgreSQL version >= 10/
+--
+-- Removes a set of keys from an object, or string elements from an array.
+--
 -- This is the same operator internally as `-.`, but the option to use a @text
 -- array@, instead of @text@ or @integer@ was only added in version 10.
--- That's why this function is seperate from `-.`.
+-- That's why this function is seperate from `-.`
 --
 -- NOTE: The following is equivalent:
 --
@@ -484,25 +511,31 @@ infixl 6 ||., -., --., #-.
 --
 -- === __PostgreSQL Documentation__
 --
--- /Works with any PostgreSQL of version >= 10/
---
+-- @
 --    | Type    | Description                                                            |  Example
 -- ---+---------+------------------------------------------------------------------------+-------------------------------------------------
 --  - | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
 --    |         | Key/value pairs are matched based on their key value.                  |
+-- @
+--
+-- @since 3.1.0
 (--.) :: JSONExpr a -> [Text] -> JSONExpr b
 (--.) value = unsafeSqlBinOp " - " value . mkTextArray
 
--- | This operator can remove elements nested in an object.
+-- | /Requires PostgreSQL version >= 9.5/
+--
+-- This operator can remove elements nested in an object.
+--
 -- If a 'Text' is not parsable as a number when selecting in an array
 -- (even when halfway through the selection) an exception will be thrown.
+--
 -- Negative integers delete counting from the end of an array.
 -- (e.g. @-1@ being the last element, @-2@ being the second to last, etc.)
 --
 -- __CAUTION: THIS FUNCTION THROWS AN EXCEPTION WHEN USED__
 -- __ON ANYTHING OTHER THAN OBJECTS OR ARRAYS, AND WILL__
 -- __ALSO THROW WHEN TRYING TO SELECT AN ARRAY ELEMENT WITH__
--- __A NON-INTEGER TEXT__ (cf. examples)
+-- __A NON-INTEGER TEXT__
 --
 -- === __Objects__
 --
@@ -515,6 +548,7 @@ infixl 6 ||., -., --., #-.
 --
 -- === __Arrays__
 --
+-- @
 -- [true, {"b":null}, 5]       #- []            == [true, {"b":null}, 5]
 -- [true, {"b":null}, 5]       #- ["0"]         == [{"b":null}, 5]
 -- [true, {"b":null}, 5]       #- ["b"]         == ERROR: path element at position 1 is not an integer: "b"
@@ -522,23 +556,23 @@ infixl 6 ||., -., --., #-.
 -- [true, {"b":null}, 5]       #- ["-2","b"]    == [true, {}, 5]
 -- {"a": {"b":[false,4,null]}} #- ["a","b","2"] == {"a": {"b":[false,4]}}
 -- {"a": {"b":[false,4,null]}} #- ["a","b","c"] == ERROR: path element at position 3 is not an integer: "c"
+-- @
 --
 -- === __Other values__
 --
--- 1    #- {anything} == ERROR: cannot delete from scalar
--- "a"  #- {anything} == ERROR: cannot delete from scalar
--- true #- {anything} == ERROR: cannot delete from scalar
--- null #- {anything} == ERROR: cannot delete from scalar
+-- @
+-- 1    \#- {anything} == ERROR: cannot delete from scalar
+-- "a"  \#- {anything} == ERROR: cannot delete from scalar
+-- true \#- {anything} == ERROR: cannot delete from scalar
+-- null \#- {anything} == ERROR: cannot delete from scalar
 -- @
 --
 -- === __PostgreSQL Documentation__
 --
--- /Works with any PostgreSQL of version >= 9.5/
---
 -- @
 --     | Type   | Description                                             |  Example
 -- ----+--------+---------------------------------------------------------+------------------------------------
---  #- | text[] | Delete the field or element with specified path         | '["a", {"b":1}]'::jsonb #- '{1,b}'
+--  \#- | text[] | Delete the field or element with specified path         | '["a", {"b":1}]'::jsonb \#- '{1,b}'
 --     |        | (for JSON arrays, negative integers count from the end) |
 -- @
 --

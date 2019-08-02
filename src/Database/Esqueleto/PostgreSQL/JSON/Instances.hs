@@ -35,6 +35,7 @@ newtype JSONB a = JSONB { unJSONB :: a }
     , Traversable
     )
 
+-- | 'SqlExpr' of a NULL-able 'JSONB' value.
 type JSONExpr a = SqlExpr (Value (Maybe (JSONB a)))
 
 -- | Convenience function to lift a regular value into
@@ -50,7 +51,9 @@ instance (FromJSON a, ToJSON a) => PersistField (JSONB a) where
       PersistText t -> first (badParse t) $ eitherDecodeStrict (TE.encodeUtf8 t)
       x -> Left $ fromPersistValueError "string or bytea" x
 
--- | jsonb - @since 3.1.0
+-- | jsonb
+--
+-- @since 3.1.0
 instance (FromJSON a, ToJSON a) => PersistFieldSql (JSONB a) where
   sqlType _ = SqlOther "JSONB"
 
