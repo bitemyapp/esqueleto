@@ -41,9 +41,10 @@ module Database.Esqueleto.PostgreSQL.JSON
     -- of your type might result in old data becoming unparsable!
     -- You can use (@JSONB Data.Aeson.Value@) for unstructured/variable JSON.
     JSONB(..)
-
   , JSONExpr
   , jsonbVal
+  -- * JSONAccessor
+  , JSONAccessor(..)
   -- * Arrow operators
   --
   -- | /Better documentation included with individual functions/
@@ -148,8 +149,7 @@ infixl 6 ||., -., --., #-.
 -- | /Requires PostgreSQL version >= 9.3/
 --
 -- This function extracts the jsonb value from a JSON array or object,
--- depending on whether you use an @int@ (@Left i@ in Haskell) or a
--- @text@ (@Right t@ in Haskell).
+-- depending on whether you use an @int@ or a @text@. (cf. 'JSONAccessor')
 --
 -- As long as the left operand is @jsonb@, this function will not
 -- throw an exception, but will return @NULL@ when an @int@ is used on
@@ -166,9 +166,9 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(->.) :: JSONExpr a -> Either Int Text -> JSONExpr b
-(->.) value (Right txt) = unsafeSqlBinOp " -> " value $ val txt
-(->.) value (Left i)    = unsafeSqlBinOp " -> " value $ val i
+(->.) :: JSONExpr a -> JSONAccessor -> JSONExpr b
+(->.) value (JSONKey txt) = unsafeSqlBinOp " -> " value $ val txt
+(->.) value (JSONIndex i) = unsafeSqlBinOp " -> " value $ val i
 
 -- | /Requires PostgreSQL version >= 9.3/
 --
@@ -190,9 +190,9 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(->>.) :: JSONExpr a -> Either Int Text -> SqlExpr (Value (Maybe Text))
-(->>.) value (Right txt) = unsafeSqlBinOp " ->> " value $ val txt
-(->>.) value (Left i)    = unsafeSqlBinOp " ->> " value $ val i
+(->>.) :: JSONExpr a -> JSONAccessor -> SqlExpr (Value (Maybe Text))
+(->>.) value (JSONKey txt) = unsafeSqlBinOp " ->> " value $ val txt
+(->>.) value (JSONIndex i) = unsafeSqlBinOp " ->> " value $ val i
 
 -- | /Requires PostgreSQL version >= 9.3/
 --
@@ -489,9 +489,9 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(-.) :: JSONExpr a -> Either Int Text -> JSONExpr b
-(-.) value (Right t) = unsafeSqlBinOp " - " value $ val t
-(-.) value (Left i) = unsafeSqlBinOp " - " value $ val i
+(-.) :: JSONExpr a -> JSONAccessor -> JSONExpr b
+(-.) value (JSONKey txt) = unsafeSqlBinOp " - " value $ val txt
+(-.) value (JSONIndex i) = unsafeSqlBinOp " - " value $ val i
 
 -- | /Requires PostgreSQL version >= 10/
 --
@@ -503,7 +503,7 @@ infixl 6 ||., -., --., #-.
 --
 -- NOTE: The following is equivalent:
 --
--- @{some JSON expression} -. Right "a" -. Right "b"@
+-- @{some JSON expression} -. "a" -. "b"@
 --
 -- is equivalent to
 --

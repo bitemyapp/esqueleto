@@ -9,6 +9,7 @@ module Database.Esqueleto.PostgreSQL.JSON.Instances where
 import Data.Aeson (FromJSON(..), ToJSON(..), encode, eitherDecodeStrict)
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
+import Data.String (IsString(..))
 import Data.Text (Text)
 import qualified Data.Text as T (concat, pack)
 import qualified Data.Text.Encoding as TE (decodeUtf8, encodeUtf8)
@@ -42,6 +43,41 @@ type JSONExpr a = SqlExpr (Value (Maybe (JSONB a)))
 -- a 'JSONB' expression.
 jsonbVal :: (FromJSON a, ToJSON a) => a -> JSONExpr a
 jsonbVal = just . val . JSONB
+
+-- | Used with certain JSON operators.
+--
+-- This data type has 'Num' and 'IsString' instances
+-- for ease of use by using integer and string literals.
+--
+-- >>> 3 :: JSONAccessor
+-- JSONIndex 3
+-- >>> -3 :: JSONAccessor
+-- JSONIndex -3
+--
+-- >>> "name" :: JSONAccessor
+-- JSONKey "name"
+--
+-- NOTE: DO NOT USE ANY OF THE 'Num' METHODS ON THIS TYPE!
+data JSONAccessor = JSONIndex Int
+                  | JSONKey Text
+  deriving (Generic, Eq, Show)
+
+-- | I repeat, DO NOT use any method other than 'fromInteger'!
+instance Num JSONAccessor where
+  fromInteger = JSONIndex . fromInteger
+  negate (JSONIndex i) = JSONIndex $ negate i
+  negate (JSONKey _) = error "Can not negate a JSONKey"
+  (+) = numErr
+  (-) = numErr
+  (*) = numErr
+  abs = numErr
+  signum = numErr
+
+numErr :: a
+numErr = error "Do not use 'Num' methods on JSONAccessors"
+
+instance IsString JSONAccessor where
+  fromString = JSONKey . T.pack
 
 -- | @since 3.1.0
 instance (FromJSON a, ToJSON a) => PersistField (JSONB a) where
