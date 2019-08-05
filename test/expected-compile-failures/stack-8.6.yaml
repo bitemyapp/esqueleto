@@ -1,8 +1,12 @@
 resolver: nightly-2018-12-18
 
 extra-deps:
-- persistent-postgresql-2.8.2.0
-- postgresql-simple-0.5.4.0
+- persistent-2.10.0
+- persistent-mysql-2.10.0
+- persistent-postgresql-2.10.0
+- persistent-sqlite-2.10.0
+- persistent-template-2.7.0
+- postgresql-simple-0.6.1
 
 allow-newer: true
 

@@ -51,6 +51,7 @@ module Common.Test
     ) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Catch (MonadCatch)
 #if __GLASGOW_HASKELL__ >= 806
 import Control.Monad.Fail (MonadFail)
 #endif
@@ -66,7 +67,6 @@ import UnliftIO
 
 import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
-import Control.Monad.Trans.Resource (MonadThrow)
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text.Lazy.Builder as TLB
@@ -1428,7 +1428,7 @@ insert' v = flip Entity v <$> insert v
 type RunDbMonad m = ( MonadUnliftIO m
                     , MonadIO m
                     , MonadLogger m
-                    , MonadThrow m )
+                    , MonadCatch m )
 
 #if __GLASGOW_HASKELL__ >= 806
 type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a

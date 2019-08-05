@@ -3,22 +3,24 @@ language: c
 sudo: false
 
 services:
-  - postgresql
   - mysql
 
 addons:
+  postgresql: "10"
   apt:
     packages:
       - libgmp-dev
-      - postgresql-client
+      - postgresql-10
+      - postgresql-client-10
       - postgresql-server-dev-all
 
-  postgresql: "9.6"
-
 env:
- - GHCVER=8.2
- - GHCVER=8.4
- - GHCVER=8.6
+  global:
+    - PGPORT=5433
+  matrix:
+    - GHCVER=8.2
+    - GHCVER=8.4
+    - GHCVER=8.6
 
 install:
   - export STACK_YAML=stack-$GHCVER.yaml

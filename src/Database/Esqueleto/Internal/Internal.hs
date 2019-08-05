@@ -46,6 +46,7 @@ import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEnt
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
+import qualified Data.ByteString as B
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
@@ -53,15 +54,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
-import Control.Exception (Exception)
-import Data.Int (Int64)
 import Data.Typeable (Typeable)
-import Database.Esqueleto.Internal.PersistentImport
 import Text.Blaze.Html (Html)
-
-import qualified Data.ByteString as B
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
