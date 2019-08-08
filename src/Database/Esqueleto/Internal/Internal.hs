@@ -457,7 +457,7 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 
 -- | @BETWEEN@.
 --
--- /Since: 3.0.0/
+-- @since: 3.1.0
 between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
 
