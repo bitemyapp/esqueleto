@@ -455,6 +455,11 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 (*.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
+-- | @BETWEEN@.
+--
+-- @since: 3.1.0
+between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
+a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
@@ -1242,7 +1247,6 @@ data CompositeKeyError =
   | CombineInsertionError
   | FoldHelpError
   | SqlCaseError
-  | SqlBinOpError
   | SqlCastAsError
   | MakeOnClauseError
   | MakeExcError
@@ -1641,7 +1645,16 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                  (b2, vals2) = f2 info
              in ( parensM p1 b1 <> op <> parensM p2 b2
                 , vals1 <> vals2 )
-unsafeSqlBinOp _ _ _ = throw (CompositeKeyErr SqlBinOpError)
+unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
+    where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
+          construct (ERaw p f)        = ERaw Parens $ \info ->
+            let (b1, vals) = f info
+                build ("?", [PersistList vals']) =
+                  (uncommas $ replicate (length vals') "?", vals')
+                build expr = expr
+             in  build (parensM p b1, vals)
+          construct (ECompositeKey f) =
+            ERaw Parens $ \info -> (uncommas $ f info, mempty)
 {-# INLINE unsafeSqlBinOp #-}
 
 
@@ -2785,4 +2798,3 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
-

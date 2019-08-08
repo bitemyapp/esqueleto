@@ -630,6 +630,54 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p3e ]
 
+    describe "when using between" $ do
+      it "works for a simple example with [uses just . val]" $
+        run $ do
+          p1e  <- insert' p1
+          _    <- insert' p2
+          _    <- insert' p3
+          ret  <- select $
+            from $ \p -> do
+              where_ ((p ^. PersonAge) `between` (just $ val 20, just $ val 40))
+              return p
+          liftIO $ ret `shouldBe` [ p1e ]
+      it "works for a proyected fields value" $
+        run $ do
+          _ <- insert' p1 >> insert' p2 >> insert' p3
+          ret <-
+            select $
+            from $ \p -> do
+            where_ $
+              just (p ^. PersonFavNum)
+                `between`
+                  (p ^. PersonAge, p ^.  PersonWeight)
+          liftIO $ ret `shouldBe` []
+      describe "when projecting composite keys" $ do
+        it "works when using composite keys with val" $
+          run $ do
+            insert_ $ Point 1 2 ""
+            ret <-
+              select $
+              from $ \p -> do
+              where_ $
+                p ^. PointId
+                  `between`
+                    ( val $ PointKey 1 2
+                    , val $ PointKey 5 6 )
+            liftIO $ ret `shouldBe` [()]
+        it "works when using ECompositeKey constructor" $
+          run $ do
+            insert_ $ Point 1 2 ""
+            ret <-
+              select $
+              from $ \p -> do
+              where_ $
+                p ^. PointId
+                  `between`
+                    ( EI.ECompositeKey $ const ["3", "4"]
+                    , EI.ECompositeKey $ const ["5", "6"] )
+            liftIO $ ret `shouldBe` []
+
     it "works with avg_" $
       run $ do
         _ <- insert' p1
