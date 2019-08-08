@@ -195,7 +195,7 @@ INNER JOIN Follow ON P1.id = Follow.follower
 INNER JOIN Person AS P2 ON P2.id = Follow.followed
 ```
 
-Note carefully that the order of the ON clauses is reversed! You're required to write your `on`s in reverse order because that helps composability (see the documentation of `on` for more details). 
+Note carefully that the order of the ON clauses is reversed! You're required to write your `on`s in reverse order because that helps composability (see the documentation of `on` for more details).
 
 ## Update and Delete
 
@@ -238,24 +238,25 @@ We re-export many symbols from `persistent` for convenience:
 There are many differences between SQL syntax and functions supported by different RDBMSs.  Since version 2.2.8, `esqueleto` includes modules containing functions that are specific to a given RDBMS.
 
 - PostgreSQL: `Database.Esqueleto.PostgreSQL`
+- MySQL: `Database.Esqueleto.MySQL`
+- SQLite: `Database.Esqueleto.SQLite`
 
 In order to use these functions, you need to explicitly import their corresponding modules.
 
 
 ### Tests and Postgres
 
-To ```stack test``` with Postgresql you'll need to set the Postgres flag for [esqueleto.cabal](esqueleto.cabal)
-Do this from the command line with: ```stack test --flag esqueleto:postgresql```
+To run the tests, do `stack test`. This tests all the backends, so you'll need
+to have MySQL and Postgresql installed.
 
-If you don't have Postgres install it. 
-Using apt-get it's just:
+Using apt-get, you should be able to do:
 
 ```
 sudo apt-get install postgresql postgresql-contrib
 sudo apt-get install libpq-dev
 ```
 
-Using homebrew on OSx 
+Using homebrew on OSx
 
 ```
 brew install postgresql
@@ -293,6 +294,3 @@ And on osx
 $ psql postgres
 postgres=# \password esqutest
 ```
-
-
-Now ```stack build --fast --test esqueleto:test:postgresql``` should invoke and pass all the Postgres tests.
