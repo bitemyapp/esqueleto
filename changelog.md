@@ -1,5 +1,8 @@
-Unreleased
+Unreleased (3.1.1)
 ========
+
+- @parsonsmatt
+  - [](): Added `renderQueryToText` and related functions.
 
 3.1.0
 =======

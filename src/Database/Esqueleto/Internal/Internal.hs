@@ -2031,6 +2031,90 @@ toRawSql mode (conn, firstIdentState) query =
       , makeLocking         lockingClause
       ]
 
+-- | Renders a 'SqlQuery' into a 'Text' value along with the list of
+-- 'PersistValue's that would be supplied to the database for @?@ placeholders.
+--
+-- You must ensure that the 'Mode' you pass to this function corresponds with
+-- the actual 'SqlQuery'. If you pass a query that uses incompatible features
+-- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
+-- result.
+--
+-- @since 3.1.1
+renderQueryToText
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+  => Mode
+  -- ^ Whether to render as an 'SELECT', 'DELETE', etc.
+  -> SqlQuery a
+  -- ^ The SQL query you want to render.
+  -> R.ReaderT backend m (T.Text, [PersistValue])
+renderQueryToText mode query = do
+  backend <- R.ask
+  let (builder, pvals) = toRawSql mode (backend, initialIdentState) query
+  pure (builderToText builder, pvals)
+
+-- | Renders a 'SqlQuery' into a 'Text' value along with the list of
+-- 'PersistValue's that would be supplied to the database for @?@ placeholders.
+--
+-- You must ensure that the 'Mode' you pass to this function corresponds with
+-- the actual 'SqlQuery'. If you pass a query that uses incompatible features
+-- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
+-- result.
+--
+-- @since 3.1.1
+renderQuerySelect
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+  => SqlQuery a
+  -- ^ The SQL query you want to render.
+  -> R.ReaderT backend m (T.Text, [PersistValue])
+renderQuerySelect = renderQueryToText SELECT
+
+-- | Renders a 'SqlQuery' into a 'Text' value along with the list of
+-- 'PersistValue's that would be supplied to the database for @?@ placeholders.
+--
+-- You must ensure that the 'Mode' you pass to this function corresponds with
+-- the actual 'SqlQuery'. If you pass a query that uses incompatible features
+-- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
+-- result.
+--
+-- @since 3.1.1
+renderQueryDelete
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+  => SqlQuery a
+  -- ^ The SQL query you want to render.
+  -> R.ReaderT backend m (T.Text, [PersistValue])
+renderQueryDelete = renderQueryToText DELETE
+
+-- | Renders a 'SqlQuery' into a 'Text' value along with the list of
+-- 'PersistValue's that would be supplied to the database for @?@ placeholders.
+--
+-- You must ensure that the 'Mode' you pass to this function corresponds with
+-- the actual 'SqlQuery'. If you pass a query that uses incompatible features
+-- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
+-- result.
+--
+-- @since 3.1.1
+renderQueryUpdate
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+  => SqlQuery a
+  -- ^ The SQL query you want to render.
+  -> R.ReaderT backend m (T.Text, [PersistValue])
+renderQueryUpdate = renderQueryToText UPDATE
+
+-- | Renders a 'SqlQuery' into a 'Text' value along with the list of
+-- 'PersistValue's that would be supplied to the database for @?@ placeholders.
+--
+-- You must ensure that the 'Mode' you pass to this function corresponds with
+-- the actual 'SqlQuery'. If you pass a query that uses incompatible features
+-- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
+-- result.
+--
+-- @since 3.1.1
+renderQueryInsertInto
+  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+  => SqlQuery a
+  -- ^ The SQL query you want to render.
+  -> R.ReaderT backend m (T.Text, [PersistValue])
+renderQueryInsertInto = renderQueryToText INSERT_INTO
 
 -- | (Internal) Mode of query being converted by 'toRawSql'.
 data Mode =
