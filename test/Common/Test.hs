@@ -1437,10 +1437,6 @@ testCountingRows run = do
           [Value n] <- select $ from $ return . countKind
           liftIO $ (n :: Int) `shouldBe` expected
 
-
-
-
-
 tests :: Run -> Spec
 tests run = do
   describe "Tests that are common to all backends" $ do
@@ -1460,6 +1456,7 @@ tests run = do
     testMathFunctions run
     testCase run
     testCountingRows run
+    testRenderSql run
 
 
 
