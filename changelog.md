@@ -2,7 +2,7 @@ Unreleased (3.1.1)
 ========
 
 - @parsonsmatt
-  - [](): Added `renderQueryToText` and related functions.
+  - [#133](https://github.com/bitemyapp/esqueleto/pull/133): Added `renderQueryToText` and related functions.
 
 3.1.0
 =======
