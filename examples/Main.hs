@@ -238,4 +238,4 @@ main = do
   where
     say :: (MonadIO m, Show a) => a -> m ()
     say = liftIO . print
-    connection = "host=localhost port=5433 user=postgres dbname=esqueleto_blog_example password=***"
+    connection = "host=localhost port=5432 user=postgres dbname=esqueleto_blog_example password=***"
