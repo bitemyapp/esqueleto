@@ -18,6 +18,7 @@ dependencies:
 - monad-logger
 - monad-control
 - transformers-base
+- unliftio-core
 ghc-options:
 - -Wall
 - -threaded

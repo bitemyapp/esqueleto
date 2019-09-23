@@ -13,6 +13,7 @@ module Blog
 import           Control.Monad.Base          (MonadBase (..))
 import           Control.Monad.Logger        (MonadLogger, NoLoggingT (..))
 import           Control.Monad.Reader
+import           Control.Monad.IO.Unlift
 import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (..),
                                               MonadTransControl (..),
                                               defaultLiftBaseWith,
@@ -23,6 +24,13 @@ import           Database.Persist.Postgresql (ConnectionString)
 
 newtype BlogT m a = BlogT { unBlogT :: NoLoggingT (ReaderT ConnectionString m) a }
   deriving (Functor, Applicative, Monad, MonadLogger, MonadReader ConnectionString, MonadIO)
+
+
+-------------------------------------------------------------------------------
+instance MonadUnliftIO m => MonadUnliftIO (BlogT m) where
+  askUnliftIO = BlogT $
+                withUnliftIO $ \u ->
+                return (UnliftIO (unliftIO u . unBlogT))
 
 
 -------------------------------------------------------------------------------
