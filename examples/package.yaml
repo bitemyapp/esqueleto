@@ -2,12 +2,14 @@ name: esqueleto-examples
 version: '0.0.0.0'
 category: Database
 author: Fintan Halpenny
-maintainer: fintan.halpenny@gmail.com
-copyright: 2017, Chris Allen
+maintainer: cma@bitemyapp.com
+copyright: 2019, Chris Allen
 license: BSD3
-github: FintanH/esqueleto
+github: bitemyapp/esqueleto
+
 extra-source-files:
 - README.md
+
 dependencies:
 - base
 - esqueleto
@@ -18,17 +20,22 @@ dependencies:
 - monad-logger
 - monad-control
 - transformers-base
+- unliftio-core
+
 ghc-options:
-- -Wall
-- -threaded
-- -rtsopts
-- -with-rtsopts=-N
+- '-Wall'
+- '-threaded'
+- '-rtsopts'
+- '-with-rtsopts=-N'
+
 when:
-- condition: flag(werror)
-  ghc-options: -Werror
+  - condition: flag(werror)
+    ghc-options: '-Werror'
 
 executables:
   blog-example:
+    other-modules:
+      - Blog
     main: Main.hs
 
 flags:

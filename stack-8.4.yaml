@@ -1,16 +1,16 @@
 resolver: lts-12.2
 
 packages:
-- '.'
+  - '.'
+  - 'examples'
 
 extra-deps:
-- aeson-1.4.1.0
-- persistent-2.10.0
-- persistent-postgresql-2.10.0
-- persistent-sqlite-2.10.0
-- persistent-mysql-2.10.0
-- persistent-template-2.7.0
-- postgresql-libpq-0.9.4.2
-- postgresql-simple-0.6.1
-- transformers-0.5.5.2
-allow-newer: true
+  - aeson-1.4.1.0
+  - persistent-2.10.0
+  - persistent-postgresql-2.10.0
+  - persistent-sqlite-2.10.0
+  - persistent-mysql-2.10.0
+  - persistent-template-2.7.0
+  - postgresql-libpq-0.9.4.2
+  - postgresql-simple-0.6.1
+  - transformers-0.5.5.2
