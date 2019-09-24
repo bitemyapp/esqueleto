@@ -61,6 +61,11 @@ module Database.Esqueleto.Internal.Sql
   , veryUnsafeCoerceSqlExprValue
   , veryUnsafeCoerceSqlExprValueList
   -- * Helper functions
+  , renderQueryToText
+  , renderQuerySelect
+  , renderQueryUpdate
+  , renderQueryDelete
+  , renderQueryInsertInto
   , makeOrderByNoNewline
   , uncommas'
   , parens

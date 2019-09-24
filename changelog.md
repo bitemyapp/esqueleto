@@ -1,5 +1,8 @@
-Unreleased
+Unreleased (3.1.1)
 ========
+
+- @parsonsmatt
+  - [#133](https://github.com/bitemyapp/esqueleto/pull/133): Added `renderQueryToText` and related functions.
 
 3.1.0
 =======

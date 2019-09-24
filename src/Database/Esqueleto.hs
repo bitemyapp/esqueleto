@@ -86,6 +86,12 @@ module Database.Esqueleto
   , insertSelectCount
   , (<#)
   , (<&>)
+  -- ** Rendering Queries
+  , renderQueryToText
+  , renderQuerySelect
+  , renderQueryUpdate
+  , renderQueryDelete
+  , renderQueryInsertInto
     -- * Internal.Language
   , From
     -- * RDBMS-specific modules
