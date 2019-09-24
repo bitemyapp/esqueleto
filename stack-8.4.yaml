@@ -2,7 +2,6 @@ resolver: lts-12.2
 
 packages:
   - '.'
-  - 'examples'
 
 extra-deps:
   - aeson-1.4.1.0
