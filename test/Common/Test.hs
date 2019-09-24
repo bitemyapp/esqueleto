@@ -65,10 +65,12 @@ import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
 
+import Database.Persist (PersistValue(..))
 import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
 import qualified Data.List as L
 import qualified Data.Set as S
+import qualified Data.Text as Text
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Database.Esqueleto.Internal.Sql as EI
@@ -1437,6 +1439,29 @@ testCountingRows run = do
           [Value n] <- select $ from $ return . countKind
           liftIO $ (n :: Int) `shouldBe` expected
 
+testRenderSql :: Run -> Spec
+testRenderSql run =
+  describe "testRenderSql" $ do
+    it "works" $ do
+      (queryText, queryVals) <- run $ renderQuerySelect $
+        from $ \p -> do
+        where_ $ p ^. PersonName ==. val "Johhny Depp"
+        pure (p ^. PersonName, p ^. PersonAge)
+      -- the different backends use different quote marks, so I filter them out
+      -- here instead of making a duplicate test
+      Text.filter (\c -> c `notElem` ['`', '"']) queryText
+        `shouldBe`
+          Text.unlines
+            [ "SELECT Person.name, Person.age"
+            , "FROM Person"
+            , "WHERE Person.name = ?"
+            ]
+      queryVals
+        `shouldBe`
+          [toPersistValue ("Johhny Depp" :: TL.Text)]
+
+
+
 tests :: Run -> Spec
 tests run = do
   describe "Tests that are common to all backends" $ do
@@ -1457,8 +1482,6 @@ tests run = do
     testCase run
     testCountingRows run
     testRenderSql run
-
-
 
 
 insert' :: ( Functor m
