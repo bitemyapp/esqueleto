@@ -9,17 +9,18 @@
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 module Main
     ( main
     ) where
 
--------------------------------------------------------------------------------
 import           Blog
 import           Control.Monad               (void)
 import           Control.Monad               (forM_)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.IO.Unlift     (MonadUnliftIO)
 import           Control.Monad.Logger        (MonadLogger)
 import           Control.Monad.Reader        (MonadReader (..), runReaderT)
 import           Control.Monad.Trans.Control (MonadBaseControl)
@@ -27,10 +28,15 @@ import           Data.Monoid                 ((<>))
 import           Database.Esqueleto
 import           Database.Persist.Postgresql (ConnectionString,
                                               withPostgresqlConn)
-import           Database.Persist.TH         (mkDeleteCascade, mkMigrate,
-                                              mkPersist, persistLowerCase,
-                                              share, sqlSettings)
--------------------------------------------------------------------------------
+import           Database.Persist.TH         ( AtLeastOneUniqueKey(..)
+                                             , OnlyOneUniqueKey(..)
+                                             , mkDeleteCascade
+                                             , mkMigrate
+                                             , mkPersist
+                                             , persistLowerCase
+                                             , share
+                                             , sqlSettings
+                                             )
 
 
 share [ mkPersist sqlSettings
@@ -50,8 +56,6 @@ share [ mkPersist sqlSettings
     deriving Eq Show
 |]
 
-
--------------------------------------------------------------------------------
 putPersons :: (MonadIO m, MonadLogger m)
            => SqlPersistT m ()
 putPersons = do
@@ -65,7 +69,6 @@ putPersons = do
   liftIO $ mapM_ (putStrLn . ("Name: " ++) . personName . entityVal) people
 
 
--------------------------------------------------------------------------------
 getJohns :: (MonadIO m, MonadLogger m)
          => SqlReadT m [Entity Person]
 getJohns =
@@ -76,7 +79,6 @@ getJohns =
     return p
 
 
--------------------------------------------------------------------------------
 getAdults :: (MonadIO m, MonadLogger m)
           => SqlReadT m [Entity Person]
 getAdults =
@@ -87,7 +89,6 @@ getAdults =
     return p
 
 
--------------------------------------------------------------------------------
 getBlogPostsByAuthors :: (MonadIO m, MonadLogger m)
                       => SqlReadT m [(Entity BlogPost, Entity Person)]
 getBlogPostsByAuthors =
@@ -99,7 +100,6 @@ getBlogPostsByAuthors =
     return (b, p)
 
 
--------------------------------------------------------------------------------
 getAuthorMaybePosts :: (MonadIO m, MonadLogger m)
                     => SqlReadT m [(Entity Person, Maybe (Entity BlogPost))]
 getAuthorMaybePosts =
@@ -113,7 +113,6 @@ getAuthorMaybePosts =
     return (p, mb)
 
 
--------------------------------------------------------------------------------
 followers :: (MonadIO m, MonadLogger m)
           => SqlReadT m [(Entity Person, Entity Follow, Entity Person)]
 followers =
@@ -128,7 +127,6 @@ followers =
     return (p1, f, p2)
 
 
--------------------------------------------------------------------------------
 updateJoao :: (MonadIO m, MonadLogger m)
            => SqlWriteT m ()
 updateJoao =
@@ -138,7 +136,6 @@ updateJoao =
     where_ (p ^. PersonName ==. val "Joao")
 
 
--------------------------------------------------------------------------------
 deleteYoungsters :: (MonadIO m, MonadLogger m)
                  => SqlPersistT m ()
 deleteYoungsters = do
@@ -154,7 +151,6 @@ deleteYoungsters = do
   forM_ youngsters (deleteCascade . entityKey)
 
 
--------------------------------------------------------------------------------
 insertBlogPosts :: (MonadIO m, MonadLogger m)
                 => SqlWriteT m ()
 insertBlogPosts =
@@ -163,10 +159,10 @@ insertBlogPosts =
     return $ BlogPost <# (val "Group Blog Post") <&> (p ^. PersonId)
 
 
--------------------------------------------------------------------------------
 runDB :: (MonadReader ConnectionString m,
           MonadIO m,
           MonadBaseControl IO m,
+          MonadUnliftIO m,
           MonadLogger m)
       => SqlPersistT m a -> m a
 runDB query = do
@@ -175,7 +171,6 @@ runDB query = do
   withPostgresqlConn conn $ \backend -> runReaderT query backend
 
 
--------------------------------------------------------------------------------
 setupDb :: (MonadIO m, MonadLogger m)
           => SqlPersistT m ()
 setupDb = do
@@ -197,7 +192,6 @@ setupDb = do
       void $ insert $ Follow joao sean
 
 
--------------------------------------------------------------------------------
 cleanDb :: (MonadIO m, MonadLogger m)
         => SqlPersistT m ()
 cleanDb = do
@@ -208,7 +202,6 @@ cleanDb = do
   where
     dropTable tableName = rawExecute ("DROP TABLE " <> tableName) []
 
--------------------------------------------------------------------------------
 main :: IO ()
 main = do
   -- Connection string for the postrgesql database
