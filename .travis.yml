@@ -16,7 +16,7 @@ addons:
 
 env:
   global:
-    - PGPORT=5433
+    - PGPORT=5432
   matrix:
     - GHCVER=8.2
     - GHCVER=8.4
@@ -28,7 +28,7 @@ install:
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
   - stack --version
-  - echo "CREATE USER esqutest WITH PASSWORD 'esqutest';" | psql postgres
+  - psql -c "CREATE USER esqutest WITH PASSWORD 'esqutest';" -U postgres
   - createdb -O esqutest esqutest
   - mysql -e 'CREATE DATABASE esqutest;'
 

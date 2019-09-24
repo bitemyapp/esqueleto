@@ -730,8 +730,9 @@ case_ = unsafeSqlCase
 -- Bar
 --   barNum Int
 -- Foo
---   Id BarId
+--   bar BarId
 --   fooNum Int
+--   Primary bar
 -- @
 --
 -- For this example, declare:
