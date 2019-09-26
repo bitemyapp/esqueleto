@@ -1,27 +1,18 @@
-{-# LANGUAGE DeriveDataTypeable
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , MultiParamTypeClasses
-           , TypeFamilies
-           , UndecidableInstances
-           , GADTs
- #-}
-{-# LANGUAGE ConstraintKinds
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , GADTs
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , UndecidableInstances
-           , ScopedTypeVariables
-           , InstanceSigs
-           , Rank2Types
-           , CPP
- #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE EmptyDataDecls         #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE InstanceSigs           #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE Rank2Types             #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
@@ -38,6 +29,7 @@ module Database.Esqueleto.Internal.Sql
   , updateCount
   , insertSelect
   , insertSelectCount
+  , upsertBy
     -- * The guts
   , unsafeSqlCase
   , unsafeSqlBinOp
@@ -73,4 +65,4 @@ module Database.Esqueleto.Internal.Sql
   , builderToText
   ) where
 
-import Database.Esqueleto.Internal.Internal
+import           Database.Esqueleto.Internal.Internal

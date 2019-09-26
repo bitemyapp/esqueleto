@@ -92,7 +92,6 @@ module Database.Esqueleto.Internal.PersistentImport
   PersistStoreWrite(..),
   ToBackendKey(..),
   PersistUniqueRead(..),
-  PersistUniqueWrite(..),
   PersistFieldSql(..),
   RawSql(..),
   CautiousMigration,
@@ -141,10 +140,13 @@ module Database.Esqueleto.Internal.PersistentImport
   WhyNullable(..)
   ) where
 
-import Database.Persist.Sql hiding
-  ( BackendSpecificFilter, Filter(..), PersistQuery, SelectOpt(..)
-  , Update(..), delete, deleteWhereCount, updateWhereCount, selectList
-  , selectKeysList, deleteCascadeWhere, (=.), (+=.), (-=.), (*=.), (/=.)
-  , (==.), (!=.), (<.), (>.), (<=.), (>=.), (<-.), (/<-.), (||.)
-  , listToJSON, mapToJSON, getPersistMap, limitOffsetOrder, selectSource
-  , update , count )
+import           Database.Persist.Sql hiding (BackendSpecificFilter,
+                                       Filter (..), PersistQuery,
+                                       SelectOpt (..), Update (..), count,
+                                       delete, deleteCascadeWhere,
+                                       deleteWhereCount, getPersistMap,
+                                       limitOffsetOrder, listToJSON, mapToJSON,
+                                       selectKeysList, selectList, selectSource,
+                                       update, updateWhereCount, (!=.), (*=.),
+                                       (+=.), (-=.), (/<-.), (/=.), (<-.), (<.),
+                                       (<=.), (=.), (==.), (>.), (>=.), (||.))

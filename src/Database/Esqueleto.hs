@@ -84,6 +84,7 @@ module Database.Esqueleto
   , updateCount
   , insertSelect
   , insertSelectCount
+  , upsertBy
   , (<#)
   , (<&>)
   -- ** Rendering Queries

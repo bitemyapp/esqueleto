@@ -1,61 +1,64 @@
-{-# LANGUAGE DeriveDataTypeable
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , MultiParamTypeClasses
-           , TypeFamilies
-           , UndecidableInstances
-           , GADTs
- #-}
-{-# LANGUAGE ConstraintKinds
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , GADTs
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , UndecidableInstances
-           , ScopedTypeVariables
-           , InstanceSigs
-           , Rank2Types
-           , CPP
- #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE EmptyDataDecls         #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE InstanceSigs           #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE Rank2Types             #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
 module Database.Esqueleto.Internal.Internal where
 
-import Control.Arrow ((***), first)
-import Control.Exception (Exception, throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), void)
-import Control.Monad.IO.Class (MonadIO(..))
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Resource (MonadResource, release)
-import Data.Acquire (with, allocateAcquire, Acquire)
-import Data.Int (Int64)
-import Data.List (intersperse)
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
-import qualified Data.Monoid as Monoid
-import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
-import qualified Control.Monad.Trans.Reader as R
-import qualified Control.Monad.Trans.State as S
-import qualified Control.Monad.Trans.Writer as W
-import qualified Data.ByteString as B
-import qualified Data.Conduit as C
-import qualified Data.Conduit.List as CL
-import qualified Data.HashSet as HS
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
+import           Control.Arrow                                (first, (***))
+import           Control.Exception                            (Exception, throw,
+                                                               throwIO)
+import           Control.Monad                                (MonadPlus (..),
+                                                               ap, void)
+import           Control.Monad.Identity                       (Identity)
+import           Control.Monad.IO.Class                       (MonadIO (..))
+import           Control.Monad.Logger                         (MonadLogger)
 
-import Data.Typeable (Typeable)
-import Text.Blaze.Html (Html)
+import           Control.Monad.Trans.Class                    (lift)
+import           Control.Monad.Trans.Resource                 (MonadResource,
+                                                               release)
+import           Data.Acquire                                 (Acquire,
+                                                               allocateAcquire,
+                                                               with)
+import           Data.Int                                     (Int64)
+import           Data.List                                    (intersperse)
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup
+#endif
+import qualified Control.Monad.Trans.Reader                   as R
+import qualified Control.Monad.Trans.State                    as S
+import qualified Control.Monad.Trans.Writer                   as W
+import qualified Data.ByteString                              as B
+import qualified Data.Conduit                                 as C
+import qualified Data.Conduit.List                            as CL
+import qualified Data.HashSet                                 as HS
+import qualified Data.Monoid                                  as Monoid
+import           Data.Proxy                                   (Proxy (..))
+import qualified Data.Text                                    as T
+import qualified Data.Text.Lazy                               as TL
+import qualified Data.Text.Lazy.Builder                       as TLB
+import           Data.Typeable                                (Typeable)
+import           Database.Esqueleto.Internal.PersistentImport
+import           Database.Persist.Class                       (OnlyOneUniqueKey, PersistUniqueWrite)
+import           Database.Persist.Sql.Util                    (entityColumnCount,
+                                                               entityColumnNames,
+                                                               hasCompositeKey,
+                                                               isIdField,
+                                                               parseEntityValues)
+import           Text.Blaze.Html                              (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -2224,7 +2227,7 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
     build = uncommas' $ map match fields
 
     match :: SomeValue -> (TLB.Builder, [PersistValue])
-    match (SomeValue (ERaw _ f)) = f info
+    match (SomeValue (ERaw _ f))        = f info
     match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
@@ -2883,3 +2886,48 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
+
+upsertBy :: (MonadIO m, PersistEntity record, BackendCompatible SqlBackend backend, IsPersistBackend (PersistEntityBackend record)) =>
+  Unique record
+  -> record
+  -> [SqlExpr (Update record)]
+  -> R.ReaderT backend m  (Entity record)
+upsertBy uniqs record update = do
+  conn <- R.ask
+  fmap head $ uncurry rawSql $
+    first builderToText $
+    let f = (***) mappend (++) tlb1 in
+      uncurry (***) f (rest conn)
+  where
+    tableName = TLB.fromText . unDBName . entityDB $ entityDef ((return () :: Identity ()) >> return record)
+    recordFieldDBNames = map (TLB.fromText . unDBName . fieldDB) $ entityFields $ entityDef ((return () :: Identity ()) >> return record)
+    names = foldr1 mappend $
+      intersperse (TLB.fromText "\",\"") $
+      map (TLB.fromText . unDBName . snd) (persistUniqueToFieldNames uniqs)
+    rest conn = first (\s -> foldr1 mappend [
+        TLB.fromText " ON CONFLICT (\"",
+        names,
+        TLB.fromText "\") DO ",
+        s,
+        TLB.fromText " RETURNING ??"]) $
+      if null update then (TLB.fromText "NOTHING;", []) else tlb2 conn
+    tlb1 = (foldr1 mappend [TLB.fromText "INSERT INTO \"",
+      tableName,
+      TLB.fromText "\"(",
+      foldr1 mappend (intersperse (TLB.fromText ",") $ map (\s -> TLB.fromText "\"" `mappend` (s `mappend` TLB.fromText "\"")) recordFieldDBNames),
+      TLB.fromText ") VALUES(",
+      foldr1 mappend (intersperse (TLB.fromText ",") $ map (const (TLB.fromText "?")) recordFieldDBNames),
+      TLB.fromText ")"] , map toPersistValue $ toPersistFields record)
+    tlb2 conn = toRawSql UPDATE (conn, initialIdentState) (set (EEntity undefined) update)
+
+upsert
+    :: (MonadIO m, MonadLogger m, PersistUniqueWrite backend,PersistRecordBackend record backend, OnlyOneUniqueKey record, BackendCompatible SqlBackend backend, IsPersistBackend (PersistEntityBackend record))
+    => record
+    -- ^ new record to insert
+    -> [SqlExpr (Update record)]
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT backend m  (Entity record)
+    -- ^ the record in the database after the operation
+upsert record updates = do
+    uniqueKey <- onlyUnique record
+    upsertBy uniqueKey record updates
