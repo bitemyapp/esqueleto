@@ -147,4 +147,4 @@ import Database.Persist.Sql hiding
   , selectKeysList, deleteCascadeWhere, (=.), (+=.), (-=.), (*=.), (/=.)
   , (==.), (!=.), (<.), (>.), (<=.), (>=.), (<-.), (/<-.), (||.)
   , listToJSON, mapToJSON, getPersistMap, limitOffsetOrder, selectSource
-  , update , count)
+  , update , count )
