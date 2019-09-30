@@ -100,7 +100,6 @@ module Database.Esqueleto
     -- * Helpers
   , valkey
   , valJ
-  , EsqueletoUpsert(..)
 
     -- * Re-exports
     -- $reexports

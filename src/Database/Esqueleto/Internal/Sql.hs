@@ -71,7 +71,6 @@ module Database.Esqueleto.Internal.Sql
   , parens
   , toArgList
   , builderToText
-  , EsqueletoUpsert(..)
   ) where
 
 import Database.Esqueleto.Internal.Internal
