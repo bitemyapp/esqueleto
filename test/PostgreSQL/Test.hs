@@ -11,6 +11,7 @@
 module Main (main) where
 
 import Control.Arrow ((&&&))
+import Control.Exception (evaluate)
 import Control.Monad (void, when)
 import Control.Monad.Catch (MonadCatch, catch)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -33,7 +34,7 @@ import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import Database.Persist.Postgresql (withPostgresqlConn)
-import Database.PostgreSQL.Simple (SqlError(..))
+import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
 import System.Environment
 import Test.Hspec
 
@@ -949,6 +950,20 @@ testHashMinusOperator =
           where_ $ v @>. jsonbVal (object [])
           where_ $ f v
 
+testInsertUniqueViolation :: Spec
+testInsertUniqueViolation =
+  describe "Unique Violation on Insert" $
+    it "Unique throws exception" $ run (do
+      u1k <- insert u1
+      u2k <- insert u2
+      insert u3) `shouldThrow` (==) exception
+  where
+    exception = SqlError {
+      sqlState = "23505", 
+      sqlExecStatus = FatalError, 
+      sqlErrorMsg = "duplicate key value violates unique constraint \"UniqueValue\"", 
+      sqlErrorDetail = "Key (value)=(0) already exists.", 
+      sqlErrorHint = ""}
 
 type JSONValue = Maybe (JSONB A.Value)
 
@@ -1021,6 +1036,7 @@ main = do
       testPostgresqlUpdate
       testPostgresqlCoalesce
       testPostgresqlTextFunctions
+      testInsertUniqueViolation
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests
@@ -1053,7 +1069,9 @@ run_worker act = withConn $ runSqlConn (migrateIt >> act)
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
+  void $ runMigrationSilent migrateUnique
   cleanDB
+  cleanUniques
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
