@@ -11,7 +11,6 @@
 module Main (main) where
 
 import Control.Arrow ((&&&))
-import Control.Exception (evaluate)
 import Control.Monad (void, when)
 import Control.Monad.Catch (MonadCatch, catch)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -954,8 +953,8 @@ testInsertUniqueViolation :: Spec
 testInsertUniqueViolation =
   describe "Unique Violation on Insert" $
     it "Unique throws exception" $ run (do
-      u1k <- insert u1
-      u2k <- insert u2
+      _ <- insert u1
+      _ <- insert u2
       insert u3) `shouldThrow` (==) exception
   where
     exception = SqlError {
@@ -964,6 +963,20 @@ testInsertUniqueViolation =
       sqlErrorMsg = "duplicate key value violates unique constraint \"UniqueValue\"", 
       sqlErrorDetail = "Key (value)=(0) already exists.", 
       sqlErrorHint = ""}
+
+testUpsert :: Spec
+testUpsert =
+  describe "Upsert test" $ do
+    it "Upsert can insert like normal" $ run $ do
+      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u1e `shouldBe` u1
+    it "Upsert performs update on collision" $ run $ do
+      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u1e `shouldBe` u1
+      u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u2e `shouldBe` u2
+      u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
 type JSONValue = Maybe (JSONB A.Value)
 
@@ -1037,6 +1050,7 @@ main = do
       testPostgresqlCoalesce
       testPostgresqlTextFunctions
       testInsertUniqueViolation
+      testUpsert
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests
