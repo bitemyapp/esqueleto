@@ -33,7 +33,7 @@ import           Database.Esqueleto.Internal.Language         hiding (random_)
 import           Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import           Database.Esqueleto.Internal.Sql
 import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..), 
-                                                              UnexpectedCaseError(..))
+                                                              UnexpectedCaseError(..), SetClause)
 import           Database.Persist.Class                       (OnlyOneUniqueKey)
 import           Data.List.NonEmpty                           ( NonEmpty( (:|) ) )
 import           Control.Arrow                                ((***), first)
@@ -208,7 +208,9 @@ upsertBy uniqueKey record updates = do
         -> (TLB.Builder, [PersistValue])
     renderUpdates conn = uncommas' . concatMap renderUpdate
         where
+          mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
           mk (ERaw _ f)        = [f info]
           mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
+          renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
           renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
           info = (projectBackend conn, initialIdentState)
