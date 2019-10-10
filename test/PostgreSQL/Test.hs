@@ -33,7 +33,7 @@ import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import Database.Persist.Postgresql (withPostgresqlConn)
-import Database.PostgreSQL.Simple (SqlError(..))
+import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
 import System.Environment
 import Test.Hspec
 
@@ -949,6 +949,34 @@ testHashMinusOperator =
           where_ $ v @>. jsonbVal (object [])
           where_ $ f v
 
+testInsertUniqueViolation :: Spec
+testInsertUniqueViolation =
+  describe "Unique Violation on Insert" $
+    it "Unique throws exception" $ run (do
+      _ <- insert u1
+      _ <- insert u2
+      insert u3) `shouldThrow` (==) exception
+  where
+    exception = SqlError {
+      sqlState = "23505", 
+      sqlExecStatus = FatalError, 
+      sqlErrorMsg = "duplicate key value violates unique constraint \"UniqueValue\"", 
+      sqlErrorDetail = "Key (value)=(0) already exists.", 
+      sqlErrorHint = ""}
+
+testUpsert :: Spec
+testUpsert =
+  describe "Upsert test" $ do
+    it "Upsert can insert like normal" $ run $ do
+      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u1e `shouldBe` u1
+    it "Upsert performs update on collision" $ run $ do
+      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u1e `shouldBe` u1
+      u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u2e `shouldBe` u2
+      u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
+      liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
 type JSONValue = Maybe (JSONB A.Value)
 
@@ -1021,6 +1049,8 @@ main = do
       testPostgresqlUpdate
       testPostgresqlCoalesce
       testPostgresqlTextFunctions
+      testInsertUniqueViolation
+      testUpsert
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests
@@ -1053,7 +1083,9 @@ run_worker act = withConn $ runSqlConn (migrateIt >> act)
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
+  void $ runMigrationSilent migrateUnique
   cleanDB
+  cleanUniques
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =

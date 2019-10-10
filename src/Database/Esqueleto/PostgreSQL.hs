@@ -18,6 +18,8 @@ module Database.Esqueleto.PostgreSQL
   , chr
   , now_
   , random_
+  , upsert
+  , upsertBy
   -- * Internal
   , unsafeSqlAggregateFunction
   ) where
@@ -28,8 +30,17 @@ import           Data.Semigroup
 import qualified Data.Text.Internal.Builder                   as TLB
 import           Data.Time.Clock                              (UTCTime)
 import           Database.Esqueleto.Internal.Language         hiding (random_)
-import           Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import           Database.Esqueleto.Internal.Sql
+import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..), 
+                                                              UnexpectedCaseError(..), SetClause)
+import           Database.Persist.Class                       (OnlyOneUniqueKey)
+import           Data.List.NonEmpty                           ( NonEmpty( (:|) ) )
+import           Control.Arrow                                ((***), first)
+import           Control.Exception                            (Exception, throw, throwIO)
+import           Control.Monad.IO.Class                       (MonadIO (..))
+import qualified Control.Monad.Trans.Reader                   as R
+
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -152,3 +163,54 @@ chr = unsafeSqlFunction "chr"
 
 now_ :: SqlExpr (Value UTCTime)
 now_ = unsafeSqlValue "NOW()"
+
+upsert :: (MonadIO m,
+      PersistEntity record,
+      OnlyOneUniqueKey record,
+      PersistRecordBackend record SqlBackend,
+      IsPersistBackend (PersistEntityBackend record))
+    => record
+    -- ^ new record to insert
+    -> [SqlExpr (Update record)]
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT SqlBackend m (Entity record)
+    -- ^ the record in the database after the operation
+upsert record updates = do
+    uniqueKey <- onlyUnique record
+    upsertBy uniqueKey record updates
+
+upsertBy :: (MonadIO m,
+    PersistEntity record,
+    IsPersistBackend (PersistEntityBackend record))
+  => Unique record
+  -- ^ uniqueness constraint to find by
+  -> record
+  -- ^ new record to insert
+  -> [SqlExpr (Update record)]
+  -- ^ updates to perform if the record already exists
+  -> R.ReaderT SqlBackend m (Entity record)
+  -- ^ the record in the database after the operation
+upsertBy uniqueKey record updates = do
+  sqlB <- R.ask
+  maybe
+    (throw (UnexpectedCaseErr OperationNotSupported)) -- Postgres backend should have connUpsertSql, if this error is thrown, check changes on persistent 
+    (handler sqlB)
+    (connUpsertSql sqlB)
+  where
+    addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
+    entDef = entityDef (Just record)
+    uDef = head $ filter ((==) (persistUniqueToFieldNames uniqueKey) . uniqueFields) $ entityUniques entDef
+    updatesText conn = first builderToText $ renderUpdates conn updates
+    handler conn f = fmap head $ uncurry rawSql $
+      (***) (f entDef (uDef :| [])) addVals $ updatesText conn
+    renderUpdates :: SqlBackend
+        -> [SqlExpr (Update val)]
+        -> (TLB.Builder, [PersistValue])
+    renderUpdates conn = uncommas' . concatMap renderUpdate
+        where
+          mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
+          mk (ERaw _ f)        = [f info]
+          mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
+          renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
+          renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
+          info = (projectBackend conn, initialIdentState)

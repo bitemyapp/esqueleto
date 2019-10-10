@@ -1263,6 +1263,7 @@ data UnexpectedCaseError =
   | InsertionFinalError
   | NewIdentForError
   | UnsafeSqlCaseError
+  | OperationNotSupported
   deriving (Show)
 
 data SqlBinOpCompositeError =

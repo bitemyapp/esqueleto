@@ -1,6 +1,9 @@
 Unreleased (3.1.1)
 ========
 
+- @JoseD92
+  - [#149](https://github.com/bitemyapp/esqueleto/pull/149): Added `upsert` support.
+
 - @parsonsmatt
   - [#133](https://github.com/bitemyapp/esqueleto/pull/133): Added `renderQueryToText` and related functions.
 

@@ -25,11 +25,14 @@ module Common.Test
     , testAscRandom
     , testRandomMath
     , migrateAll
+    , migrateUnique
     , cleanDB
+    , cleanUniques
     , RunDbMonad
     , Run
     , p1, p2, p3, p4, p5
     , l1, l2, l3
+    , u1, u2, u3, u4
     , insert'
     , EntityField (..)
     , Foo (..)
@@ -48,6 +51,7 @@ module Common.Test
     , Point (..)
     , Circle (..)
     , Numbers (..)
+    , OneUnique(..)
     ) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
@@ -157,8 +161,14 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     double Double
 |]
 
-
-
+-- Unique Test schema
+share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
+  OneUnique
+    name String
+    value Int
+    UniqueValue value
+    deriving Eq Show
+|]
 
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
@@ -196,7 +206,17 @@ l2 = Lord "Dorset" Nothing
 l3 :: Lord
 l3 = Lord "Chester" (Just 17)
 
+u1 :: OneUnique
+u1 = OneUnique "First" 0
 
+u2 :: OneUnique
+u2 = OneUnique "Second" 1
+
+u3 :: OneUnique
+u3 = OneUnique "Third" 0
+
+u4 :: OneUnique
+u4 = OneUnique "First" 2
 
 testSelect :: Run -> Spec
 testSelect run = do
@@ -1536,3 +1556,10 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
+
+
+cleanUniques
+  :: (forall m. RunDbMonad m
+  => SqlPersistT (R.ResourceT m) ())
+cleanUniques =
+  delete $ from $ \(_ :: SqlExpr (Entity OneUnique))    -> return ()
