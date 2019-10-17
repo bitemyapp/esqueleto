@@ -339,11 +339,77 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 locking :: LockingKind -> SqlQuery ()
 locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 
+{-#
+  DEPRECATED
+    sub_select
+    "sub_select is an unsafe function to use. If used with a SqlQuery \n \
+returns 0 results, then it may return NULL despite not mentioning Maybe in \n \
+ther eturn type. If it returns more than 1 result, then it will throw a \n \
+SQL error.\n\n Instead, consider using one of the following alternatives: \n \
+- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
+- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
+  has a Maybe in the return type. \n \
+- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
+  countRows and friends."
+  #-}
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- simple value so should be used only when the @SELECT@ query
 -- is guaranteed to return just one row.
+--
+-- Deprecated in 3.2.0.
 sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
 sub_select         = sub SELECT
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
+-- function will only return a single result - it has a @LIMIT 1@ passed in to
+-- the query to make it safe, and the return type is 'Maybe' to indicate that
+-- the subquery might result in 0 rows.
+--
+-- If you find yourself writing @'joinV' . 'subSelect'@, then consider using
+-- 'subSelectMaybe'.
+--
+-- If you know that the subquery will always return exactly one row (eg
+-- 'countRows'), then consider 'subSelectUnsafe'.
+--
+-- @since 3.2.0
+subSelect
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value a))
+  -> SqlExpr (Value (Maybe a))
+subSelect query = just (subSelectUnsafe (query <* limit 1))
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
+-- for the common @'joinV' . 'subSelect'@ idiom, where you are calling
+-- 'subSelect' on an expression that would be 'Maybe' already.
+--
+-- As an example, you would use this function when calling 'sum_' or 'max_',
+-- which have 'Maybe' in the result type (for a 0 row query).
+--
+-- @since 3.2.0
+subSelectMaybe
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value (Maybe a)))
+  -> SqlExpr (Value (Maybe a))
+subSelectMaybe = joinV . subSelect
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
+-- because it can throw runtime exceptions in two cases:
+--
+-- 1. If the query passed has 0 result rows, then it will return a @NULL@ value.
+--    The @persistent@ parsing operations will fail on an unexpected @NULL@.
+-- 2. If the query passed returns more than one row, then the SQL engine will
+--    fail with an error like "More than one row returned by a subquery used as
+--    an expression".
+--
+-- This function is safe if you guarantee that exactly one row will be returned,
+-- or if the result already has a 'Maybe' type for some reason.
+--
+-- For variatns with the safety encoded already, see 'subSelect' and
+-- 'subSelectMaybe'.
+--
+-- @since 3.2.0
+subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
 (^.)

@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# OPTIONS_GHC -fno-warn-deprecations  #-}
+-- {-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
            , UndecidableInstances
@@ -69,7 +69,6 @@ import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
 
-import Database.Persist (PersistValue(..))
 import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
 import qualified Data.List as L
