@@ -350,7 +350,10 @@ locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value (Maybe a))
 sub_select         = just . sub SELECT
 
--- |
+-- | Promise that the value you have is /definitely/ not @NULL@, by some
+-- guarantee that doesn't exist in esqueleto's types.
+--
+-- @since 3.2.0
 unsafePromiseNotNull
   :: SqlExpr (Value (Maybe a))
   -> SqlExpr (Value a)

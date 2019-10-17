@@ -1,3 +1,12 @@
+Unreleased (3.2.0)
+=======
+
+- @parsonsmatt
+  - [#152](https://github.com/bitemyapp/esqueleto/pull/152): Changed the type of
+    `sub_select` to return a `Maybe`. This fixes a potential runtime error where
+    the subquery returns zero rows, resulting in a `NULL` for the expression
+    that `persistent` cannot parse.
+
 Unreleased (3.1.1)
 ========
 
