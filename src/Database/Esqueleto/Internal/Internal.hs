@@ -342,8 +342,19 @@ locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- simple value so should be used only when the @SELECT@ query
 -- is guaranteed to return just one row.
-sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
-sub_select         = sub SELECT
+--
+-- In 3.2.0, this was updated to have a @Maybe@ in the return type. This change
+-- is due to the common error of using it with queries that might return @NULL@.
+-- Call the function 'unsafePromiseNotNull' if you can guarantee that the value
+-- will return exactly one row.
+sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value (Maybe a))
+sub_select         = just . sub SELECT
+
+-- |
+unsafePromiseNotNull
+  :: SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value a)
+unsafePromiseNotNull = veryUnsafeCoerceSqlExprValue
 
 -- | Project a field of an entity.
 (^.)
@@ -579,8 +590,11 @@ castString = veryUnsafeCoerceSqlExprValue
 
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- list of values.
-subList_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (ValueList a)
-subList_select         = EList . sub_select
+subList_select
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value a))
+  -> SqlExpr (ValueList a)
+subList_select         = EList . unsafePromiseNotNull . sub_select
 
 -- | Lift a list of constant value from Haskell-land to the query.
 valList :: PersistField typ => [typ] -> SqlExpr (ValueList typ)

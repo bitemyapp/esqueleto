@@ -328,7 +328,7 @@ testSelectFrom run = do
                      from $ \followB -> do
                      where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
                      return $ followB ^. FollowFollower
-               where_ $ followA ^. FollowFollowed ==. sub_select subquery
+               where_ $ just (followA ^. FollowFollowed) ==. sub_select subquery
                return followA
         liftIO $ length ret `shouldBe` 2
 
@@ -996,7 +996,7 @@ testCoasleceDefault run = do
                          from $ \p -> do
                          where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
                          return $ p ^. PersonAge
-                 return $ coalesceDefault [sub_select sub] (val (42 :: Int))
+                 return $ coalesceDefault [joinV (sub_select sub)] (val (42 :: Int))
         liftIO $ ret `shouldBe` [ Value (36 :: Int)
                                 , Value 42
                                 , Value 17
@@ -1047,7 +1047,7 @@ testUpdate run = do
               where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
               return countRows
         ()  <- update $ \p -> do
-               set p [ PersonAge =. just (sub_select (blogPostsBy p)) ]
+               set p [ PersonAge =. sub_select (blogPostsBy p) ]
         ret <- select $
                from $ \p -> do
                orderBy [ asc (p ^. PersonName) ]
@@ -1381,11 +1381,11 @@ testCase run = do
                               from $ \c -> do
                               where_ (c ^. PersonName ==. val "Mike")
                               return (c ^. PersonFavNum)
-                      where_ (v ^. PersonFavNum >. sub_select sub)
+                      where_ (just (v ^. PersonFavNum) >. sub_select sub)
                       return $ count (v ^. PersonName) +. val (1 :: Int)) ]
-              (else_ $ val (-1))
+              (else_ $ just (val (-1)))
 
-        liftIO $ ret `shouldBe` [ Value (3) ]
+        liftIO $ ret `shouldBe` [ Value (Just 3) ]
 
 
 
