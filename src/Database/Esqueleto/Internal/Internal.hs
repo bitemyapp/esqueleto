@@ -342,9 +342,10 @@ locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 {-#
   DEPRECATED
     sub_select
-    "sub_select is an unsafe function to use. If used with a SqlQuery \n \
-returns 0 results, then it may return NULL despite not mentioning Maybe in \n \
-ther eturn type. If it returns more than 1 result, then it will throw a \n \
+    "sub_select \n \
+sub_select is an unsafe function to use. If used with a SqlQuery that \n \
+returns 0 results, then it may return NULL despite not mentioning Maybe \n \
+in the return type. If it returns more than 1 result, then it will throw a \n \
 SQL error.\n\n Instead, consider using one of the following alternatives: \n \
 - subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
 - subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \

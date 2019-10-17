@@ -1,3 +1,11 @@
+(unreleased) 3.2.0
+========
+
+- @parsonsmatt
+  - [#153](https://github.com/bitemyapp/esqueleto/pull/153): Deprecate
+    `sub_select` and introduce `subSelect`, `subSelectMaybe`, and
+    `subSelectUnsafe`.
+
 3.1.1
 ========
 
