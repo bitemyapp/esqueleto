@@ -64,6 +64,7 @@ module Database.Esqueleto
   , DistinctOn
   , LockingKind(..)
   , SqlString
+  , unsafePromiseNotNull
     -- ** Joins
   , InnerJoin(..)
   , CrossJoin(..)

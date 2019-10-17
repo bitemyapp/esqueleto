@@ -46,6 +46,7 @@ module Database.Esqueleto.Internal.Sql
   , unsafeSqlCastAs
   , unsafeSqlFunction
   , unsafeSqlExtractSubField
+  , unsafePromiseNotNull
   , UnsafeSqlFunctionArgument
   , OrderByClause
   , rawSelectSource
