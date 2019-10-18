@@ -350,6 +350,7 @@ SQL error.\n\n Instead, consider using one of the following alternatives: \n \
 - subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
 - subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
   has a Maybe in the return type. \n \
+- subSelectCount: Performs a count of the query - this is always safe. \n \
 - subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
   countRows and friends."
   #-}
@@ -369,8 +370,12 @@ sub_select         = sub SELECT
 -- If you find yourself writing @'joinV' . 'subSelect'@, then consider using
 -- 'subSelectMaybe'.
 --
+-- If you're performing a 'countRows', then you can use 'subSelectCount' which
+-- is safe.
+--
 -- If you know that the subquery will always return exactly one row (eg
--- 'countRows'), then consider 'subSelectUnsafe'.
+-- a foreign key constraint guarantees that you'll get exactly one row), then
+-- consider 'subSelectUnsafe', along with a comment explaining why it is safe.
 --
 -- @since 3.2.0
 subSelect
@@ -393,6 +398,19 @@ subSelectMaybe
   -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
+-- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
+-- always guaranteed to return a result value, and is completely safe.
+--
+-- @since 3.2.0
+subSelectCount
+  :: (Num a, PersistField a)
+  => SqlQuery ignored
+  -> SqlExpr (Value a)
+subSelectCount query = do
+  subSelectUnsafe $ do
+    _ <- query
+    pure countRows
+
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
 -- because it can throw runtime exceptions in two cases:
 --
@@ -406,7 +424,7 @@ subSelectMaybe = joinV . subSelect
 -- or if the result already has a 'Maybe' type for some reason.
 --
 -- For variants with the safety encoded already, see 'subSelect' and
--- 'subSelectMaybe'.
+-- 'subSelectMaybe'. For the most common safe use of this, see 'subSelectCount'.
 --
 -- @since 3.2.0
 subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
