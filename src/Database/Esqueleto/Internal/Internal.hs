@@ -405,7 +405,7 @@ subSelectMaybe = joinV . subSelect
 -- This function is safe if you guarantee that exactly one row will be returned,
 -- or if the result already has a 'Maybe' type for some reason.
 --
--- For variatns with the safety encoded already, see 'subSelect' and
+-- For variants with the safety encoded already, see 'subSelect' and
 -- 'subSelectMaybe'.
 --
 -- @since 3.2.0
