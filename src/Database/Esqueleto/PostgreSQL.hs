@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings
-           , GADTs, CPP
+           , GADTs, CPP, Rank2Types
+           , ScopedTypeVariables
  #-}
 -- | This module contain PostgreSQL-specific functions.
 --
@@ -20,6 +21,8 @@ module Database.Esqueleto.PostgreSQL
   , random_
   , upsert
   , upsertBy
+  , insertSelectWithConflict
+  , insertSelectWithConflictCount
   -- * Internal
   , unsafeSqlAggregateFunction
   ) where
@@ -33,14 +36,17 @@ import           Database.Esqueleto.Internal.Language         hiding (random_)
 import           Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import           Database.Esqueleto.Internal.Sql
 import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..), 
-                                                              UnexpectedCaseError(..), SetClause)
+                                                              UnexpectedCaseError(..), SetClause, Ident(..),
+                                                              uncommas)
 import           Database.Persist.Class                       (OnlyOneUniqueKey)
 import           Data.List.NonEmpty                           ( NonEmpty( (:|) ) )
+import           Data.Int                                     (Int64)
+import           Data.Proxy                                   (Proxy(..))
 import           Control.Arrow                                ((***), first)
 import           Control.Exception                            (Exception, throw, throwIO)
+import           Control.Monad                                (void)
 import           Control.Monad.IO.Class                       (MonadIO (..))
 import qualified Control.Monad.Trans.Reader                   as R
-
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -203,14 +209,78 @@ upsertBy uniqueKey record updates = do
     updatesText conn = first builderToText $ renderUpdates conn updates
     handler conn f = fmap head $ uncurry rawSql $
       (***) (f entDef (uDef :| [])) addVals $ updatesText conn
-    renderUpdates :: SqlBackend
-        -> [SqlExpr (Update val)]
-        -> (TLB.Builder, [PersistValue])
-    renderUpdates conn = uncommas' . concatMap renderUpdate
-        where
-          mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
-          mk (ERaw _ f)        = [f info]
-          mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
-          renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
-          renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
-          info = (projectBackend conn, initialIdentState)
+
+-- | Render postgres updates to be use in a SET clause.
+renderUpdates :: (BackendCompatible SqlBackend backend) => 
+    backend
+    -> [SqlExpr (Update val)]
+    -> (TLB.Builder, [PersistValue])
+renderUpdates conn = uncommas' . concatMap renderUpdate
+    where
+      mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
+      mk (ERaw _ f)        = [f info]
+      mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
+      renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
+      renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
+      info = (projectBackend conn, initialIdentState)
+
+-- | Inserts into a table the results of a query similar to 'insertSelect' but allows
+-- to update values that violate a constraint during insertions.
+--
+-- Example of usage:
+--
+-- @
+-- insertSelectWithConflict 
+--   (SomeFooUnique undefined)
+--   (from $ \b ->
+--     return $ Foo <# (b ^. BarNum)
+--   )
+--   (\current excluded ->
+--     [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
+--   )
+-- @
+--
+-- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique, 
+-- the conflicting value is updated to the current plus the excluded.
+insertSelectWithConflict :: (MonadIO m, PersistEntity val) => 
+  Unique val
+  -- ^ Uniqueness constraint, this is used just to get the name of the postgres constraint, the value(s) is(are) never used, so if you have a unique "MyUnique 0", "MyUnique undefined" will work as well.
+  -> SqlQuery (SqlExpr (Insertion val)) 
+  -- ^ Insert query.
+  -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+  -- ^ A list of updates to be applied in case of the constraint being violated. The expression takes the current and excluded value to produce the updates.
+  -> SqlWriteT m ()
+insertSelectWithConflict unique query = void . insertSelectWithConflictCount unique query
+
+-- | Same as 'insertSelectWithConflict' but returns the number of rows affected.
+insertSelectWithConflictCount :: forall val m. (MonadIO m, PersistEntity val) => 
+  Unique val
+  -> SqlQuery (SqlExpr (Insertion val)) 
+  -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+  -> SqlWriteT m Int64
+insertSelectWithConflictCount unique query conflictQuery = do
+  conn <- R.ask
+  uncurry rawExecuteCount $
+    combine
+      (toRawSql INSERT_INTO (conn, initialIdentState) (fmap EInsertFinal query))
+      (conflict conn)
+  where
+    proxy :: Proxy val
+    proxy = Proxy
+    combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
+    entExcluded = EEntity $ I "excluded"
+    tableName = unDBName . entityDB . entityDef
+    entCurrent = EEntity $ I (tableName proxy)
+    -- there must be a better way to get the constrain name from a unique, make this not a list search
+    uniqueDef = head . filter ((==) (persistUniqueToFieldNames unique) . uniqueFields) . entityUniques . entityDef $ proxy
+    constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
+    renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
+    renderedUpdates conn = renderUpdates conn (conflictQuery entCurrent entExcluded)
+    conflict conn = (foldr1 mappend [
+        TLB.fromText "ON CONFLICT ON CONSTRAINT \"",
+        constraint,
+        TLB.fromText "\" DO UPDATE SET ",
+        updatesTLB
+      ],values)
+      where
+        (updatesTLB,values) = renderedUpdates conn
