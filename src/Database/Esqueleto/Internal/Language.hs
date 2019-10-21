@@ -59,6 +59,7 @@ module Database.Esqueleto.Internal.Language
   , subSelect
   , subSelectMaybe
   , subSelectCount
+  , subSelectList
   , subSelectUnsafe
   ) where
 

@@ -411,6 +411,17 @@ subSelectCount query = do
     _ <- query
     pure countRows
 
+-- | Execute a subquery @SELECT@ in a 'SqlExpr' that returns a list. This is an
+-- alias for 'subList_select' and is provided for symmetry with the other safe
+-- subselect functions.
+--
+-- @since 3.2.0
+subSelectList
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value a))
+  -> SqlExpr (ValueList a)
+subSelectList = subList_select
+
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
 -- because it can throw runtime exceptions in two cases:
 --

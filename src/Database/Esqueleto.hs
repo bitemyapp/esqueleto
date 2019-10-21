@@ -57,6 +57,7 @@ module Database.Esqueleto
   , subSelectMaybe
   , subSelectCount
   , subSelectUnsafe
+  , subSelectList
   , ToBaseId(..)
   , when_
   , then_
