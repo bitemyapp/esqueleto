@@ -422,6 +422,47 @@ subSelectList
   -> SqlExpr (ValueList a)
 subSelectList = subList_select
 
+-- | Performs a sub-select using the given foreign key on the entity. This is
+-- useful to extract values that are known to be present by the database schema.
+--
+-- As an example, consider the following persistent definition:
+--
+-- @
+-- User
+--   profile ProfileId
+--
+-- Profile
+--   name    Text
+-- @
+--
+-- The following query will return the name of the user.
+--
+-- @
+-- getUserWithName =
+--     'select' $
+--     'from' $ \user ->
+--     'pure' (user, 'subSelectForeign' user UserProfile (^. ProfileName)
+-- @
+--
+-- @since 3.2.0
+subSelectForeign
+  ::
+  ( BackendCompatible SqlBackend (PersistEntityBackend val1)
+  , PersistEntity val1, PersistEntity val2, PersistField a
+  )
+  => SqlExpr (Entity val2)
+  -- ^ An expression representing the table you have access to now.
+  -> EntityField val2 (Key val1)
+  -- ^ The foreign key field on the table.
+  -> (SqlExpr (Entity val1) -> SqlExpr (Value a))
+  -- ^ A function to extract a value from the foreign reference table.
+  -> SqlExpr (Value a)
+subSelectForeign expr foreignKey with =
+  subSelectUnsafe $
+  from $ \table -> do
+  where_ $ expr ^. foreignKey ==. table ^. persistIdField
+  pure (with table)
+
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
 -- because it can throw runtime exceptions in two cases:
 --
