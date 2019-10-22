@@ -978,6 +978,50 @@ testUpsert =
       u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
+testInsertSelectWithConflict :: Spec
+testInsertSelectWithConflict =
+  describe "insertSelectWithConflict test" $ do
+    it "Should do Nothing when no updates set" $ run $ do
+      _ <- insert p1
+      _ <- insert p2
+      _ <- insert p3
+      n1 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+          from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
+        )
+        (\current excluded -> [])
+      uniques1 <- select $ from $ \u -> return u
+      n2 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+          from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
+        )
+        (\current excluded -> [])
+      uniques2 <- select $ from $ \u -> return u
+      liftIO $ n1 `shouldBe` 3
+      liftIO $ n2 `shouldBe` 0
+      let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
+      liftIO $ map entityVal uniques1 `shouldBe` test
+      liftIO $ map entityVal uniques2 `shouldBe` test
+    it "Should update a value if given an update on conflict" $ run $ do
+        _ <- insert p1
+        _ <- insert p2
+        _ <- insert p3
+        -- Note, have to sum 4 so that the update does not conflicts again with another row.
+        n1 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+            from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
+          )
+          (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
+        uniques1 <- select $ from $ \u -> return u
+        n2 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+            from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
+          )
+          (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
+        uniques2 <- select $ from $ \u -> return u
+        liftIO $ n1 `shouldBe` 3
+        liftIO $ n2 `shouldBe` 3
+        let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
+            test2 = map (OneUnique "test" . (+4) . (*2) . personFavNum) [p1,p2,p3]
+        liftIO $ map entityVal uniques1 `shouldBe` test
+        liftIO $ map entityVal uniques2 `shouldBe` test2
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1051,6 +1095,7 @@ main = do
       testPostgresqlTextFunctions
       testInsertUniqueViolation
       testUpsert
+      testInsertSelectWithConflict
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests

@@ -267,6 +267,7 @@ insertSelectWithConflictCount unique query conflictQuery = do
   where
     proxy :: Proxy val
     proxy = Proxy
+    updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
     entExcluded = EEntity $ I "excluded"
     tableName = unDBName . entityDB . entityDef
@@ -275,12 +276,14 @@ insertSelectWithConflictCount unique query conflictQuery = do
     uniqueDef = head . filter ((==) (persistUniqueToFieldNames unique) . uniqueFields) . entityUniques . entityDef $ proxy
     constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
-    renderedUpdates conn = renderUpdates conn (conflictQuery entCurrent entExcluded)
-    conflict conn = (foldr1 mappend [
+    renderedUpdates conn = renderUpdates conn updates
+    conflict conn = (foldr1 mappend ([
         TLB.fromText "ON CONFLICT ON CONSTRAINT \"",
         constraint,
-        TLB.fromText "\" DO UPDATE SET ",
+        TLB.fromText "\" DO "
+      ] ++ if null updates then [TLB.fromText "NOTHING"] else [      
+        TLB.fromText "UPDATE SET ",
         updatesTLB
-      ],values)
+      ]),values)
       where
         (updatesTLB,values) = renderedUpdates conn
