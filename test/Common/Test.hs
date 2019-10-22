@@ -100,6 +100,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     title String
     authorId PersonId
     deriving Eq Show
+  Comment
+    body String
+    blog BlogPostId
+    deriving Eq Show
 
   Lord
     county String maxlen=100
@@ -159,6 +163,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Numbers
     int    Int
     double Double
+
 |]
 
 -- Unique Test schema
@@ -315,6 +320,7 @@ testSelectFrom run = do
                                                     , (p1e, p2e)
                                                     , (p2e, p1e)
                                                     , (p2e, p2e) ]
+
 
     it "works for a self-join via sub_select" $
       run $ do
@@ -826,6 +832,16 @@ testSelectWhere run = do
                                 , (p1e, f12, p2e)
                                 , (p4e, f42, p2e)
                                 , (p2e, f21, p1e) ]
+
+    it "works for a many-to-many explicit join and on order doesn't matter" $
+      run $ do
+        ret <- select $
+               from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
+               on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
+               on $ blog ^. BlogPostId ==. comment ^. CommentBlog
+               pure (person, comment)
+
+        liftIO $ True `shouldBe` True
 
     it "works for a many-to-many explicit join with LEFT OUTER JOINs" $
       run $ do
