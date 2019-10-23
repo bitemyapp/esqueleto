@@ -31,12 +31,12 @@ library
       Database.Esqueleto
       Database.Esqueleto.Internal.Language
       Database.Esqueleto.Internal.Sql
+      Database.Esqueleto.Internal.Internal
       Database.Esqueleto.MySQL
       Database.Esqueleto.PostgreSQL
       Database.Esqueleto.PostgreSQL.JSON
       Database.Esqueleto.SQLite
   other-modules:
-      Database.Esqueleto.Internal.Internal
       Database.Esqueleto.Internal.PersistentImport
       Database.Esqueleto.PostgreSQL.JSON.Instances
       Paths_esqueleto

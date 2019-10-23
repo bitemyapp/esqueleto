@@ -25,8 +25,12 @@
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
+--
+-- If you use this module, please report what your use case is on the issue
+-- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Control.Applicative ((<|>))
 import Control.Arrow ((***), first)
 import Control.Exception (Exception, throw, throwIO)
 import Control.Monad (ap, MonadPlus(..), void)
@@ -1352,27 +1356,42 @@ collectOnClauses :: [FromClause] -> Either (SqlExpr (Value Bool)) [FromClause]
 collectOnClauses = go []
   where
     go []  (f@(FromStart _ _):fs) = fmap (f:) (go [] fs) -- fast path
-    go acc (OnClause expr    :fs) = findMatching acc expr >>= flip go fs
+    go acc (OnClause expr    :fs) = do
+      a <- findMatching acc expr
+      go a fs
     go acc (f:fs)                 = go (f:acc) fs
     go acc []                     = return $ reverse acc
 
-    findMatching (f : acc) expr =
-      case tryMatch expr f of
-        Just f' -> return (f' : acc)
-        Nothing -> (f:) <$> findMatching acc expr
-    findMatching [] expr = Left expr
+    findMatching
+      :: [FromClause]
+      -> SqlExpr (Value Bool)
+      -> Either (SqlExpr (Value Bool)) [FromClause]
+    findMatching fromClauses expr =
+      case fromClauses of
+        f : acc ->
+          case tryMatch expr f of
+            Just f' -> return (f' : acc)
+            Nothing -> (f:) <$> findMatching acc expr
+        [] ->
+          Left expr
 
-    tryMatch expr (FromJoin l k r onClause) =
-      matchR `mplus` matchC `mplus` matchL -- right to left
-        where
-          matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
-          matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
-          matchC = case onClause of
-                     Nothing | k /= CrossJoinKind
-                               -> return (FromJoin l k r (Just expr))
-                             | otherwise -> mzero
-                     Just _  -> mzero
-    tryMatch _ _ = mzero
+    tryMatch :: SqlExpr (Value Bool) -> FromClause -> Maybe FromClause
+    tryMatch expr fromClause =
+      case fromClause of
+        FromJoin l k r onClause ->
+          matchR `mplus` matchC `mplus` matchL -- right to left
+            where
+              matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
+              matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
+              matchC =
+                case onClause of
+                  Nothing
+                    | k /= CrossJoinKind -> return (FromJoin l k r (Just expr))
+                    | otherwise -> Nothing
+                  Just _ ->
+                    Nothing
+        _ ->
+          Nothing
 
 
 -- | A complete @WHERE@ clause.
@@ -1441,24 +1460,18 @@ initialIdentState = IdentState mempty
 -- | Create a fresh 'Ident'.  If possible, use the given
 -- 'DBName'.
 newIdentFor :: DBName -> SqlQuery Ident
-newIdentFor = Q . lift . try . unDBName
+newIdentFor (DBName original) = Q $ lift $ findFree Nothing
   where
-    try orig = do
-      s <- S.get
-      let go (t:ts) | t `HS.member` inUse s = go ts
-                    | otherwise             = use t
-          go [] = throw (UnexpectedCaseErr NewIdentForError)
-      go (possibilities orig)
-
-    possibilities t = t : map addNum [2..]
-      where
-        addNum :: Int -> T.Text
-        addNum = T.append t . T.pack . show
-
-    use t = do
-      S.modify (\s -> s { inUse = HS.insert t (inUse s) })
-      return (I t)
-
+    findFree msuffix = do
+      let
+        withSuffix =
+          maybe id (\suffix -> (<> T.pack (show suffix))) msuffix original
+      isInUse <- S.gets (HS.member withSuffix . inUse)
+      if isInUse
+        then findFree (succ <$> (msuffix <|> Just 1))
+        else do
+          S.modify (\s -> s { inUse = HS.insert withSuffix (inUse s) })
+          pure (I withSuffix)
 
 -- | Information needed to escape and use identifiers.
 type IdentInfo = (SqlBackend, IdentState)
@@ -2884,3 +2897,12 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
+
+renderExpr :: Monad m => SqlExpr (Value a) -> SqlPersistT m T.Text
+renderExpr e = case e of
+  ERaw parens mkBuilderValues -> do
+    sqlBackend <- R.ask
+    let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
+    pure (builderToText builder)
+  ECompositeKey _ ->
+    error "don't care"

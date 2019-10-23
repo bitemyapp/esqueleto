@@ -1476,7 +1476,7 @@ testCountingRows run = do
           liftIO $ (n :: Int) `shouldBe` expected
 
 testRenderSql :: Run -> Spec
-testRenderSql run =
+testRenderSql run = do
   describe "testRenderSql" $ do
     it "works" $ do
       (queryText, queryVals) <- run $ renderQuerySelect $
@@ -1496,6 +1496,13 @@ testRenderSql run =
         `shouldBe`
           [toPersistValue ("Johhny Depp" :: TL.Text)]
 
+  describe "renderExpr" $ do
+    it "renders a value" $ do
+      run $ do
+        expr <- EI.renderExpr $
+          EI.EEntity (EI.I "user") ^. PersonId
+          ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
+        liftIO $ expr `shouldBe` "\"user\".\"id\" = \"blog_post\".\"authorId\""
 
 
 tests :: Run -> Spec
