@@ -1468,7 +1468,7 @@ newIdentFor (DBName original) = Q $ lift $ findFree Nothing
           maybe id (\suffix -> (<> T.pack (show suffix))) msuffix original
       isInUse <- S.gets (HS.member withSuffix . inUse)
       if isInUse
-        then findFree (succ <$> (msuffix <|> Just 1))
+        then findFree (succ <$> (msuffix <|> Just (1 :: Int)))
         else do
           S.modify (\s -> s { inUse = HS.insert withSuffix (inUse s) })
           pure (I withSuffix)
@@ -2898,11 +2898,25 @@ insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
-renderExpr :: Monad m => SqlExpr (Value a) -> SqlPersistT m T.Text
-renderExpr e = case e of
-  ERaw parens mkBuilderValues -> do
-    sqlBackend <- R.ask
-    let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
-    pure (builderToText builder)
-  ECompositeKey _ ->
-    error "don't care"
+-- | Renders an expression into 'Text'. Only useful for creating a textual
+-- representation of the clauses passed to an "On" clause.
+renderExpr :: MonadIO m => SqlExpr (Value Bool) -> SqlPersistT m T.Text
+renderExpr e = do
+  sqlBackend <- R.ask
+  case e of
+    ERaw parens mkBuilderValues -> do
+      let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
+      pure (builderToText builder)
+    ECompositeKey mkInfo ->
+      liftIO
+        . throwIO
+        . RenderExprUnexpectedECompositeKey
+        . builderToText
+        . mconcat
+        . mkInfo
+        $ (sqlBackend, initialIdentState)
+
+data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
+  deriving Show
+
+instance Exception RenderExprException
