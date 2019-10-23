@@ -55,7 +55,7 @@ module Database.Esqueleto.Internal.Language
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId, (<#), (<&>)
+             , case_, toBaseId, (<#), (<&>), associateJoin
   ) where
 
 import Database.Esqueleto.Internal.PersistentImport
