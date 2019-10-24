@@ -1498,11 +1498,14 @@ testRenderSql run = do
 
   describe "renderExpr" $ do
     it "renders a value" $ do
-      run $ do
-        expr <- EI.renderExpr $
+      expr <- run $
+        EI.renderExpr $
           EI.EEntity (EI.I "user") ^. PersonId
           ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
-        liftIO $ expr `shouldBe` "\"user\".\"id\" = \"blog_post\".\"authorId\""
+      expr `shouldBe` "\"user\".\"id\" = \"blog_post\".\"authorId\""
+    it "renders ? for a val" $ do
+      expr <- run $ EI.renderExpr (val (PersonKey 0) ==. val (PersonKey 1))
+      expr `shouldBe` "? = ?"
 
 
 tests :: Run -> Spec

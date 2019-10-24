@@ -1379,7 +1379,7 @@ collectOnClauses = go []
     tryMatch expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
-          matchR `mplus` matchC `mplus` matchL -- right to left
+          matchR <|> matchC <|> matchL -- right to left
             where
               matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
               matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
