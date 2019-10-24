@@ -86,6 +86,7 @@ test-suite mysql
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , mysql
     , mysql-simple
     , persistent >=2.8.0 && <2.11
@@ -122,6 +123,7 @@ test-suite postgresql
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , persistent >=2.10.0 && <2.11
     , persistent-postgresql >= 2.10.0 && <2.11
     , persistent-template
@@ -157,6 +159,7 @@ test-suite sqlite
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , persistent >=2.8.0 && <2.11
     , persistent-sqlite
     , persistent-template

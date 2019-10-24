@@ -52,8 +52,7 @@ mkEscapeChar sqlBackend =
 type ExprParser a = Char -> Parser a
 
 onExpr :: ExprParser (Set TableAccess)
-onExpr e = fmap Set.fromList (many' tableAccesses) <|> do
-  pure mempty
+onExpr e = Set.fromList <$> many' tableAccesses
   where
    tableAccesses = do
      skipToEscape e <?> "Skipping to an escape char"

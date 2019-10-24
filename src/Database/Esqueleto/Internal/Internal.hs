@@ -30,10 +30,13 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Control.Applicative ((<|>))
 import Control.Arrow ((***), first)
 import Control.Exception (Exception, throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), void)
+import qualified Data.Maybe as Maybe
+import Control.Monad (guard, ap, MonadPlus(..), void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
@@ -60,6 +63,10 @@ import qualified Data.Text.Lazy.Builder as TLB
 
 import Data.Typeable (Typeable)
 import Text.Blaze.Html (Html)
+
+import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
+
+import qualified Debug.Trace as Debug
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -1352,8 +1359,11 @@ newtype SetClause = SetClause (SqlExpr (Value ()))
 -- | Collect 'OnClause's on 'FromJoin's.  Returns the first
 -- unmatched 'OnClause's data on error.  Returns a list without
 -- 'OnClauses' on success.
-collectOnClauses :: [FromClause] -> Either (SqlExpr (Value Bool)) [FromClause]
-collectOnClauses = go []
+collectOnClauses
+  :: SqlBackend
+  -> [FromClause]
+  -> Either (SqlExpr (Value Bool)) [FromClause]
+collectOnClauses sqlBackend = go []
   where
     go []  (f@(FromStart _ _):fs) = fmap (f:) (go [] fs) -- fast path
     go acc (OnClause expr    :fs) = do
@@ -1379,20 +1389,68 @@ collectOnClauses = go []
     tryMatch expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
-          matchR <|> matchC <|> matchL -- right to left
+          matchTable <|> matchR <|> matchC <|> matchL -- right to left
             where
               matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
               matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
               matchC =
                 case onClause of
                   Nothing
-                    | k /= CrossJoinKind -> return (FromJoin l k r (Just expr))
-                    | otherwise -> Nothing
+                    | "?" `T.isInfixOf` renderedExpr ->
+                        return (FromJoin l k r (Just expr))
+                    | Set.null identsInOnClause ->
+                        return (FromJoin l k r (Just expr))
+--                    | k /= CrossJoinKind ->
+--                        return (FromJoin l k r (Just expr))
+                    | otherwise ->
+                        Nothing
                   Just _ ->
                     Nothing
+              matchTable = do
+                i1 <- findLeftmostIdent r
+                i2 <- findRightmostIdent l
+--                Debug.traceM $ "i1: " <> show i1
+--                Debug.traceM $ "i2: " <> show i2
+--                Debug.traceM $ "identsInOnClause: " <> show identsInOnClause
+                guard $ all (`Set.member` identsInOnClause) [i1, i2]
+                guard $ k /= CrossJoinKind
+                guard $ Maybe.isNothing onClause
+                do
+                  const (Just ()) $ do
+                    Just ()
+                    Debug.traceM $
+                      mconcat $
+                      [ "Reached a hit in matchTable. identsinonclause: "
+                      , show identsInOnClause
+                      , ", leftmost ident: "
+                      , show i1
+                      , ", rightmost ident: "
+                      , show i2
+                      ]
+                pure (FromJoin l k r (Just expr))
+
+              findRightmostIdent (FromStart i _) = Just i
+              findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
+              findRightmostIdent (OnClause {}) = Nothing
+
+              findLeftmostIdent (FromStart i _) = Just i
+              findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
+              findLeftmostIdent (OnClause {}) = Nothing
+
         _ ->
           Nothing
+      where
+        identsInOnClause =
+          onExprToTableIdentifiers
 
+        renderedExpr =
+          renderExpr sqlBackend expr
+
+        onExprToTableIdentifiers =
+          Set.map (I . tableAccessTable)
+          . either error id
+          . parseOnExpr sqlBackend
+          $ renderedExpr
 
 -- | A complete @WHERE@ clause.
 data WhereClause = Where (SqlExpr (Value Bool))
@@ -1447,6 +1505,7 @@ type LockingClause = Monoid.Last LockingKind
 
 -- | Identifier used for table names.
 newtype Ident = I T.Text
+  deriving (Eq, Ord, Show)
 
 
 -- | List of identifiers already in use and supply of temporary
@@ -2174,11 +2233,15 @@ makeSelect info mode_ distinctClause ret = process mode_
     plain    v = (v, [])
 
 
-makeFrom :: IdentInfo -> Mode -> [FromClause] -> (TLB.Builder, [PersistValue])
+makeFrom
+  :: IdentInfo
+  -> Mode
+  -> [FromClause]
+  -> (TLB.Builder, [PersistValue])
 makeFrom _    _    [] = mempty
 makeFrom info mode fs = ret
   where
-    ret = case collectOnClauses fs of
+    ret = case collectOnClauses (fst info) fs of
             Left expr -> throw $ mkExc expr
             Right fs' -> keyword $ uncommas' (map (mk Never) fs')
     keyword = case mode of
@@ -2900,16 +2963,14 @@ insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
-renderExpr :: MonadIO m => SqlExpr (Value x) -> SqlPersistT m T.Text
-renderExpr e = do
-  sqlBackend <- R.ask
+renderExpr :: SqlBackend -> SqlExpr (Value x) -> T.Text
+renderExpr sqlBackend e =
   case e of
-    ERaw parens mkBuilderValues -> do
+    ERaw _ mkBuilderValues -> do
       let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
-      pure (builderToText builder)
+       in (builderToText builder)
     ECompositeKey mkInfo ->
-      liftIO
-        . throwIO
+      throw
         . RenderExprUnexpectedECompositeKey
         . builderToText
         . mconcat
@@ -2920,3 +2981,4 @@ data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
   deriving Show
 
 instance Exception RenderExprException
+

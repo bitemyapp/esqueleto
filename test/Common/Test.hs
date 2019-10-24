@@ -56,6 +56,7 @@ module Common.Test
 
 import Data.Either
 import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Reader (ask)
 import Control.Monad.Catch (MonadCatch)
 #if __GLASGOW_HASKELL__ >= 806
 import Control.Monad.Fail (MonadFail)
@@ -614,7 +615,7 @@ testSelectJoin run = do
 
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
-  describe "select/where_" $ do
+  describe "select where_" $ do
     it "works for a simple example with (==.)" $
       run $ do
         p1e <- insert' p1
@@ -835,12 +836,16 @@ testSelectWhere run = do
                                 , (p2e, f21, p1e) ]
 
     it "works for a many-to-many explicit join and on order doesn't matter" $ do
-      run $ void $
-        select $
-        from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
-        on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
-        on $ blog ^. BlogPostId ==. comment ^. CommentBlog
-        pure (person, comment)
+      let
+        q =
+          from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
+          on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
+          on $ blog ^. BlogPostId ==. comment ^. CommentBlog
+          pure (person, comment)
+      run (void (select q))
+        `catch` \(SomeException e) -> do
+          (text, _) <- run (renderQuerySelect q)
+          error $ Text.unpack text <> "\n\n" <> show e
 
       -- we only care that we don't have a SQL error
       True `shouldBe` True
@@ -1500,13 +1505,21 @@ testRenderSql run = do
 
   describe "renderExpr" $ do
     it "renders a value" $ do
-      expr <- run $
-        EI.renderExpr $
+      (c, expr) <- run $ do
+        conn <- ask
+        let Right c = P.mkEscapeChar conn
+        pure $ (,) c $ EI.renderExpr conn $
           EI.EEntity (EI.I "user") ^. PersonId
           ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
-      expr `shouldBe` "\"user\".\"id\" = \"blog_post\".\"authorId\""
+      expr
+        `shouldBe`
+          Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
+          <>
+          " = "
+          <>
+          Text.intercalate (Text.singleton c) ["", "blog_post", ".", "authorId", ""]
     it "renders ? for a val" $ do
-      expr <- run $ EI.renderExpr (val (PersonKey 0) ==. val (PersonKey 1))
+      expr <- run $ ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
       expr `shouldBe` "? = ?"
 
   describe "EEntity Ident behavior" $ do
@@ -1607,6 +1620,16 @@ testRenderSql run = do
         subject "false" `shouldBe` pure mempty
         subject "true" `shouldBe` pure mempty
         subject "1 = 1" `shouldBe` pure mempty
+      it "works even if an identifier isn't first" $ do
+        subject "true and #foo#.#bar# = 2"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+
 
 tests :: Run -> Spec
 tests run = do
