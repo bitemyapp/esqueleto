@@ -985,12 +985,12 @@ testInsertSelectWithConflict =
       _ <- insert p1
       _ <- insert p2
       _ <- insert p3
-      n1 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+      n1 <- EP.insertSelectWithConflictCount UniqueValue (
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
       uniques1 <- select $ from $ \u -> return u
-      n2 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+      n2 <- EP.insertSelectWithConflictCount UniqueValue (
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
@@ -1005,12 +1005,12 @@ testInsertSelectWithConflict =
         _ <- insert p2
         _ <- insert p3
         -- Note, have to sum 4 so that the update does not conflicts again with another row.
-        n1 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+        n1 <- EP.insertSelectWithConflictCount UniqueValue (
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
         uniques1 <- select $ from $ \u -> return u
-        n2 <- EP.insertSelectWithConflictCount (UniqueValue undefined) (
+        n2 <- EP.insertSelectWithConflictCount UniqueValue (
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])

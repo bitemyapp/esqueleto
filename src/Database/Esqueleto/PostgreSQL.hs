@@ -2,7 +2,9 @@
 {-# LANGUAGE OverloadedStrings
            , GADTs, CPP, Rank2Types
            , ScopedTypeVariables
+           , FlexibleInstances
  #-}
+ {-# LANGUAGE TypeFamilies #-}
 -- | This module contain PostgreSQL-specific functions.
 --
 -- /Since: 2.2.8/
@@ -25,6 +27,7 @@ module Database.Esqueleto.PostgreSQL
   , insertSelectWithConflictCount
   -- * Internal
   , unsafeSqlAggregateFunction
+  , toUniqueDef
   ) where
 
 #if __GLASGOW_HASKELL__ < 804
@@ -205,7 +208,7 @@ upsertBy uniqueKey record updates = do
   where
     addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
     entDef = entityDef (Just record)
-    uDef = head $ filter ((==) (persistUniqueToFieldNames uniqueKey) . uniqueFields) $ entityUniques entDef
+    uDef = toUniqueDef uniqueKey
     updatesText conn = first builderToText $ renderUpdates conn updates
     handler conn f = fmap head $ uncurry rawSql $
       (***) (f entDef (uDef :| [])) addVals $ updatesText conn
@@ -224,14 +227,52 @@ renderUpdates conn = uncommas' . concatMap renderUpdate
       renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
       info = (projectBackend conn, initialIdentState)
 
+type family KnowResult a where
+  KnowResult (i -> o) = KnowResult o
+  KnowResult a = a
+
+class FinalResult a where
+  finalR :: a -> KnowResult a
+
+instance FinalResult (Unique val) where
+  finalR = id
+
+instance (FinalResult b) => FinalResult (a -> b) where
+  finalR f = finalR (f undefined)
+
+toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) => 
+  a -> UniqueDef
+toUniqueDef uniqueConstructor = uniqueDef
+  where
+    proxy :: Proxy val
+    proxy = Proxy
+    unique :: Unique val
+    unique = finalR uniqueConstructor
+    -- there must be a better way to get the constrain name from a unique, make this not a list search
+    filterF = (==) (persistUniqueToFieldNames unique) . uniqueFields
+    uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
+
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
 --
 -- Example of usage:
 --
 -- @
+-- share [ mkPersist sqlSettings
+--       , mkDeleteCascade sqlSettings
+--       , mkMigrate "migrate"
+--       ] [persistLowerCase|
+--   Bar
+--     num Int
+--     deriving Eq Show
+--   Foo
+--     num Int
+--     UniqueFoo num
+--     deriving Eq Show
+-- |]
+--
 -- insertSelectWithConflict 
---   (SomeFooUnique undefined)
+--   UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
 --   (from $ \b ->
 --     return $ Foo <# (b ^. BarNum)
 --   )
@@ -242,9 +283,13 @@ renderUpdates conn = uncommas' . concatMap renderUpdate
 --
 -- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique, 
 -- the conflicting value is updated to the current plus the excluded.
-insertSelectWithConflict :: (MonadIO m, PersistEntity val) => 
-  Unique val
-  -- ^ Uniqueness constraint, this is used just to get the name of the postgres constraint, the value(s) is(are) never used, so if you have a unique "MyUnique 0", "MyUnique undefined" will work as well.
+insertSelectWithConflict :: forall a m val. (
+    FinalResult a,
+    KnowResult a ~ (Unique val), 
+    MonadIO m, 
+    PersistEntity val) => 
+  a
+  -- ^ Unique constructor or a unique, this is used just to get the name of the postgres constraint, the value(s) is(are) never used, so if you have a unique "MyUnique 0", "MyUnique undefined" would work as well.
   -> SqlQuery (SqlExpr (Insertion val)) 
   -- ^ Insert query.
   -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
@@ -253,8 +298,12 @@ insertSelectWithConflict :: (MonadIO m, PersistEntity val) =>
 insertSelectWithConflict unique query = void . insertSelectWithConflictCount unique query
 
 -- | Same as 'insertSelectWithConflict' but returns the number of rows affected.
-insertSelectWithConflictCount :: forall val m. (MonadIO m, PersistEntity val) => 
-  Unique val
+insertSelectWithConflictCount :: forall a val m. (
+    FinalResult a,
+    KnowResult a ~ (Unique val), 
+    MonadIO m, 
+    PersistEntity val) => 
+  a
   -> SqlQuery (SqlExpr (Insertion val)) 
   -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
   -> SqlWriteT m Int64
@@ -272,8 +321,7 @@ insertSelectWithConflictCount unique query conflictQuery = do
     entExcluded = EEntity $ I "excluded"
     tableName = unDBName . entityDB . entityDef
     entCurrent = EEntity $ I (tableName proxy)
-    -- there must be a better way to get the constrain name from a unique, make this not a list search
-    uniqueDef = head . filter ((==) (persistUniqueToFieldNames unique) . uniqueFields) . entityUniques . entityDef $ proxy
+    uniqueDef = toUniqueDef unique
     constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
     renderedUpdates conn = renderUpdates conn updates
