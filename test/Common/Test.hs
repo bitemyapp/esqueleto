@@ -54,6 +54,7 @@ module Common.Test
     , OneUnique(..)
     ) where
 
+import Data.Either
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.Catch (MonadCatch)
 #if __GLASGOW_HASKELL__ >= 806
@@ -68,6 +69,7 @@ import Database.Esqueleto
 import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
+import qualified Data.Attoparsec.Text as AP
 
 import Database.Persist (PersistValue(..))
 import Data.Conduit (ConduitT, (.|), runConduit)
@@ -79,8 +81,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Database.Esqueleto.Internal.Sql as EI
 import qualified UnliftIO.Resource as R
-
-
+import qualified Database.Esqueleto.Internal.ExprParser as P
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -833,15 +834,16 @@ testSelectWhere run = do
                                 , (p4e, f42, p2e)
                                 , (p2e, f21, p1e) ]
 
-    it "works for a many-to-many explicit join and on order doesn't matter" $
-      run $ do
-        ret <- select $
-               from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
-               on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
-               on $ blog ^. BlogPostId ==. comment ^. CommentBlog
-               pure (person, comment)
+    it "works for a many-to-many explicit join and on order doesn't matter" $ do
+      run $ void $
+        select $
+        from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
+        on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
+        on $ blog ^. BlogPostId ==. comment ^. CommentBlog
+        pure (person, comment)
 
-        liftIO $ True `shouldBe` True
+      -- we only care that we don't have a SQL error
+      True `shouldBe` True
 
     it "works for a many-to-many explicit join with LEFT OUTER JOINs" $
       run $ do
@@ -1507,6 +1509,104 @@ testRenderSql run = do
       expr <- run $ EI.renderExpr (val (PersonKey 0) ==. val (PersonKey 1))
       expr `shouldBe` "? = ?"
 
+  describe "EEntity Ident behavior" $ do
+    let
+      render :: SqlExpr (Entity val) -> Text.Text
+      render (EI.EEntity (EI.I ident)) = ident
+    it "renders sensibly" $ do
+      results <- run $ do
+        _ <- insert $ Foo 2
+        _ <- insert $ Foo 3
+        _ <- insert $ Person "hello" Nothing Nothing 3
+        select $
+          from $ \(a `LeftOuterJoin` b) -> do
+          on $ a ^. FooName ==. b ^. PersonFavNum
+          pure (val (render a), val (render b))
+      head results
+        `shouldBe`
+          (Value "Foo", Value "Person")
+
+  describe "ExprParser" $ do
+    let parse parser = AP.parseOnly (parser '#')
+    describe "parseEscapedChars" $ do
+      let subject = parse P.parseEscapedChars
+      it "parses words" $ do
+        subject "hello world"
+          `shouldBe`
+            Right "hello world"
+      it "only returns a single escape-char if present" $ do
+        subject "i_am##identifier##"
+          `shouldBe`
+            Right "i_am#identifier#"
+    describe "parseEscapedIdentifier" $ do
+      let subject = parse P.parseEscapedIdentifier
+      it "parses the quotes out" $ do
+        subject "#it's a me, mario#"
+          `shouldBe`
+            Right "it's a me, mario"
+      it "requires a beginning and end quote" $ do
+        subject "#alas, i have no end"
+          `shouldSatisfy`
+            isLeft
+    describe "parseTableAccess" $ do
+      let subject = parse P.parseTableAccess
+      it "parses a table access" $ do
+        subject "#foo#.#bar#"
+          `shouldBe`
+            Right P.TableAccess
+              { P.tableAccessTable = "foo"
+              , P.tableAccessColumn = "bar"
+              }
+    describe "onExpr" $ do
+      let subject = parse P.onExpr
+      it "works" $ do
+        subject "#foo#.#bar# = #bar#.#baz#"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              , P.TableAccess
+                { P.tableAccessTable = "bar"
+                , P.tableAccessColumn = "baz"
+                }
+              ]
+      it "also works with other nonsense" $ do
+        subject "#foo#.#bar# = 3"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+      it "handles a conjunction" $ do
+        subject "#foo#.#bar# = #bar#.#baz# AND #bar#.#baz# > 10"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              , P.TableAccess
+                { P.tableAccessTable = "bar"
+                , P.tableAccessColumn = "baz"
+                }
+              ]
+      it "handles ? okay" $ do
+        subject "#foo#.#bar# = ?"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+      it "handles degenerate cases" $ do
+        subject "false" `shouldBe` pure mempty
+        subject "true" `shouldBe` pure mempty
+        subject "1 = 1" `shouldBe` pure mempty
 
 tests :: Run -> Spec
 tests run = do

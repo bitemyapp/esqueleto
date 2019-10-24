@@ -2900,7 +2900,7 @@ insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
-renderExpr :: MonadIO m => SqlExpr (Value Bool) -> SqlPersistT m T.Text
+renderExpr :: MonadIO m => SqlExpr (Value x) -> SqlPersistT m T.Text
 renderExpr e = do
   sqlBackend <- R.ask
   case e of
