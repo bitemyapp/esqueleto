@@ -1843,6 +1843,21 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
       listsEqualOn ac ca $ \(Entity _ a, b) ->
         (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
 
+    it "doesn't require an on for a crossjoin" $ do
+      void $ run $
+        select $
+        from $ \(a `CrossJoin` b) -> do
+        pure (a :: SqlExpr (Entity JoinOne), b :: SqlExpr (Entity JoinTwo))
+
+    it "errors with an on for a crossjoin" $ do
+      (void $ run $
+        select $
+        from $ \(a `CrossJoin` b) -> do
+        on $ a ^. JoinOneId ==. b ^. JoinTwoJoinOne
+        pure (a, b))
+          `shouldThrow` \(OnClauseWithoutMatchingJoinException _) ->
+            True
+
     it "left joins associativity" $ do
       ca <- run $ do
         setup
