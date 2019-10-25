@@ -50,7 +50,6 @@ import qualified Data.ByteString as B
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
-import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
@@ -2885,27 +2884,3 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
-
--- | Avoid N+1 queries and join entities into a map structure
--- @
--- getFoosAndNestedBarsFromParent :: ParentId -> (Map (Key Foo) (Foo, [Entity Bar]))
--- getFoosAndNestedBarsFromParent parentId = 'fmap' associateJoin $ 'select' $
--- 'from' $ \\(foo `'LeftOuterJoin`` bar) -> do
---   'on' (bar '^.' BarFooId '==.' foo '^.' FooId)
---   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
---   'pure' (foo, bar)
--- @
-
-associateJoin
-  :: forall e1 e0
-   . Ord (Key e0)
-  => [(Entity e0, e1)]
-  -> Map.Map (Key e0) (e0, [e1])
-associateJoin = foldr f start
-  where
-    start = Map.empty
-    f (one, many) =
-      Map.insertWith
-        (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
-        (entityKey one)
-        (entityVal one, [many])
