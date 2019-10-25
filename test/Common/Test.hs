@@ -107,6 +107,9 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     body String
     blog BlogPostId
     deriving Eq Show
+  Profile
+    name String
+    person PersonId
 
   Lord
     county String maxlen=100
@@ -1801,6 +1804,25 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
       listsEqualOn xs0 xs1 getNames
       listsEqualOn xs0 xs2 getNames
       listsEqualOn xs0 xs3 getNames
+
+    it "inner join on two entities" $ do
+      (xs0, xs1) <- run $ do
+        pid <- insert $ Person "hello" Nothing Nothing 3
+        insert $ BlogPost "good poast" pid
+        insert $ Profile "cool" pid
+        xs0 <- select $
+          from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr)
+        xs1 <- select $
+          from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr)
+        pure (xs0, xs1)
+      listsEqualOn xs0 xs1 $ \(Entity _ p, Entity _ b, Entity _ pr) ->
+        (personName p, blogPostTitle b, profileName pr)
 
     it "many-to-many" $ do
       ac <- run $ do
