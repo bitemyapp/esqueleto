@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
+           , PartialTypeSignatures
            , UndecidableInstances
            , EmptyDataDecls
            , FlexibleContexts
@@ -166,6 +167,34 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     int    Int
     double Double
 
+  JoinOne
+    name    String
+    deriving Eq Show
+
+  JoinTwo
+    joinOne JoinOneId
+    name    String
+    deriving Eq Show
+
+  JoinThree
+    joinTwo JoinTwoId
+    name    String
+    deriving Eq Show
+
+  JoinFour
+    name    String
+    joinThree JoinThreeId
+    deriving Eq Show
+
+  JoinOther
+    name    String
+    deriving Eq Show
+
+  JoinMany
+    name      String
+    joinOther JoinOtherId
+    joinOne   JoinOneId
+    deriving Eq Show
 |]
 
 -- Unique Test schema
@@ -454,7 +483,7 @@ testSelectFrom run = do
 
 testSelectJoin :: Run -> Spec
 testSelectJoin run = do
-  describe "select/JOIN" $ do
+  describe "select:JOIN" $ do
     it "works with a LEFT OUTER JOIN" $
       run $ do
         p1e <- insert' p1
@@ -610,8 +639,6 @@ testSelectJoin run = do
               on (val True)
               return p
           liftIO $ (entityVal <$> ps) `shouldBe` [p1]
-
-
 
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
@@ -1630,6 +1657,215 @@ testRenderSql run = do
                 }
               ]
 
+testOnClauseOrder :: Run -> Spec
+testOnClauseOrder run = describe "On Clause Ordering" $ do
+  let
+    setup :: MonadIO m => SqlPersistT m ()
+    setup = do
+      ja1 <- insert (JoinOne "j1 hello")
+      ja2 <- insert (JoinOne "j1 world")
+      jb1 <- insert (JoinTwo ja1 "j2 hello")
+      jb2 <- insert (JoinTwo ja1 "j2 world")
+      jb3 <- insert (JoinTwo ja2 "j2 foo")
+      _ <- insert (JoinTwo ja2 "j2 bar")
+      jc1 <- insert (JoinThree jb1 "j3 hello")
+      jc2 <- insert (JoinThree jb1 "j3 world")
+      _ <- insert (JoinThree jb2 "j3 foo")
+      _ <- insert (JoinThree jb3 "j3 bar")
+      _ <- insert (JoinThree jb3 "j3 baz")
+      _ <- insert (JoinFour "j4 foo" jc1)
+      _ <- insert (JoinFour "j4 bar" jc2)
+      jd1 <- insert (JoinOther "foo")
+      jd2 <- insert (JoinOther "bar")
+      _ <- insert (JoinMany "jm foo hello" jd1 ja1)
+      _ <- insert (JoinMany "jm foo world" jd1 ja2)
+      _ <- insert (JoinMany "jm bar hello" jd2 ja1)
+      _ <- insert (JoinMany "jm bar world" jd2 ja2)
+      pure ()
+  describe "identical results for" $ do
+    it "three tables" $ do
+      abcs <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c)
+      acbs <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c)
+
+      listsEqualOn abcs acbs $ \(Entity _ j1, Entity _ j2, Entity _ j3) ->
+        (joinOneName j1, joinTwoName j2, joinThreeName j3)
+
+    it "four tables" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c, d)
+      xs2 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c, d)
+      xs3 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c, d)
+      xs4 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c, d)
+
+      let getNames (j1, j2, j3, j4) =
+            ( joinOneName (entityVal j1)
+            , joinTwoName (entityVal j2)
+            , joinThreeName (entityVal j3)
+            , joinFourName (entityVal j4)
+            )
+      listsEqualOn xs0 xs1 getNames
+      listsEqualOn xs0 xs2 getNames
+      listsEqualOn xs0 xs3 getNames
+      listsEqualOn xs0 xs4 getNames
+
+    it "associativity of innerjoin" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` (c `InnerJoin` d)) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs2 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` (b `InnerJoin` c) `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs3 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` (b `InnerJoin` c `InnerJoin` d)) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      let getNames (j1, j2, j3, j4) =
+            ( joinOneName (entityVal j1)
+            , joinTwoName (entityVal j2)
+            , joinThreeName (entityVal j3)
+            , joinFourName (entityVal j4)
+            )
+      listsEqualOn xs0 xs1 getNames
+      listsEqualOn xs0 xs2 getNames
+      listsEqualOn xs0 xs3 getNames
+
+    it "many-to-many" $ do
+      ac <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+          on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+          pure (a, c)
+
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+          on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+          pure (a, c)
+
+      listsEqualOn ac ca $ \(Entity _ a, Entity _ b) ->
+        (joinOneName a, joinOtherName b)
+
+    it "left joins on order" $ do
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+      ac <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+
+      listsEqualOn ac ca $ \(Entity _ a, b) ->
+        (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
+
+    it "left joins associativity" $ do
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` (b `InnerJoin` c)) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+      ca' <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+
+      listsEqualOn ca ca' $ \(Entity _ a, b) ->
+        (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
+
+listsEqualOn :: (Show a1, Ord a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
+listsEqualOn a b f = (map f a) `shouldBe` (map f b)
 
 tests :: Run -> Spec
 tests run = do
@@ -1651,6 +1887,7 @@ tests run = do
     testCase run
     testCountingRows run
     testRenderSql run
+    testOnClauseOrder run
 
 
 insert' :: ( Functor m
@@ -1705,6 +1942,12 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinMany))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinFour))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinThree))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinTwo))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinOne))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinOther))    -> return ()
 
 
 cleanUniques

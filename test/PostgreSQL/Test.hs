@@ -958,10 +958,10 @@ testInsertUniqueViolation =
       insert u3) `shouldThrow` (==) exception
   where
     exception = SqlError {
-      sqlState = "23505", 
-      sqlExecStatus = FatalError, 
-      sqlErrorMsg = "duplicate key value violates unique constraint \"UniqueValue\"", 
-      sqlErrorDetail = "Key (value)=(0) already exists.", 
+      sqlState = "23505",
+      sqlExecStatus = FatalError,
+      sqlErrorMsg = "duplicate key value violates unique constraint \"UniqueValue\"",
+      sqlErrorDetail = "Key (value)=(0) already exists.",
       sqlErrorHint = ""}
 
 testUpsert :: Spec
