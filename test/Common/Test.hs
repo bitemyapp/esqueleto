@@ -73,7 +73,6 @@ import Test.Hspec
 import UnliftIO
 import qualified Data.Attoparsec.Text as AP
 
-import Database.Persist (PersistValue(..))
 import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
 import qualified Data.List as L
@@ -866,16 +865,12 @@ testSelectWhere run = do
                                 , (p2e, f21, p1e) ]
 
     it "works for a many-to-many explicit join and on order doesn't matter" $ do
-      let
-        q =
-          from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
-          on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
-          on $ blog ^. BlogPostId ==. comment ^. CommentBlog
-          pure (person, comment)
-      run (void (select q))
-        `catch` \(SomeException e) -> do
-          (text, _) <- run (renderQuerySelect q)
-          error $ Text.unpack text <> "\n\n" <> show e
+      run $ void $
+        selectRethrowingQuery $
+        from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
+        on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
+        on $ blog ^. BlogPostId ==. comment ^. CommentBlog
+        pure (person, comment)
 
       -- we only care that we don't have a SQL error
       True `shouldBe` True
@@ -1808,14 +1803,14 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
     it "inner join on two entities" $ do
       (xs0, xs1) <- run $ do
         pid <- insert $ Person "hello" Nothing Nothing 3
-        insert $ BlogPost "good poast" pid
-        insert $ Profile "cool" pid
-        xs0 <- select $
+        _ <- insert $ BlogPost "good poast" pid
+        _ <- insert $ Profile "cool" pid
+        xs0 <- selectRethrowingQuery $
           from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
           on $ p ^. PersonId ==. b ^. BlogPostAuthorId
           on $ p ^. PersonId ==. pr ^. ProfilePerson
           pure (p, b, pr)
-        xs1 <- select $
+        xs1 <- selectRethrowingQuery $
           from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
           on $ p ^. PersonId ==. pr ^. ProfilePerson
           on $ p ^. PersonId ==. b ^. BlogPostAuthorId
@@ -1962,6 +1957,7 @@ cleanDB = do
 
   delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Profile))     -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Deed)) -> return ()
@@ -1992,3 +1988,13 @@ cleanUniques
   => SqlPersistT (R.ResourceT m) ())
 cleanUniques =
   delete $ from $ \(_ :: SqlExpr (Entity OneUnique))    -> return ()
+
+selectRethrowingQuery
+  :: (MonadIO m, EI.SqlSelect a r, MonadUnliftIO m)
+  => SqlQuery a
+  -> SqlPersistT m [r]
+selectRethrowingQuery query =
+  select query
+    `catch` \(SomeException e) -> do
+      (text, _) <- renderQuerySelect query
+      liftIO . throwIO . userError $ Text.unpack text <> "\n\n" <> show e
