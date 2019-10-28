@@ -1,3 +1,9 @@
+Unreleased (3.1.3)
+========
+
+- @JoseD92
+  - [#155](https://github.com/bitemyapp/esqueleto/pull/149): Added `insertSelectWithConflict` postgres function.
+
 Unreleased (3.1.1)
 ========
 
