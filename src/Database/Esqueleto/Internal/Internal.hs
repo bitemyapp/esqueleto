@@ -352,11 +352,148 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 locking :: LockingKind -> SqlQuery ()
 locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 
+{-#
+  DEPRECATED
+    sub_select
+    "sub_select \n \
+sub_select is an unsafe function to use. If used with a SqlQuery that \n \
+returns 0 results, then it may return NULL despite not mentioning Maybe \n \
+in the return type. If it returns more than 1 result, then it will throw a \n \
+SQL error.\n\n Instead, consider using one of the following alternatives: \n \
+- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
+- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
+  has a Maybe in the return type. \n \
+- subSelectCount: Performs a count of the query - this is always safe. \n \
+- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
+  countRows and friends."
+  #-}
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- simple value so should be used only when the @SELECT@ query
 -- is guaranteed to return just one row.
+--
+-- Deprecated in 3.2.0.
 sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
 sub_select         = sub SELECT
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
+-- function will only return a single result - it has a @LIMIT 1@ passed in to
+-- the query to make it safe, and the return type is 'Maybe' to indicate that
+-- the subquery might result in 0 rows.
+--
+-- If you find yourself writing @'joinV' . 'subSelect'@, then consider using
+-- 'subSelectMaybe'.
+--
+-- If you're performing a 'countRows', then you can use 'subSelectCount' which
+-- is safe.
+--
+-- If you know that the subquery will always return exactly one row (eg
+-- a foreign key constraint guarantees that you'll get exactly one row), then
+-- consider 'subSelectUnsafe', along with a comment explaining why it is safe.
+--
+-- @since 3.2.0
+subSelect
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value a))
+  -> SqlExpr (Value (Maybe a))
+subSelect query = just (subSelectUnsafe (query <* limit 1))
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
+-- for the common @'joinV' . 'subSelect'@ idiom, where you are calling
+-- 'subSelect' on an expression that would be 'Maybe' already.
+--
+-- As an example, you would use this function when calling 'sum_' or 'max_',
+-- which have 'Maybe' in the result type (for a 0 row query).
+--
+-- @since 3.2.0
+subSelectMaybe
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value (Maybe a)))
+  -> SqlExpr (Value (Maybe a))
+subSelectMaybe = joinV . subSelect
+
+-- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
+-- always guaranteed to return a result value, and is completely safe.
+--
+-- @since 3.2.0
+subSelectCount
+  :: (Num a, PersistField a)
+  => SqlQuery ignored
+  -> SqlExpr (Value a)
+subSelectCount query = do
+  subSelectUnsafe $ do
+    _ <- query
+    pure countRows
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr' that returns a list. This is an
+-- alias for 'subList_select' and is provided for symmetry with the other safe
+-- subselect functions.
+--
+-- @since 3.2.0
+subSelectList
+  :: PersistField a
+  => SqlQuery (SqlExpr (Value a))
+  -> SqlExpr (ValueList a)
+subSelectList = subList_select
+
+-- | Performs a sub-select using the given foreign key on the entity. This is
+-- useful to extract values that are known to be present by the database schema.
+--
+-- As an example, consider the following persistent definition:
+--
+-- @
+-- User
+--   profile ProfileId
+--
+-- Profile
+--   name    Text
+-- @
+--
+-- The following query will return the name of the user.
+--
+-- @
+-- getUserWithName =
+--     'select' $
+--     'from' $ \user ->
+--     'pure' (user, 'subSelectForeign' user UserProfile (^. ProfileName)
+-- @
+--
+-- @since 3.2.0
+subSelectForeign
+  ::
+  ( BackendCompatible SqlBackend (PersistEntityBackend val1)
+  , PersistEntity val1, PersistEntity val2, PersistField a
+  )
+  => SqlExpr (Entity val2)
+  -- ^ An expression representing the table you have access to now.
+  -> EntityField val2 (Key val1)
+  -- ^ The foreign key field on the table.
+  -> (SqlExpr (Entity val1) -> SqlExpr (Value a))
+  -- ^ A function to extract a value from the foreign reference table.
+  -> SqlExpr (Value a)
+subSelectForeign expr foreignKey with =
+  subSelectUnsafe $
+  from $ \table -> do
+  where_ $ expr ^. foreignKey ==. table ^. persistIdField
+  pure (with table)
+
+-- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
+-- because it can throw runtime exceptions in two cases:
+--
+-- 1. If the query passed has 0 result rows, then it will return a @NULL@ value.
+--    The @persistent@ parsing operations will fail on an unexpected @NULL@.
+-- 2. If the query passed returns more than one row, then the SQL engine will
+--    fail with an error like "More than one row returned by a subquery used as
+--    an expression".
+--
+-- This function is safe if you guarantee that exactly one row will be returned,
+-- or if the result already has a 'Maybe' type for some reason.
+--
+-- For variants with the safety encoded already, see 'subSelect' and
+-- 'subSelectMaybe'. For the most common safe use of this, see 'subSelectCount'.
+--
+-- @since 3.2.0
+subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
 (^.)

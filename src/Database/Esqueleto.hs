@@ -53,6 +53,12 @@ module Database.Esqueleto
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
              , case_, toBaseId
+  , subSelect
+  , subSelectMaybe
+  , subSelectCount
+  , subSelectForeign
+  , subSelectList
+  , subSelectUnsafe
   , ToBaseId(..)
   , when_
   , then_

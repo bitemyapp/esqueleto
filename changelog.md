@@ -1,6 +1,10 @@
-3.2.0 (unreleased)
-=======
+(unreleased) 3.2.0
+========
 
+- @parsonsmatt
+  - [#153](https://github.com/bitemyapp/esqueleto/pull/153): Deprecate
+    `sub_select` and introduce `subSelect`, `subSelectMaybe`, and
+    `subSelectUnsafe`.
 - @parsonsmatt
   - [#156](https://github.com/bitemyapp/esqueleto/pull/156): Remove the
     restriction that `on` clauses must appear in reverse order to the joining

@@ -1,7 +1,8 @@
-{-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# OPTIONS_GHC -fno-warn-deprecations  #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
+           , TypeApplications
            , PartialTypeSignatures
            , UndecidableInstances
            , EmptyDataDecls
@@ -176,6 +177,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Numbers
     int    Int
     double Double
+    deriving Eq Show
 
   JoinOne
     name    String
@@ -286,6 +288,179 @@ testSelect run = do
       run $ do
         ret <- select $ return nothing
         liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
+
+testSubSelect :: Run -> Spec
+testSubSelect run = do
+  let
+    setup :: MonadIO m => SqlPersistT m ()
+    setup = do
+      _ <- insert $ Numbers 1 2
+      _ <- insert $ Numbers 2 4
+      _ <- insert $ Numbers 3 5
+      _ <- insert $ Numbers 6 7
+      pure ()
+  describe "subSelect" $ do
+    it "is safe for queries that may return multiple results" $ do
+      let
+        query =
+          from $ \n -> do
+          orderBy [asc (n ^. NumbersInt)]
+          pure (n ^. NumbersInt)
+      res <- run $ do
+        setup
+        select $ pure $ subSelect query
+      res `shouldBe` [Value (Just 1)]
+
+      eres <- try $ run $ do
+        setup
+        select $ pure $ sub_select query
+      case eres of
+        Left (SomeException _) ->
+          -- We should receive an exception, but the different database
+          -- libraries throw different exceptions. Hooray.
+          pure ()
+        Right v ->
+          -- This shouldn't happen, but in sqlite land, many things are
+          -- possible.
+          v `shouldBe` [Value 1]
+
+    it "is safe for queries that may not return anything" $ do
+      let
+        query =
+          from $ \n -> do
+          orderBy [asc (n ^. NumbersInt)]
+          limit 1
+          pure (n ^. NumbersInt)
+      res <- run $ select $ pure $ subSelect query
+      res `shouldBe` [Value Nothing]
+
+      eres <- try $ run $ do
+        setup
+        select $ pure $ sub_select query
+
+      case eres of
+        Left (_ :: PersistException) ->
+          -- We expect to receive this exception. However, sqlite evidently has
+          -- no problems with it, so we can't *require* that the exception is
+          -- thrown. Sigh.
+          pure ()
+        Right v ->
+          -- This shouldn't happen, but in sqlite land, many things are
+          -- possible.
+          v `shouldBe` [Value 1]
+
+  describe "subSelectList" $ do
+    it "is safe on empty databases as well as good databases" $ do
+      let
+        query =
+          from $ \n -> do
+          where_ $ n ^. NumbersInt `in_` do
+            subSelectList $
+              from $ \n' -> do
+              where_ $ n' ^. NumbersInt >=. val 3
+              pure (n' ^. NumbersInt)
+          pure n
+
+      empty <- run $ do
+        select query
+
+      full <- run $ do
+        setup
+        select query
+
+      empty `shouldBe` []
+      full `shouldSatisfy` (not . null)
+
+  describe "subSelectMaybe" $ do
+    it "is equivalent to joinV . subSelect" $ do
+      let
+        query
+          :: ( SqlQuery (SqlExpr (Value (Maybe Int)))
+            -> SqlExpr (Value (Maybe Int))
+            )
+          -> SqlQuery (SqlExpr (Value (Maybe Int)))
+        query selector =
+          from $ \n -> do
+          pure $
+            selector $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersDouble >=. n ^. NumbersDouble
+            pure (max_ (n' ^. NumbersInt))
+
+      a <- run $ do
+        setup
+        select (query subSelectMaybe)
+      b <- run $ do
+        setup
+        select (query (joinV . subSelect))
+      a `shouldBe` b
+
+  describe "subSelectCount" $ do
+    it "is a safe way to do a countRows" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) n $
+            subSelectCount @Int $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) n $
+            subSelectUnsafe $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+            pure (countRows :: SqlExpr (Value Int))
+
+      let getter (Entity _ a, b) = (a, b)
+      map getter xs0 `shouldBe` map getter xs1
+
+  describe "subSelectUnsafe" $ do
+    it "throws exceptions on multiple results" $ do
+      eres <- try $ run $ do
+        setup
+        bad <- select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelectUnsafe $
+            from $ \n' -> do
+            pure (just (n' ^. NumbersDouble))
+        good <- select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelect $
+            from $ \n' -> do
+            pure (n' ^. NumbersDouble)
+        pure (bad, good)
+      case eres of
+        Left (SomeException _) ->
+          -- Must use SomeException because the database libraries throw their
+          -- own errors.
+          pure ()
+        Right (bad, good) -> do
+          -- SQLite just takes the first element of the sub-select. lol.
+          --
+          bad `shouldBe` good
+
+    it "throws exceptions on null results" $ do
+      eres <- try $ run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelectUnsafe $
+            from $ \n' -> do
+            where_ $ val False
+            pure (n' ^. NumbersDouble)
+      case eres of
+        Left (_ :: PersistException) ->
+          pure ()
+        Right xs ->
+          xs `shouldBe` []
 
 
 testSelectSource :: Run -> Spec
@@ -1986,6 +2161,7 @@ tests :: Run -> Spec
 tests run = do
   describe "Tests that are common to all backends" $ do
     testSelect run
+    testSubSelect run
     testSelectSource run
     testSelectFrom run
     testSelectJoin run
