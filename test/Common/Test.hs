@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
--- {-# OPTIONS_GHC -fno-warn-deprecations  #-}
+{-# OPTIONS_GHC -fno-warn-deprecations  #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
            , UndecidableInstances
