@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, GADTs, RankNTypes #-}
 -- | The @esqueleto@ EDSL (embedded domain specific language).
 -- This module replaces @Database.Persist@, so instead of
 -- importing that module you should just import this one:
@@ -100,6 +100,7 @@ module Database.Esqueleto
     -- * Helpers
   , valkey
   , valJ
+  , associateJoin
 
     -- * Re-exports
     -- $reexports
@@ -110,6 +111,7 @@ module Database.Esqueleto
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Int (Int64)
+import qualified Data.Map.Strict as Map
 import Database.Esqueleto.Internal.Language
 import Database.Esqueleto.Internal.Sql
 import Database.Esqueleto.Internal.PersistentImport
@@ -434,3 +436,27 @@ deleteKey :: ( PersistStore backend
              , PersistEntity val )
           => Key val -> ReaderT backend m ()
 deleteKey = Database.Persist.delete
+
+-- | Avoid N+1 queries and join entities into a map structure
+-- @
+-- getFoosAndNestedBarsFromParent :: ParentId -> (Map (Key Foo) (Foo, [Maybe (Entity Bar)]))
+-- getFoosAndNestedBarsFromParent parentId = 'fmap' associateJoin $ 'select' $
+-- 'from' $ \\(foo `'LeftOuterJoin`` bar) -> do
+--   'on' (bar '?.' BarFooId '==.' foo '^.' FooId)
+--   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
+--   'pure' (foo, bar)
+-- @
+-- /Since: 3.1.2/
+associateJoin
+  :: forall e1 e0
+   . Ord (Key e0)
+  => [(Entity e0, e1)]
+  -> Map.Map (Key e0) (e0, [e1])
+associateJoin = foldr f start
+  where
+    start = Map.empty
+    f (one, many) =
+      Map.insertWith
+        (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
+        (entityKey one)
+        (entityVal one, [many])

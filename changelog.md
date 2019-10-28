@@ -6,6 +6,12 @@
     restriction that `on` clauses must appear in reverse order to the joining
     tables.
 
+3.1.2
+========
+
+- @tippenein
+  - [#149](https://github.com/bitemyapp/esqueleto/pull/157): Added `associateJoin` query helpers.
+
 3.1.1
 =======
 
