@@ -6,6 +6,12 @@
     restriction that `on` clauses must appear in reverse order to the joining
     tables.
 
+3.1.3
+========
+
+- @JoseD92
+  - [#155](https://github.com/bitemyapp/esqueleto/pull/149): Added `insertSelectWithConflict` postgres function.
+
 3.1.2
 ========
 

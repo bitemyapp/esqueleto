@@ -53,6 +53,7 @@ module Common.Test
     , Circle (..)
     , Numbers (..)
     , OneUnique(..)
+    , Unique(..)
     ) where
 
 import Data.Either
