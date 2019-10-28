@@ -177,6 +177,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Numbers
     int    Int
     double Double
+    deriving Eq Show
 
   JoinOne
     name    String
