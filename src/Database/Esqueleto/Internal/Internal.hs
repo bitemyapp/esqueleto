@@ -132,53 +132,57 @@ fromFinish (EPreprocessedFrom ret f') = Q $ do
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
 where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
--- | @ON@ clause: restrict the @JOIN@'s result.  The @ON@
--- clause will be applied to the /last/ @JOIN@ that does not
--- have an @ON@ clause yet.  If there are no @JOIN@s without
--- @ON@ clauses (either because you didn't do any @JOIN@, or
--- because all @JOIN@s already have their own @ON@ clauses), a
--- runtime exception 'OnClauseWithoutMatchingJoinException' is
--- thrown.  @ON@ clauses are optional when doing @JOIN@s.
+-- | An @ON@ clause, useful to describe how two tables are related. Cross joins
+-- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
+-- outer joins do.
 --
--- On the simple case of doing just one @JOIN@, for example
+-- If you don't include an 'on' clause (or include too many!) then a runtime
+-- exception will be thrown.
+--
+-- As an example, consider this simple join:
 --
 -- @
--- select $
+-- 'select' $
 -- 'from' $ \\(foo `'InnerJoin`` bar) -> do
 --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
 --   ...
 -- @
 --
--- there's no ambiguity and the rules above just mean that
--- you're allowed to call 'on' only once (as in SQL).  If you
--- have many joins, then the 'on's are applied on the /reverse/
--- order that the @JOIN@s appear.  For example:
+-- We need to specify the clause for joining the two columns together. If we had
+-- this:
 --
 -- @
--- select $
+-- 'select' $
+-- 'from' $ \\(foo `'CrossJoin`` bar) -> do
+--   ...
+-- @
+--
+-- Then we can safely omit the 'on' clause, because the cross join will make
+-- pairs of all records possible.
+--
+-- You can do multiple 'on' clauses in a query. This query joins three tables,
+-- and has two 'on' clauses:
+--
+-- @
+-- 'select' $
 -- 'from' $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
 --   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
 --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
 --   ...
 -- @
 --
--- The order is /reversed/ in order to improve composability.
--- For example, consider @query1@ and @query2@ below:
+-- Old versions of esqueleto required that you provide the 'on' clauses in
+-- reverse order. This restriction has been lifted - you can now provide 'on'
+-- clauses in any order, and the SQL should work itself out. The above query is
+-- now totally equivalent to this:
 --
 -- @
--- let query1 =
---       'from' $ \\(foo `'InnerJoin`` bar) -> do
---         'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
---     query2 =
---       'from' $ \\(mbaz `'LeftOuterJoin`` quux) -> do
---         return (mbaz '?.' BazName, quux)
---     test1 =      (,) \<$\> query1 \<*\> query2
---     test2 = flip (,) \<$\> query2 \<*\> query1
+-- 'select' $
+-- 'from' $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
+--   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
+--   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
+--   ...
 -- @
---
--- If the order was /not/ reversed, then @test2@ would be
--- broken: @query1@'s 'on' would refer to @query2@'s
--- 'LeftOuterJoin'.
 on :: SqlExpr (Value Bool) -> SqlQuery ()
 on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
@@ -1946,7 +1950,7 @@ selectSource query = do
 --  @Value t@.  You may use @Value@ to return projections of an
 --  @Entity@ (see @('^.')@ and @('?.')@) or to return any other
 --  value calculated on the query (e.g., 'countRows' or
---  'sub_select').
+--  'subSelect').
 --
 -- The @SqlSelect a r@ class has functional dependencies that
 -- allow type information to flow both from @a@ to @r@ and
