@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
+           , TypeApplications
            , UndecidableInstances
            , EmptyDataDecls
            , FlexibleContexts
@@ -159,6 +160,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Numbers
     int    Int
     double Double
+    deriving Eq Show
 |]
 
 -- Unique Test schema
@@ -300,6 +302,112 @@ testSubSelect run = do
           -- This shouldn't happen, but in sqlite land, many things are
           -- possible.
           v `shouldBe` [Value 1]
+
+  describe "subSelectList" $ do
+    it "is safe on empty databases as well as good databases" $ do
+      let
+        query =
+          from $ \n -> do
+          where_ $ n ^. NumbersInt `in_` do
+            subSelectList $
+              from $ \n' -> do
+              where_ $ n' ^. NumbersInt >=. val 3
+              pure (n' ^. NumbersInt)
+          pure n
+
+      empty <- run $ do
+        select query
+
+      full <- run $ do
+        setup
+        select query
+
+      empty `shouldBe` []
+      full `shouldSatisfy` (not . null)
+
+  describe "subSelectMaybe" $ do
+    it "is equivalent to joinV . subSelect" $ do
+      let
+        query
+          :: ( SqlQuery (SqlExpr (Value (Maybe Int)))
+            -> SqlExpr (Value (Maybe Int))
+            )
+          -> SqlQuery (SqlExpr (Value (Maybe Int)))
+        query selector =
+          from $ \n -> do
+          pure $
+            selector $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersDouble >=. n ^. NumbersDouble
+            pure (max_ (n' ^. NumbersInt))
+
+      a <- run $ do
+        setup
+        select (query subSelectMaybe)
+      b <- run $ do
+        setup
+        select (query (joinV . subSelect))
+      a `shouldBe` b
+
+  describe "subSelectCount" $ do
+    it "is a safe way to do a countRows" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) n $
+            subSelectCount @Int $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) n $
+            subSelectUnsafe $
+            from $ \n' -> do
+            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+            pure (countRows :: SqlExpr (Value Int))
+
+      let getter (Entity _ a, b) = (a, b)
+      map getter xs0 `shouldBe` map getter xs1
+
+  describe "subSelectUnsafe" $ do
+    it "throws exceptions on multiple results" $ do
+      eres <- try $ run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelectUnsafe $
+            from $ \n' -> do
+            pure (n' ^. NumbersDouble)
+      case eres of
+        Left (SomeException _) ->
+          -- Must use SomeException because the database libraries throw their
+          -- own errors.
+          pure ()
+        Right xs ->
+          -- I guess that some database libraries don't blow up??
+          xs `shouldBe` []
+
+    it "throws exceptions on null results" $ do
+      eres <- try $ run $ do
+        setup
+        select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelectUnsafe $
+            from $ \n' -> do
+            where_ $ val False
+            pure (n' ^. NumbersDouble)
+      case eres of
+        Left (_ :: PersistException) ->
+          pure ()
+        Right xs ->
+          xs `shouldBe` []
+
 
 testSelectSource :: Run -> Spec
 testSelectSource run = do
