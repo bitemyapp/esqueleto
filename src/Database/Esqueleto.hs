@@ -327,15 +327,10 @@ import qualified Database.Persist
 -- @
 -- 'select' $
 -- 'from' $ \\(p1 `'InnerJoin`` f `'InnerJoin`` p2) -> do
--- 'on' (p2 '^.' PersonId '==.' f '^.' FollowFollowed)
 -- 'on' (p1 '^.' PersonId '==.' f '^.' FollowFollower)
+-- 'on' (p2 '^.' PersonId '==.' f '^.' FollowFollowed)
 -- return (p1, f, p2)
 -- @
---
--- /Note carefully that the order of the ON clauses is/
--- /reversed!/ You're required to write your 'on's in reverse
--- order because that helps composability (see the documentation
--- of 'on' for more details).
 --
 -- We also currently support @UPDATE@ and @DELETE@ statements.
 -- For example:

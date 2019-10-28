@@ -55,6 +55,7 @@ module Database.Esqueleto.Internal.Sql
   , Mode(..)
   , NeedParens(..)
   , IdentState
+  , renderExpr
   , initialIdentState
   , IdentInfo
   , SqlSelect(..)
@@ -71,6 +72,7 @@ module Database.Esqueleto.Internal.Sql
   , parens
   , toArgList
   , builderToText
+  , Ident(..)
   ) where
 
 import Database.Esqueleto.Internal.Internal
