@@ -302,6 +302,8 @@ insertSelectWithConflict :: forall a m val. (
 insertSelectWithConflict unique query = void . insertSelectWithConflictCount unique query
 
 -- | Same as 'insertSelectWithConflict' but returns the number of rows affected.
+--
+-- @since 3.1.3
 insertSelectWithConflictCount :: forall a val m. (
     FinalResult a,
     KnowResult a ~ (Unique val), 
