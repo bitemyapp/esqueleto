@@ -214,6 +214,8 @@ upsertBy uniqueKey record updates = do
       (***) (f entDef (uDef :| [])) addVals $ updatesText conn
 
 -- | Render postgres updates to be use in a SET clause.
+-- 
+-- @since 3.1.3
 renderUpdates :: (BackendCompatible SqlBackend backend) => 
     backend
     -> [SqlExpr (Update val)]
