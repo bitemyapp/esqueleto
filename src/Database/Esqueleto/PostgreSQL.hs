@@ -242,6 +242,11 @@ instance FinalResult (Unique val) where
 instance (FinalResult b) => FinalResult (a -> b) where
   finalR f = finalR (f undefined)
 
+-- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You 
+-- can supply just the constructor itself, or a value of the type - the library is capable of figuring 
+-- it out from there.
+--
+-- @since 3.1.3
 toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) => 
   a -> UniqueDef
 toUniqueDef uniqueConstructor = uniqueDef
