@@ -2975,7 +2975,9 @@ insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
-renderExpr :: SqlBackend -> SqlExpr (Value x) -> T.Text
+--
+-- @since 3.2.0
+renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
 renderExpr sqlBackend e =
   case e of
     ERaw _ mkBuilderValues -> do
@@ -2989,8 +2991,14 @@ renderExpr sqlBackend e =
         . mkInfo
         $ (sqlBackend, initialIdentState)
 
+-- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
+-- keys, and will blow up if you give it one.
+--
+-- @since 3.2.0
 data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
   deriving Show
 
+-- |
+--
+-- @since 3.2.0
 instance Exception RenderExprException
-
