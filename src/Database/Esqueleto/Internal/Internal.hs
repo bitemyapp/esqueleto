@@ -634,11 +634,11 @@ v `notIn` e = ifNotEmptyList e True  $ unsafeSqlBinOp " NOT IN " v (veryUnsafeCo
 -- return person
 -- @
 exists :: SqlQuery () -> SqlExpr (Value Bool)
-exists    = unsafeSqlFunction     "EXISTS " . existsHelper
+exists    = unsafeSqlFunctionNoParens     "EXISTS " . existsHelper
 
 -- | @NOT EXISTS@ operator.
 notExists :: SqlQuery () -> SqlExpr (Value Bool)
-notExists = unsafeSqlFunction "NOT EXISTS " . existsHelper
+notExists = unsafeSqlFunctionNoParens "NOT EXISTS " . existsHelper
 
 -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
 -- a type error to use this function on a @SELECT@, it will
@@ -1766,6 +1766,14 @@ unsafeSqlValue v = ERaw Never $ const (v, mempty)
 unsafeSqlFunction :: UnsafeSqlFunctionArgument a =>
                      TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunction name arg =
+  ERaw Never $ \info ->
+    let (argsTLB, argsVals) =
+          uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
+    in (name <> parens (parens argsTLB), argsVals)
+
+unsafeSqlFunctionNoParens :: UnsafeSqlFunctionArgument a =>
+                     TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlFunctionNoParens name arg =
   ERaw Never $ \info ->
     let (argsTLB, argsVals) =
           uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg

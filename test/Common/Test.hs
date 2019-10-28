@@ -242,6 +242,22 @@ testSelect run = do
         ret <- select $ return nothing
         liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
+  describe "sub_select" $ do
+    it "works inside of sum" $ do
+      run $ do
+        ret <-
+          select $
+          pure $
+            sum_ $
+              sub_select $
+              from $ \foo -> do
+              pure (foo ^. FooName)
+        nonSub <-
+          select $
+          from $ \foo -> do
+          pure (sum_ (foo ^. FooName))
+
+        liftIO $ ret `shouldBe` (nonSub :: [Value (Maybe Int)])
 
 testSelectSource :: Run -> Spec
 testSelectSource run = do
