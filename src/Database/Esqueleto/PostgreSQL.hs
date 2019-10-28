@@ -2,9 +2,7 @@
 {-# LANGUAGE OverloadedStrings
            , GADTs, CPP, Rank2Types
            , ScopedTypeVariables
-           , FlexibleInstances
  #-}
- {-# LANGUAGE TypeFamilies #-}
 -- | This module contain PostgreSQL-specific functions.
 --
 -- /Since: 2.2.8/
@@ -27,7 +25,6 @@ module Database.Esqueleto.PostgreSQL
   , insertSelectWithConflictCount
   -- * Internal
   , unsafeSqlAggregateFunction
-  , toUniqueDef
   ) where
 
 #if __GLASGOW_HASKELL__ < 804
@@ -40,7 +37,8 @@ import           Database.Esqueleto.Internal.PersistentImport hiding (upsert, up
 import           Database.Esqueleto.Internal.Sql
 import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..), 
                                                               UnexpectedCaseError(..), SetClause, Ident(..),
-                                                              uncommas)
+                                                              uncommas, FinalResult(..), toUniqueDef,
+                                                              KnowResult, renderUpdates)
 import           Database.Persist.Class                       (OnlyOneUniqueKey)
 import           Data.List.NonEmpty                           ( NonEmpty( (:|) ) )
 import           Data.Int                                     (Int64)
@@ -212,52 +210,6 @@ upsertBy uniqueKey record updates = do
     updatesText conn = first builderToText $ renderUpdates conn updates
     handler conn f = fmap head $ uncurry rawSql $
       (***) (f entDef (uDef :| [])) addVals $ updatesText conn
-
--- | Render postgres updates to be use in a SET clause.
--- 
--- @since 3.1.3
-renderUpdates :: (BackendCompatible SqlBackend backend) => 
-    backend
-    -> [SqlExpr (Update val)]
-    -> (TLB.Builder, [PersistValue])
-renderUpdates conn = uncommas' . concatMap renderUpdate
-    where
-      mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
-      mk (ERaw _ f)        = [f info]
-      mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
-      renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
-      renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
-      info = (projectBackend conn, initialIdentState)
-
-type family KnowResult a where
-  KnowResult (i -> o) = KnowResult o
-  KnowResult a = a
-
-class FinalResult a where
-  finalR :: a -> KnowResult a
-
-instance FinalResult (Unique val) where
-  finalR = id
-
-instance (FinalResult b) => FinalResult (a -> b) where
-  finalR f = finalR (f undefined)
-
--- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You 
--- can supply just the constructor itself, or a value of the type - the library is capable of figuring 
--- it out from there.
---
--- @since 3.1.3
-toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) => 
-  a -> UniqueDef
-toUniqueDef uniqueConstructor = uniqueDef
-  where
-    proxy :: Proxy val
-    proxy = Proxy
-    unique :: Unique val
-    unique = finalR uniqueConstructor
-    -- there must be a better way to get the constrain name from a unique, make this not a list search
-    filterF = (==) (persistUniqueToFieldNames unique) . uniqueFields
-    uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
 
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
