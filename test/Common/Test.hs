@@ -52,6 +52,7 @@ module Common.Test
     , Circle (..)
     , Numbers (..)
     , OneUnique(..)
+    , Unique(..)
     ) where
 
 import Control.Monad (forM_, replicateM, replicateM_, void)

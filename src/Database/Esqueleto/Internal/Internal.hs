@@ -1024,6 +1024,54 @@ instance ( ToSomeValues a
     toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f ++
     toSomeValues g ++ toSomeValues h
 
+type family KnowResult a where
+  KnowResult (i -> o) = KnowResult o
+  KnowResult a = a
+
+-- | A class for constructors or function which result type is known.
+--
+-- @since 3.1.3
+class FinalResult a where
+  finalR :: a -> KnowResult a
+
+instance FinalResult (Unique val) where
+  finalR = id
+
+instance (FinalResult b) => FinalResult (a -> b) where
+  finalR f = finalR (f undefined)
+
+-- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You 
+-- can supply just the constructor itself, or a value of the type - the library is capable of figuring 
+-- it out from there.
+--
+-- @since 3.1.3
+toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) => 
+  a -> UniqueDef
+toUniqueDef uniqueConstructor = uniqueDef
+  where
+    proxy :: Proxy val
+    proxy = Proxy
+    unique :: Unique val
+    unique = finalR uniqueConstructor
+    -- there must be a better way to get the constrain name from a unique, make this not a list search
+    filterF = (==) (persistUniqueToFieldNames unique) . uniqueFields
+    uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
+
+-- | Render updates to be use in a SET clause for a given sql backend.
+-- 
+-- @since 3.1.3
+renderUpdates :: (BackendCompatible SqlBackend backend) => 
+    backend
+    -> [SqlExpr (Update val)]
+    -> (TLB.Builder, [PersistValue])
+renderUpdates conn = uncommas' . concatMap renderUpdate
+    where
+      mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
+      mk (ERaw _ f)        = [f info]
+      mk (ECompositeKey _) = throw (CompositeKeyErr MakeSetError) -- FIXME
+      renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
+      renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
+      info = (projectBackend conn, initialIdentState)
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
 data InnerJoin a b = a `InnerJoin` b

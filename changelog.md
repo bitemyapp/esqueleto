@@ -6,6 +6,12 @@
     `sub_select` and introduce `subSelect`, `subSelectMaybe`, and
     `subSelectUnsafe`.
     
+3.1.3
+========
+
+- @JoseD92
+  - [#155](https://github.com/bitemyapp/esqueleto/pull/149): Added `insertSelectWithConflict` postgres function.
+
 3.1.2
 ========
 
