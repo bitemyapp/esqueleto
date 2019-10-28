@@ -1,5 +1,5 @@
-{-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# OPTIONS_GHC -fno-warn-deprecations  #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 {-# LANGUAGE ConstraintKinds
            , CPP
            , UndecidableInstances
@@ -241,6 +241,65 @@ testSelect run = do
         ret <- select $ return nothing
         liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
+testSubSelect :: Run -> Spec
+testSubSelect run = do
+  let
+    setup :: MonadIO m => SqlPersistT m ()
+    setup = do
+      _ <- insert $ Numbers 1 2
+      _ <- insert $ Numbers 2 4
+      _ <- insert $ Numbers 3 5
+      _ <- insert $ Numbers 6 7
+      pure ()
+  describe "subSelect" $ do
+    it "is safe for queries that may return multiple results" $ do
+      let
+        query =
+          from $ \n -> do
+          orderBy [asc (n ^. NumbersInt)]
+          pure (n ^. NumbersInt)
+      res <- run $ do
+        setup
+        select $ pure $ subSelect query
+      res `shouldBe` [Value (Just 1)]
+
+      eres <- try $ run $ do
+        setup
+        select $ pure $ sub_select query
+      case eres of
+        Left (SomeException _) ->
+          -- We should receive an exception, but the different database
+          -- libraries throw different exceptions. Hooray.
+          pure ()
+        Right v ->
+          -- This shouldn't happen, but in sqlite land, many things are
+          -- possible.
+          v `shouldBe` [Value 1]
+
+    it "is safe for queries that may not return anything" $ do
+      let
+        query =
+          from $ \n -> do
+          orderBy [asc (n ^. NumbersInt)]
+          limit 1
+          pure (n ^. NumbersInt)
+      res <- run $ select $ pure $ subSelect query
+      res `shouldBe` [Value Nothing]
+
+      eres <- try $ run $ do
+        setup
+        select $ pure $ sub_select query
+
+      case eres of
+        Left (_ :: PersistException) ->
+          -- We expect to receive this exception. However, sqlite evidently has
+          -- no problems with it, so we can't *require* that the exception is
+          -- thrown. Sigh.
+          pure ()
+        Right v ->
+          -- This shouldn't happen, but in sqlite land, many things are
+          -- possible.
+          v `shouldBe` [Value 1]
 
 testSelectSource :: Run -> Spec
 testSelectSource run = do
@@ -1486,6 +1545,7 @@ tests :: Run -> Spec
 tests run = do
   describe "Tests that are common to all backends" $ do
     testSelect run
+    testSubSelect run
     testSelectSource run
     testSelectFrom run
     testSelectJoin run
