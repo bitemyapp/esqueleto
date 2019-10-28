@@ -89,8 +89,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Foo
     name Int
     Primary name
+    deriving Show Eq Ord
   Bar
     quux FooId
+    deriving Show Eq Ord
 
   Person
     name String
@@ -1959,9 +1961,11 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
         query1 =
           from $ \(foo `InnerJoin` bar) -> do
           on (foo ^. FooId ==. bar ^. BarQuux)
+          pure (foo, bar)
         query2 =
           from $ \(p `LeftOuterJoin` bp) -> do
           on (p ^. PersonId ==. bp ^. BlogPostAuthorId)
+          pure (p, bp)
       (a, b) <- run $ do
         fid <- insert $ Foo 5
         _ <- insert $ Bar fid
@@ -1970,12 +1974,12 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
         a <- select ((,) <$> query1 <*> query2)
         b <- select (flip (,) <$> query1 <*> query2)
         pure (a, b)
-      listsEqualOn a b id
+      listsEqualOn a (map (\(x, y) -> (y, x)) b) id
 
 
 
-listsEqualOn :: (Show a1, Ord a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
-listsEqualOn a b f = (map f a) `shouldBe` (map f b)
+listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
+listsEqualOn a b f = map f a `shouldBe` map f b
 
 tests :: Run -> Spec
 tests run = do
