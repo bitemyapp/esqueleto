@@ -377,20 +377,28 @@ testSubSelect run = do
     it "throws exceptions on multiple results" $ do
       eres <- try $ run $ do
         setup
-        select $
+        bad <- select $
           from $ \n -> do
           pure $ (,) (n ^. NumbersInt) $
             subSelectUnsafe $
             from $ \n' -> do
+            pure (just (n' ^. NumbersDouble))
+        good <- select $
+          from $ \n -> do
+          pure $ (,) (n ^. NumbersInt) $
+            subSelect $
+            from $ \n' -> do
             pure (n' ^. NumbersDouble)
+        pure (bad, good)
       case eres of
         Left (SomeException _) ->
           -- Must use SomeException because the database libraries throw their
           -- own errors.
           pure ()
-        Right xs ->
-          -- I guess that some database libraries don't blow up??
-          xs `shouldBe` []
+        Right (bad, good) -> do
+          -- SQLite just takes the first element of the sub-select. lol.
+          --
+          bad `shouldBe` good
 
     it "throws exceptions on null results" $ do
       eres <- try $ run $ do
