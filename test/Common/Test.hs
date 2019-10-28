@@ -1954,6 +1954,26 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
       listsEqualOn ca ca' $ \(Entity _ a, b) ->
         (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
 
+    it "composes queries still" $ do
+      let
+        query1 =
+          from $ \(foo `InnerJoin` bar) -> do
+          on (foo ^. FooId ==. bar ^. BarQuux)
+        query2 =
+          from $ \(p `LeftOuterJoin` bp) -> do
+          on (p ^. PersonId ==. bp ^. BlogPostAuthorId)
+      (a, b) <- run $ do
+        fid <- insert $ Foo 5
+        _ <- insert $ Bar fid
+        pid <- insert $ Person "hey" Nothing Nothing 30
+        _ <- insert $ BlogPost "WHY" pid
+        a <- select ((,) <$> query1 <*> query2)
+        b <- select (flip (,) <$> query1 <*> query2)
+        pure (a, b)
+      listsEqualOn a b id
+
+
+
 listsEqualOn :: (Show a1, Ord a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = (map f a) `shouldBe` (map f b)
 
@@ -2010,8 +2030,8 @@ cleanDB
   :: (forall m. RunDbMonad m
   => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
-  delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Reply)) -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Comment)) -> return ()

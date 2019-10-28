@@ -132,7 +132,7 @@ fromFinish (EPreprocessedFrom ret f') = Q $ do
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
 where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
--- | @ON@ clause: restrict the a @JOIN@'s result.  The @ON@
+-- | @ON@ clause: restrict the @JOIN@'s result.  The @ON@
 -- clause will be applied to the /last/ @JOIN@ that does not
 -- have an @ON@ clause yet.  If there are no @JOIN@s without
 -- @ON@ clauses (either because you didn't do any @JOIN@, or
@@ -1410,7 +1410,6 @@ collectOnClauses sqlBackend = go Set.empty []
     tryMatch idents expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
-          -- Debug.trace "tryMatch . . ." $
           matchTable <|> matchR <|> matchC <|> matchL <|> matchPartial -- right to left
             where
               matchR = fmap (\r' -> FromJoin l k r' onClause)
@@ -1418,50 +1417,25 @@ collectOnClauses sqlBackend = go Set.empty []
               matchL = fmap (\l' -> FromJoin l' k r onClause)
                 <$> tryMatch idents expr l
               matchPartial = do
-                -- Debug.traceM "\nEntering matchPartial"
-                -- Debug.traceM $ "Idents in on clause: " <> show identsInOnClause
-                -- Debug.traceM $ "Seen identifiers:    " <> show idents
-                -- ll <- findLeftmostIdent l
-                -- lr <- findLeftmostIdent r
-                -- rr <- findRightmostIdent r
-                -- rl <- findRightmostIdent l
-                -- Debug.traceM $ "Leftmost from r:     " <> show lr
-                -- Debug.traceM $ "Rightmost from l:    " <> show rl
-                -- Debug.traceM $ "Leftmost from l:     " <> show ll
-                -- Debug.traceM $ "Rightmost from r:    " <> show rr
                 i1 <- findLeftmostIdent l
                 i2 <- findRightmostIdent r
                 guard $
                   Set.isSubsetOf
                     identsInOnClause
                     (Set.fromList [i1, i2])
-                -- Debug.traceM "Subset passed"
                 guard $ k /= CrossJoinKind
-                -- case onClause of
-                --   Nothing ->
-                --     Debug.trace "No on clause" (Just ())
-                --   Just on -> do
-                --     Debug.traceM "on clause found: "
-                --     Debug.traceM $ T.unpack (renderExpr sqlBackend on)
-                --     Nothing
                 guard $ Maybe.isNothing onClause
-                -- Debug.traceM $ "matchPartial succeeds"
                 pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
               matchC =
                 case onClause of
                   Nothing
                     | "?" `T.isInfixOf` renderedExpr ->
-                        -- Debug.trace "matchC hits" $
                         return (idents, FromJoin l k r (Just expr))
                     | Set.null identsInOnClause ->
-                        -- Debug.trace "matchC hits" $
                         return (idents, FromJoin l k r (Just expr))
---                    | k /= CrossJoinKind ->
---                        return (FromJoin l k r (Just expr))
                     | otherwise ->
                         Nothing
                   Just _ ->
-                    -- Debug.trace "Value was already set in matchC"
                     Nothing
               matchTable = do
                 i1 <- findLeftmostIdent r
@@ -1469,10 +1443,6 @@ collectOnClauses sqlBackend = go Set.empty []
                 guard $ Set.fromList [i1, i2] `Set.isSubsetOf` identsInOnClause
                 guard $ k /= CrossJoinKind
                 guard $ Maybe.isNothing onClause
-                -- Debug.traceM "matchTable matches"
-                -- Debug.traceM $ "identsinOnClause: " <> show identsInOnClause
-                -- Debug.traceM $ "i1: " <> show i1
-                -- Debug.traceM $ "i2: " <> show i2
                 pure (Set.fromList [i1, i2] <> idents, FromJoin l k r (Just expr))
 
         _ ->
