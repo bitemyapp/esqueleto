@@ -285,6 +285,8 @@ toUniqueDef uniqueConstructor = uniqueDef
 --
 -- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique, 
 -- the conflicting value is updated to the current plus the excluded.
+--
+-- @since 3.1.3
 insertSelectWithConflict :: forall a m val. (
     FinalResult a,
     KnowResult a ~ (Unique val), 
