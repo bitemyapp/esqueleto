@@ -5,7 +5,11 @@
   - [#153](https://github.com/bitemyapp/esqueleto/pull/153): Deprecate
     `sub_select` and introduce `subSelect`, `subSelectMaybe`, and
     `subSelectUnsafe`.
-    
+- @parsonsmatt
+  - [#156](https://github.com/bitemyapp/esqueleto/pull/156): Remove the
+    restriction that `on` clauses must appear in reverse order to the joining
+    tables.
+
 3.1.3
 ========
 
@@ -19,7 +23,7 @@
   - [#149](https://github.com/bitemyapp/esqueleto/pull/157): Added `associateJoin` query helpers.
 
 3.1.1
-========
+=======
 
 - @JoseD92
   - [#149](https://github.com/bitemyapp/esqueleto/pull/149): Added `upsert` support.

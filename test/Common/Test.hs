@@ -3,6 +3,7 @@
 {-# LANGUAGE ConstraintKinds
            , CPP
            , TypeApplications
+           , PartialTypeSignatures
            , UndecidableInstances
            , EmptyDataDecls
            , FlexibleContexts
@@ -56,7 +57,9 @@ module Common.Test
     , Unique(..)
     ) where
 
+import Data.Either
 import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Reader (ask)
 import Control.Monad.Catch (MonadCatch)
 #if __GLASGOW_HASKELL__ >= 806
 import Control.Monad.Fail (MonadFail)
@@ -70,6 +73,7 @@ import Database.Esqueleto
 import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
+import qualified Data.Attoparsec.Text as AP
 
 import Data.Conduit (ConduitT, (.|), runConduit)
 import qualified Data.Conduit.List as CL
@@ -80,16 +84,17 @@ import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Database.Esqueleto.Internal.Sql as EI
 import qualified UnliftIO.Resource as R
-
-
+import qualified Database.Esqueleto.Internal.ExprParser as P
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Foo
     name Int
     Primary name
+    deriving Show Eq Ord
   Bar
     quux FooId
+    deriving Show Eq Ord
 
   Person
     name String
@@ -100,6 +105,18 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   BlogPost
     title String
     authorId PersonId
+    deriving Eq Show
+  Comment
+    body String
+    blog BlogPostId
+    deriving Eq Show
+  Profile
+    name String
+    person PersonId
+    deriving Eq Show
+  Reply
+    guy PersonId
+    body String
     deriving Eq Show
 
   Lord
@@ -160,6 +177,34 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Numbers
     int    Int
     double Double
+
+  JoinOne
+    name    String
+    deriving Eq Show
+
+  JoinTwo
+    joinOne JoinOneId
+    name    String
+    deriving Eq Show
+
+  JoinThree
+    joinTwo JoinTwoId
+    name    String
+    deriving Eq Show
+
+  JoinFour
+    name    String
+    joinThree JoinThreeId
+    deriving Eq Show
+
+  JoinOther
+    name    String
+    deriving Eq Show
+
+  JoinMany
+    name      String
+    joinOther JoinOtherId
+    joinOne   JoinOneId
     deriving Eq Show
 |]
 
@@ -491,6 +536,7 @@ testSelectFrom run = do
                                                     , (p2e, p1e)
                                                     , (p2e, p2e) ]
 
+
     it "works for a self-join via sub_select" $
       run $ do
         p1k <- insert p1
@@ -621,7 +667,7 @@ testSelectFrom run = do
 
 testSelectJoin :: Run -> Spec
 testSelectJoin run = do
-  describe "select/JOIN" $ do
+  describe "select:JOIN" $ do
     it "works with a LEFT OUTER JOIN" $
       run $ do
         p1e <- insert' p1
@@ -778,11 +824,9 @@ testSelectJoin run = do
               return p
           liftIO $ (entityVal <$> ps) `shouldBe` [p1]
 
-
-
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
-  describe "select/where_" $ do
+  describe "select where_" $ do
     it "works for a simple example with (==.)" $
       run $ do
         p1e <- insert' p1
@@ -1001,6 +1045,17 @@ testSelectWhere run = do
                                 , (p1e, f12, p2e)
                                 , (p4e, f42, p2e)
                                 , (p2e, f21, p1e) ]
+
+    it "works for a many-to-many explicit join and on order doesn't matter" $ do
+      run $ void $
+        selectRethrowingQuery $
+        from $ \(person `InnerJoin` blog `InnerJoin` comment) -> do
+        on $ person ^. PersonId ==. blog ^. BlogPostAuthorId
+        on $ blog ^. BlogPostId ==. comment ^. CommentBlog
+        pure (person, comment)
+
+      -- we only care that we don't have a SQL error
+      True `shouldBe` True
 
     it "works for a many-to-many explicit join with LEFT OUTER JOINs" $
       run $ do
@@ -1635,7 +1690,7 @@ testCountingRows run = do
           liftIO $ (n :: Int) `shouldBe` expected
 
 testRenderSql :: Run -> Spec
-testRenderSql run =
+testRenderSql run = do
   describe "testRenderSql" $ do
     it "works" $ do
       (queryText, queryVals) <- run $ renderQuerySelect $
@@ -1655,7 +1710,451 @@ testRenderSql run =
         `shouldBe`
           [toPersistValue ("Johhny Depp" :: TL.Text)]
 
+  describe "renderExpr" $ do
+    it "renders a value" $ do
+      (c, expr) <- run $ do
+        conn <- ask
+        let Right c = P.mkEscapeChar conn
+        pure $ (,) c $ EI.renderExpr conn $
+          EI.EEntity (EI.I "user") ^. PersonId
+          ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
+      expr
+        `shouldBe`
+          Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
+          <>
+          " = "
+          <>
+          Text.intercalate (Text.singleton c) ["", "blog_post", ".", "authorId", ""]
+    it "renders ? for a val" $ do
+      expr <- run $ ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
+      expr `shouldBe` "? = ?"
 
+  describe "EEntity Ident behavior" $ do
+    let
+      render :: SqlExpr (Entity val) -> Text.Text
+      render (EI.EEntity (EI.I ident)) = ident
+    it "renders sensibly" $ do
+      results <- run $ do
+        _ <- insert $ Foo 2
+        _ <- insert $ Foo 3
+        _ <- insert $ Person "hello" Nothing Nothing 3
+        select $
+          from $ \(a `LeftOuterJoin` b) -> do
+          on $ a ^. FooName ==. b ^. PersonFavNum
+          pure (val (render a), val (render b))
+      head results
+        `shouldBe`
+          (Value "Foo", Value "Person")
+
+  describe "ExprParser" $ do
+    let parse parser = AP.parseOnly (parser '#')
+    describe "parseEscapedChars" $ do
+      let subject = parse P.parseEscapedChars
+      it "parses words" $ do
+        subject "hello world"
+          `shouldBe`
+            Right "hello world"
+      it "only returns a single escape-char if present" $ do
+        subject "i_am##identifier##"
+          `shouldBe`
+            Right "i_am#identifier#"
+    describe "parseEscapedIdentifier" $ do
+      let subject = parse P.parseEscapedIdentifier
+      it "parses the quotes out" $ do
+        subject "#it's a me, mario#"
+          `shouldBe`
+            Right "it's a me, mario"
+      it "requires a beginning and end quote" $ do
+        subject "#alas, i have no end"
+          `shouldSatisfy`
+            isLeft
+    describe "parseTableAccess" $ do
+      let subject = parse P.parseTableAccess
+      it "parses a table access" $ do
+        subject "#foo#.#bar#"
+          `shouldBe`
+            Right P.TableAccess
+              { P.tableAccessTable = "foo"
+              , P.tableAccessColumn = "bar"
+              }
+    describe "onExpr" $ do
+      let subject = parse P.onExpr
+      it "works" $ do
+        subject "#foo#.#bar# = #bar#.#baz#"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              , P.TableAccess
+                { P.tableAccessTable = "bar"
+                , P.tableAccessColumn = "baz"
+                }
+              ]
+      it "also works with other nonsense" $ do
+        subject "#foo#.#bar# = 3"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+      it "handles a conjunction" $ do
+        subject "#foo#.#bar# = #bar#.#baz# AND #bar#.#baz# > 10"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              , P.TableAccess
+                { P.tableAccessTable = "bar"
+                , P.tableAccessColumn = "baz"
+                }
+              ]
+      it "handles ? okay" $ do
+        subject "#foo#.#bar# = ?"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+      it "handles degenerate cases" $ do
+        subject "false" `shouldBe` pure mempty
+        subject "true" `shouldBe` pure mempty
+        subject "1 = 1" `shouldBe` pure mempty
+      it "works even if an identifier isn't first" $ do
+        subject "true and #foo#.#bar# = 2"
+          `shouldBe` do
+            Right $ S.fromList
+              [ P.TableAccess
+                { P.tableAccessTable = "foo"
+                , P.tableAccessColumn = "bar"
+                }
+              ]
+
+testOnClauseOrder :: Run -> Spec
+testOnClauseOrder run = describe "On Clause Ordering" $ do
+  let
+    setup :: MonadIO m => SqlPersistT m ()
+    setup = do
+      ja1 <- insert (JoinOne "j1 hello")
+      ja2 <- insert (JoinOne "j1 world")
+      jb1 <- insert (JoinTwo ja1 "j2 hello")
+      jb2 <- insert (JoinTwo ja1 "j2 world")
+      jb3 <- insert (JoinTwo ja2 "j2 foo")
+      _ <- insert (JoinTwo ja2 "j2 bar")
+      jc1 <- insert (JoinThree jb1 "j3 hello")
+      jc2 <- insert (JoinThree jb1 "j3 world")
+      _ <- insert (JoinThree jb2 "j3 foo")
+      _ <- insert (JoinThree jb3 "j3 bar")
+      _ <- insert (JoinThree jb3 "j3 baz")
+      _ <- insert (JoinFour "j4 foo" jc1)
+      _ <- insert (JoinFour "j4 bar" jc2)
+      jd1 <- insert (JoinOther "foo")
+      jd2 <- insert (JoinOther "bar")
+      _ <- insert (JoinMany "jm foo hello" jd1 ja1)
+      _ <- insert (JoinMany "jm foo world" jd1 ja2)
+      _ <- insert (JoinMany "jm bar hello" jd2 ja1)
+      _ <- insert (JoinMany "jm bar world" jd2 ja2)
+      pure ()
+  describe "identical results for" $ do
+    it "three tables" $ do
+      abcs <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c)
+      acbs <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c)
+
+      listsEqualOn abcs acbs $ \(Entity _ j1, Entity _ j2, Entity _ j3) ->
+        (joinOneName j1, joinTwoName j2, joinThreeName j3)
+
+    it "four tables" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c, d)
+      xs2 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c, d)
+      xs3 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          pure (a, b, c, d)
+      xs4 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          pure (a, b, c, d)
+
+      let getNames (j1, j2, j3, j4) =
+            ( joinOneName (entityVal j1)
+            , joinTwoName (entityVal j2)
+            , joinThreeName (entityVal j3)
+            , joinFourName (entityVal j4)
+            )
+      listsEqualOn xs0 xs1 getNames
+      listsEqualOn xs0 xs2 getNames
+      listsEqualOn xs0 xs3 getNames
+      listsEqualOn xs0 xs4 getNames
+
+    it "associativity of innerjoin" $ do
+      xs0 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs1 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` (c `InnerJoin` d)) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs2 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` (b `InnerJoin` c) `InnerJoin` d) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      xs3 <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` (b `InnerJoin` c `InnerJoin` d)) -> do
+          on (a ^. JoinOneId ==. b ^. JoinTwoJoinOne)
+          on (b ^. JoinTwoId ==. c ^. JoinThreeJoinTwo)
+          on (c ^. JoinThreeId ==. d ^. JoinFourJoinThree)
+          pure (a, b, c, d)
+
+      let getNames (j1, j2, j3, j4) =
+            ( joinOneName (entityVal j1)
+            , joinTwoName (entityVal j2)
+            , joinThreeName (entityVal j3)
+            , joinFourName (entityVal j4)
+            )
+      listsEqualOn xs0 xs1 getNames
+      listsEqualOn xs0 xs2 getNames
+      listsEqualOn xs0 xs3 getNames
+
+    it "inner join on two entities" $ do
+      (xs0, xs1) <- run $ do
+        pid <- insert $ Person "hello" Nothing Nothing 3
+        _ <- insert $ BlogPost "good poast" pid
+        _ <- insert $ Profile "cool" pid
+        xs0 <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr)
+        xs1 <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr)
+        pure (xs0, xs1)
+      listsEqualOn xs0 xs1 $ \(Entity _ p, Entity _ b, Entity _ pr) ->
+        (personName p, blogPostTitle b, profileName pr)
+    it "inner join on three entities" $ do
+      res <- run $ do
+        pid <- insert $ Person "hello" Nothing Nothing 3
+        _ <- insert $ BlogPost "good poast" pid
+        _ <- insert $ BlogPost "good poast #2" pid
+        _ <- insert $ Profile "cool" pid
+        _ <- insert $ Reply pid "u wot m8"
+        _ <- insert $ Reply pid "how dare you"
+
+        bprr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          pure (p, b, pr, r)
+
+        brpr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr, r)
+
+        prbr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          pure (p, b, pr, r)
+
+        prrb <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr, r)
+
+        rprb <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr, r)
+
+        rbpr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr, r)
+
+        pure [bprr, brpr, prbr, prrb, rprb, rbpr]
+      forM_ (zip res (drop 1 (cycle res))) $ \(a, b) -> a `shouldBe` b
+
+    it "many-to-many" $ do
+      ac <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+          on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+          pure (a, c)
+
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+          on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+          on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+          pure (a, c)
+
+      listsEqualOn ac ca $ \(Entity _ a, Entity _ b) ->
+        (joinOneName a, joinOtherName b)
+
+    it "left joins on order" $ do
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+      ac <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+
+      listsEqualOn ac ca $ \(Entity _ a, b) ->
+        (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
+
+    it "doesn't require an on for a crossjoin" $ do
+      void $ run $
+        select $
+        from $ \(a `CrossJoin` b) -> do
+        pure (a :: SqlExpr (Entity JoinOne), b :: SqlExpr (Entity JoinTwo))
+
+    it "errors with an on for a crossjoin" $ do
+      (void $ run $
+        select $
+        from $ \(a `CrossJoin` b) -> do
+        on $ a ^. JoinOneId ==. b ^. JoinTwoJoinOne
+        pure (a, b))
+          `shouldThrow` \(OnClauseWithoutMatchingJoinException _) ->
+            True
+
+    it "left joins associativity" $ do
+      ca <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` (b `InnerJoin` c)) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+      ca' <- run $ do
+        setup
+        select $
+          from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+          on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+          on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+          orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+          pure (a, c)
+
+      listsEqualOn ca ca' $ \(Entity _ a, b) ->
+        (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
+
+    it "composes queries still" $ do
+      let
+        query1 =
+          from $ \(foo `InnerJoin` bar) -> do
+          on (foo ^. FooId ==. bar ^. BarQuux)
+          pure (foo, bar)
+        query2 =
+          from $ \(p `LeftOuterJoin` bp) -> do
+          on (p ^. PersonId ==. bp ^. BlogPostAuthorId)
+          pure (p, bp)
+      (a, b) <- run $ do
+        fid <- insert $ Foo 5
+        _ <- insert $ Bar fid
+        pid <- insert $ Person "hey" Nothing Nothing 30
+        _ <- insert $ BlogPost "WHY" pid
+        a <- select ((,) <$> query1 <*> query2)
+        b <- select (flip (,) <$> query1 <*> query2)
+        pure (a, b)
+      listsEqualOn a (map (\(x, y) -> (y, x)) b) id
+
+
+
+listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
+listsEqualOn a b f = map f a `shouldBe` map f b
 
 tests :: Run -> Spec
 tests run = do
@@ -1678,6 +2177,7 @@ tests run = do
     testCase run
     testCountingRows run
     testRenderSql run
+    testOnClauseOrder run
 
 
 insert' :: ( Functor m
@@ -1710,12 +2210,15 @@ cleanDB
   :: (forall m. RunDbMonad m
   => SqlPersistT (R.ResourceT m) ())
 cleanDB = do
-  delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
 
-  delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
-  delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
-  delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Reply)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Comment)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Profile)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity BlogPost)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Follow)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Person)) -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Deed)) -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Lord)) -> return ()
@@ -1732,6 +2235,12 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Point))      -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Numbers))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinMany))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinFour))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinThree))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinTwo))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinOne))    -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity JoinOther))    -> return ()
 
 
 cleanUniques
@@ -1739,3 +2248,13 @@ cleanUniques
   => SqlPersistT (R.ResourceT m) ())
 cleanUniques =
   delete $ from $ \(_ :: SqlExpr (Entity OneUnique))    -> return ()
+
+selectRethrowingQuery
+  :: (MonadIO m, EI.SqlSelect a r, MonadUnliftIO m)
+  => SqlQuery a
+  -> SqlPersistT m [r]
+selectRethrowingQuery query =
+  select query
+    `catch` \(SomeException e) -> do
+      (text, _) <- renderQuerySelect query
+      liftIO . throwIO . userError $ Text.unpack text <> "\n\n" <> show e

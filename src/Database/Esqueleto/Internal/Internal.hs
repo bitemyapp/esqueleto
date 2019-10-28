@@ -25,11 +25,16 @@
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
+--
+-- If you use this module, please report what your use case is on the issue
+-- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Control.Applicative ((<|>))
 import Control.Arrow ((***), first)
 import Control.Exception (Exception, throw, throwIO)
-import Control.Monad (ap, MonadPlus(..), void)
+import qualified Data.Maybe as Maybe
+import Control.Monad (guard, ap, MonadPlus(..), void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
@@ -43,6 +48,8 @@ import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
+import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
@@ -56,6 +63,8 @@ import qualified Data.Text.Lazy.Builder as TLB
 
 import Data.Typeable (Typeable)
 import Text.Blaze.Html (Html)
+
+import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -80,8 +89,8 @@ fromStart = x
       let ed = entityDef (getVal x)
       ident <- newIdentFor (entityDB ed)
       let ret   = EEntity ident
-          from_ = FromStart ident ed
-      return (EPreprocessedFrom ret from_)
+          f' = FromStart ident ed
+      return (EPreprocessedFrom ret f')
     getVal :: SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))) -> Proxy a
     getVal = const Proxy
 
@@ -94,7 +103,7 @@ fromStartMaybe = maybelize <$> fromStart
   where
     maybelize :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
               -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
-    maybelize (EPreprocessedFrom ret from_) = EPreprocessedFrom (EMaybe ret) from_
+    maybelize (EPreprocessedFrom ret f') = EPreprocessedFrom (EMaybe ret) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -105,71 +114,75 @@ fromJoin
 fromJoin (EPreprocessedFrom lhsRet lhsFrom)
          (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
   let ret   = smartJoin lhsRet rhsRet
-      from_ = FromJoin lhsFrom             -- LHS
+      from' = FromJoin lhsFrom             -- LHS
                        (reifyJoinKind ret) -- JOIN
                        rhsFrom             -- RHS
                        Nothing             -- ON
-  return (EPreprocessedFrom ret from_)
+  return (EPreprocessedFrom ret from')
 
 -- | (Internal) Finish a @JOIN@.
 fromFinish
   :: SqlExpr (PreprocessedFrom a)
   -> SqlQuery a
-fromFinish (EPreprocessedFrom ret from_) = Q $ do
-  W.tell mempty { sdFromClause = [from_] }
+fromFinish (EPreprocessedFrom ret f') = Q $ do
+  W.tell mempty { sdFromClause = [f'] }
   return ret
 
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
 where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
--- | @ON@ clause: restrict the a @JOIN@'s result.  The @ON@
--- clause will be applied to the /last/ @JOIN@ that does not
--- have an @ON@ clause yet.  If there are no @JOIN@s without
--- @ON@ clauses (either because you didn't do any @JOIN@, or
--- because all @JOIN@s already have their own @ON@ clauses), a
--- runtime exception 'OnClauseWithoutMatchingJoinException' is
--- thrown.  @ON@ clauses are optional when doing @JOIN@s.
+-- | An @ON@ clause, useful to describe how two tables are related. Cross joins
+-- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
+-- outer joins do.
 --
--- On the simple case of doing just one @JOIN@, for example
+-- If you don't include an 'on' clause (or include too many!) then a runtime
+-- exception will be thrown.
+--
+-- As an example, consider this simple join:
 --
 -- @
--- select $
+-- 'select' $
 -- 'from' $ \\(foo `'InnerJoin`` bar) -> do
 --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
 --   ...
 -- @
 --
--- there's no ambiguity and the rules above just mean that
--- you're allowed to call 'on' only once (as in SQL).  If you
--- have many joins, then the 'on's are applied on the /reverse/
--- order that the @JOIN@s appear.  For example:
+-- We need to specify the clause for joining the two columns together. If we had
+-- this:
 --
 -- @
--- select $
+-- 'select' $
+-- 'from' $ \\(foo `'CrossJoin`` bar) -> do
+--   ...
+-- @
+--
+-- Then we can safely omit the 'on' clause, because the cross join will make
+-- pairs of all records possible.
+--
+-- You can do multiple 'on' clauses in a query. This query joins three tables,
+-- and has two 'on' clauses:
+--
+-- @
+-- 'select' $
 -- 'from' $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
 --   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
 --   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
 --   ...
 -- @
 --
--- The order is /reversed/ in order to improve composability.
--- For example, consider @query1@ and @query2@ below:
+-- Old versions of esqueleto required that you provide the 'on' clauses in
+-- reverse order. This restriction has been lifted - you can now provide 'on'
+-- clauses in any order, and the SQL should work itself out. The above query is
+-- now totally equivalent to this:
 --
 -- @
--- let query1 =
---       'from' $ \\(foo `'InnerJoin`` bar) -> do
---         'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
---     query2 =
---       'from' $ \\(mbaz `'LeftOuterJoin`` quux) -> do
---         return (mbaz '?.' BazName, quux)
---     test1 =      (,) \<$\> query1 \<*\> query2
---     test2 = flip (,) \<$\> query2 \<*\> query1
+-- 'select' $
+-- 'from' $ \\(foo `'InnerJoin`` bar `'InnerJoin`` baz) -> do
+--   'on' (foo '^.' FooId '==.' bar '^.' BarFooId)
+--   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
+--   ...
 -- @
---
--- If the order was /not/ reversed, then @test2@ would be
--- broken: @query1@'s 'on' would refer to @query2@'s
--- 'LeftOuterJoin'.
 on :: SqlExpr (Value Bool) -> SqlQuery ()
 on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
@@ -1533,32 +1546,108 @@ newtype SetClause = SetClause (SqlExpr (Value ()))
 -- | Collect 'OnClause's on 'FromJoin's.  Returns the first
 -- unmatched 'OnClause's data on error.  Returns a list without
 -- 'OnClauses' on success.
-collectOnClauses :: [FromClause] -> Either (SqlExpr (Value Bool)) [FromClause]
-collectOnClauses = go []
+collectOnClauses
+  :: SqlBackend
+  -> [FromClause]
+  -> Either (SqlExpr (Value Bool)) [FromClause]
+collectOnClauses sqlBackend = go Set.empty []
   where
-    go []  (f@(FromStart _ _):fs) = fmap (f:) (go [] fs) -- fast path
-    go acc (OnClause expr    :fs) = findMatching acc expr >>= flip go fs
-    go acc (f:fs)                 = go (f:acc) fs
-    go acc []                     = return $ reverse acc
+    go is []  (f@(FromStart i _) : fs) =
+      fmap (f:) (go (Set.insert i is) [] fs) -- fast path
+    go idents acc (OnClause expr : fs) = do
+      (idents', a) <- findMatching idents acc expr
+      go idents' a fs
+    go idents acc (f:fs) =
+      go idents (f:acc) fs
+    go _ acc [] =
+      return $ reverse acc
 
-    findMatching (f : acc) expr =
-      case tryMatch expr f of
-        Just f' -> return (f' : acc)
-        Nothing -> (f:) <$> findMatching acc expr
-    findMatching [] expr = Left expr
+    findMatching
+      :: Set Ident
+      -> [FromClause]
+      -> SqlExpr (Value Bool)
+      -> Either (SqlExpr (Value Bool)) (Set Ident, [FromClause])
+    findMatching idents fromClauses expr =
+      case fromClauses of
+        f : acc ->
+          let
+            idents' =
+              idents
+              <> Set.fromList (Maybe.catMaybes [findLeftmostIdent f, findRightmostIdent f])
+          in
+            case tryMatch idents' expr f of
+              Just (idents'', f') ->
+                return (idents'', f' : acc)
+              Nothing ->
+                fmap (f:) <$> findMatching idents' acc expr
+        [] ->
+          Left expr
 
-    tryMatch expr (FromJoin l k r onClause) =
-      matchR `mplus` matchC `mplus` matchL -- right to left
-        where
-          matchR = (\r' -> FromJoin l k r' onClause) <$> tryMatch expr r
-          matchL = (\l' -> FromJoin l' k r onClause) <$> tryMatch expr l
-          matchC = case onClause of
-                     Nothing | k /= CrossJoinKind
-                               -> return (FromJoin l k r (Just expr))
-                             | otherwise -> mzero
-                     Just _  -> mzero
-    tryMatch _ _ = mzero
+    findRightmostIdent (FromStart i _) = Just i
+    findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
+    findRightmostIdent (OnClause {}) = Nothing
 
+    findLeftmostIdent (FromStart i _) = Just i
+    findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
+    findLeftmostIdent (OnClause {}) = Nothing
+
+    tryMatch
+      :: Set Ident
+      -> SqlExpr (Value Bool)
+      -> FromClause
+      -> Maybe (Set Ident, FromClause)
+    tryMatch idents expr fromClause =
+      case fromClause of
+        FromJoin l k r onClause ->
+          matchTable <|> matchR <|> matchC <|> matchL <|> matchPartial -- right to left
+            where
+              matchR = fmap (\r' -> FromJoin l k r' onClause)
+                <$> tryMatch idents expr r
+              matchL = fmap (\l' -> FromJoin l' k r onClause)
+                <$> tryMatch idents expr l
+              matchPartial = do
+                i1 <- findLeftmostIdent l
+                i2 <- findRightmostIdent r
+                guard $
+                  Set.isSubsetOf
+                    identsInOnClause
+                    (Set.fromList [i1, i2])
+                guard $ k /= CrossJoinKind
+                guard $ Maybe.isNothing onClause
+                pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
+              matchC =
+                case onClause of
+                  Nothing
+                    | "?" `T.isInfixOf` renderedExpr ->
+                        return (idents, FromJoin l k r (Just expr))
+                    | Set.null identsInOnClause ->
+                        return (idents, FromJoin l k r (Just expr))
+                    | otherwise ->
+                        Nothing
+                  Just _ ->
+                    Nothing
+              matchTable = do
+                i1 <- findLeftmostIdent r
+                i2 <- findRightmostIdent l
+                guard $ Set.fromList [i1, i2] `Set.isSubsetOf` identsInOnClause
+                guard $ k /= CrossJoinKind
+                guard $ Maybe.isNothing onClause
+                pure (Set.fromList [i1, i2] <> idents, FromJoin l k r (Just expr))
+
+        _ ->
+          Nothing
+      where
+        identsInOnClause =
+          onExprToTableIdentifiers
+
+        renderedExpr =
+          renderExpr sqlBackend expr
+
+        onExprToTableIdentifiers =
+          Set.map (I . tableAccessTable)
+          . either error id
+          . parseOnExpr sqlBackend
+          $ renderedExpr
 
 -- | A complete @WHERE@ clause.
 data WhereClause = Where (SqlExpr (Value Bool))
@@ -1613,6 +1702,7 @@ type LockingClause = Monoid.Last LockingKind
 
 -- | Identifier used for table names.
 newtype Ident = I T.Text
+  deriving (Eq, Ord, Show)
 
 
 -- | List of identifiers already in use and supply of temporary
@@ -1626,24 +1716,18 @@ initialIdentState = IdentState mempty
 -- | Create a fresh 'Ident'.  If possible, use the given
 -- 'DBName'.
 newIdentFor :: DBName -> SqlQuery Ident
-newIdentFor = Q . lift . try . unDBName
+newIdentFor (DBName original) = Q $ lift $ findFree Nothing
   where
-    try orig = do
-      s <- S.get
-      let go (t:ts) | t `HS.member` inUse s = go ts
-                    | otherwise             = use t
-          go [] = throw (UnexpectedCaseErr NewIdentForError)
-      go (possibilities orig)
-
-    possibilities t = t : map addNum [2..]
-      where
-        addNum :: Int -> T.Text
-        addNum = T.append t . T.pack . show
-
-    use t = do
-      S.modify (\s -> s { inUse = HS.insert t (inUse s) })
-      return (I t)
-
+    findFree msuffix = do
+      let
+        withSuffix =
+          maybe id (\suffix -> (<> T.pack (show suffix))) msuffix original
+      isInUse <- S.gets (HS.member withSuffix . inUse)
+      if isInUse
+        then findFree (succ <$> (msuffix <|> Just (1 :: Int)))
+        else do
+          S.modify (\s -> s { inUse = HS.insert withSuffix (inUse s) })
+          pure (I withSuffix)
 
 -- | Information needed to escape and use identifiers.
 type IdentInfo = (SqlBackend, IdentState)
@@ -2051,7 +2135,7 @@ selectSource query = do
 --  @Value t@.  You may use @Value@ to return projections of an
 --  @Entity@ (see @('^.')@ and @('?.')@) or to return any other
 --  value calculated on the query (e.g., 'countRows' or
---  'sub_select').
+--  'subSelect').
 --
 -- The @SqlSelect a r@ class has functional dependencies that
 -- allow type information to flow both from @a@ to @r@ and
@@ -2346,11 +2430,15 @@ makeSelect info mode_ distinctClause ret = process mode_
     plain    v = (v, [])
 
 
-makeFrom :: IdentInfo -> Mode -> [FromClause] -> (TLB.Builder, [PersistValue])
+makeFrom
+  :: IdentInfo
+  -> Mode
+  -> [FromClause]
+  -> (TLB.Builder, [PersistValue])
 makeFrom _    _    [] = mempty
 makeFrom info mode fs = ret
   where
-    ret = case collectOnClauses fs of
+    ret = case collectOnClauses (fst info) fs of
             Left expr -> throw $ mkExc expr
             Right fs' -> keyword $ uncommas' (map (mk Never) fs')
     keyword = case mode of
@@ -3069,3 +3157,33 @@ insertSelect = void . insertSelectCount
 insertSelectCount :: (MonadIO m, PersistEntity a) =>
   SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
+
+-- | Renders an expression into 'Text'. Only useful for creating a textual
+-- representation of the clauses passed to an "On" clause.
+--
+-- @since 3.2.0
+renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
+renderExpr sqlBackend e =
+  case e of
+    ERaw _ mkBuilderValues -> do
+      let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
+       in (builderToText builder)
+    ECompositeKey mkInfo ->
+      throw
+        . RenderExprUnexpectedECompositeKey
+        . builderToText
+        . mconcat
+        . mkInfo
+        $ (sqlBackend, initialIdentState)
+
+-- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
+-- keys, and will blow up if you give it one.
+--
+-- @since 3.2.0
+data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
+  deriving Show
+
+-- |
+--
+-- @since 3.2.0
+instance Exception RenderExprException

@@ -31,12 +31,13 @@ library
       Database.Esqueleto
       Database.Esqueleto.Internal.Language
       Database.Esqueleto.Internal.Sql
+      Database.Esqueleto.Internal.Internal
+      Database.Esqueleto.Internal.ExprParser
       Database.Esqueleto.MySQL
       Database.Esqueleto.PostgreSQL
       Database.Esqueleto.PostgreSQL.JSON
       Database.Esqueleto.SQLite
   other-modules:
-      Database.Esqueleto.Internal.Internal
       Database.Esqueleto.Internal.PersistentImport
       Database.Esqueleto.PostgreSQL.JSON.Instances
       Paths_esqueleto
@@ -45,10 +46,12 @@ library
   build-depends:
       base >=4.8 && <5.0
     , aeson >=1.0
+    , attoparsec >= 0.13 && < 0.14
     , blaze-html
     , bytestring
     , containers
     , conduit >=1.3
+    , containers
     , monad-logger
     , persistent >=2.10.0 && <2.11
     , resourcet >=1.2
@@ -75,6 +78,7 @@ test-suite mysql
   ghc-options: -Wall
   build-depends:
       base >=4.8 && <5.0
+    , attoparsec
     , blaze-html
     , bytestring
     , conduit >=1.3
@@ -83,6 +87,7 @@ test-suite mysql
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , mysql
     , mysql-simple
     , persistent >=2.8.0 && <2.11
@@ -110,6 +115,7 @@ test-suite postgresql
   build-depends:
       base >=4.8 && <5.0
     , aeson
+    , attoparsec
     , blaze-html
     , bytestring
     , conduit >=1.3
@@ -118,6 +124,7 @@ test-suite postgresql
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , persistent >=2.10.0 && <2.11
     , persistent-postgresql >= 2.10.0 && <2.11
     , persistent-template
@@ -144,6 +151,7 @@ test-suite sqlite
   ghc-options: -Wall
   build-depends:
       base >=4.8 && <5.0
+    , attoparsec
     , blaze-html
     , bytestring
     , conduit >=1.3
@@ -152,6 +160,7 @@ test-suite sqlite
     , exceptions
     , hspec
     , monad-logger
+    , mtl
     , persistent >=2.8.0 && <2.11
     , persistent-sqlite
     , persistent-template
