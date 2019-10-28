@@ -109,6 +109,11 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Profile
     name String
     person PersonId
+    deriving Eq Show
+  Reply
+    guy PersonId
+    body String
+    deriving Eq Show
 
   Lord
     county String maxlen=100
@@ -1818,6 +1823,59 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
         pure (xs0, xs1)
       listsEqualOn xs0 xs1 $ \(Entity _ p, Entity _ b, Entity _ pr) ->
         (personName p, blogPostTitle b, profileName pr)
+    it "inner join on three entities" $ do
+      res <- run $ do
+        pid <- insert $ Person "hello" Nothing Nothing 3
+        _ <- insert $ BlogPost "good poast" pid
+        _ <- insert $ BlogPost "good poast #2" pid
+        _ <- insert $ Profile "cool" pid
+        _ <- insert $ Reply pid "u wot m8"
+        _ <- insert $ Reply pid "how dare you"
+
+        bprr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          pure (p, b, pr, r)
+
+        brpr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr, r)
+
+        prbr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          pure (p, b, pr, r)
+
+        prrb <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr, r)
+
+        rprb <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          pure (p, b, pr, r)
+
+        rbpr <- selectRethrowingQuery $
+          from $ \(p `InnerJoin` b `InnerJoin` pr `InnerJoin` r) -> do
+          on $ p ^. PersonId ==. r ^. ReplyGuy
+          on $ p ^. PersonId ==. b ^. BlogPostAuthorId
+          on $ p ^. PersonId ==. pr ^. ProfilePerson
+          pure (p, b, pr, r)
+
+        pure [bprr, brpr, prbr, prrb, rprb, rbpr]
+      forM_ (zip res (drop 1 (cycle res))) $ \(a, b) -> a `shouldBe` b
 
     it "many-to-many" $ do
       ac <- run $ do
@@ -1955,10 +2013,12 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
 
-  delete $ from $ \(_ :: SqlExpr (Entity BlogPost))   -> return ()
-  delete $ from $ \(_ :: SqlExpr (Entity Follow))     -> return ()
-  delete $ from $ \(_ :: SqlExpr (Entity Profile))     -> return ()
-  delete $ from $ \(_ :: SqlExpr (Entity Person))     -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Reply)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Comment)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Profile)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity BlogPost)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Follow)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity Person)) -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity Deed)) -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Lord)) -> return ()
