@@ -35,7 +35,7 @@ import           Data.Time.Clock                              (UTCTime)
 import           Database.Esqueleto.Internal.Language         hiding (random_)
 import           Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import           Database.Esqueleto.Internal.Sql
-import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..), 
+import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..),
                                                               UnexpectedCaseError(..), SetClause, Ident(..),
                                                               uncommas, FinalResult(..), toUniqueDef,
                                                               KnowResult, renderUpdates)
@@ -44,7 +44,7 @@ import           Data.List.NonEmpty                           ( NonEmpty( (:|) )
 import           Data.Int                                     (Int64)
 import           Data.Proxy                                   (Proxy(..))
 import           Control.Arrow                                ((***), first)
-import           Control.Exception                            (Exception, throw, throwIO)
+import           Control.Exception                            (throw)
 import           Control.Monad                                (void)
 import           Control.Monad.IO.Class                       (MonadIO (..))
 import qualified Control.Monad.Trans.Reader                   as R
@@ -169,7 +169,7 @@ chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
 chr = unsafeSqlFunction "chr"
 
 now_ :: SqlExpr (Value UTCTime)
-now_ = unsafeSqlValue "NOW()"
+now_ = unsafeSqlFunction "NOW" ()
 
 upsert :: (MonadIO m,
       PersistEntity record,
@@ -200,7 +200,7 @@ upsertBy :: (MonadIO m,
 upsertBy uniqueKey record updates = do
   sqlB <- R.ask
   maybe
-    (throw (UnexpectedCaseErr OperationNotSupported)) -- Postgres backend should have connUpsertSql, if this error is thrown, check changes on persistent 
+    (throw (UnexpectedCaseErr OperationNotSupported)) -- Postgres backend should have connUpsertSql, if this error is thrown, check changes on persistent
     (handler sqlB)
     (connUpsertSql sqlB)
   where
@@ -230,7 +230,7 @@ upsertBy uniqueKey record updates = do
 --     deriving Eq Show
 -- |]
 --
--- insertSelectWithConflict 
+-- insertSelectWithConflict
 --   UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
 --   (from $ \b ->
 --     return $ Foo <# (b ^. BarNum)
@@ -240,18 +240,18 @@ upsertBy uniqueKey record updates = do
 --   )
 -- @
 --
--- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique, 
+-- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique,
 -- the conflicting value is updated to the current plus the excluded.
 --
 -- @since 3.1.3
 insertSelectWithConflict :: forall a m val. (
     FinalResult a,
-    KnowResult a ~ (Unique val), 
-    MonadIO m, 
-    PersistEntity val) => 
+    KnowResult a ~ (Unique val),
+    MonadIO m,
+    PersistEntity val) =>
   a
   -- ^ Unique constructor or a unique, this is used just to get the name of the postgres constraint, the value(s) is(are) never used, so if you have a unique "MyUnique 0", "MyUnique undefined" would work as well.
-  -> SqlQuery (SqlExpr (Insertion val)) 
+  -> SqlQuery (SqlExpr (Insertion val))
   -- ^ Insert query.
   -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
   -- ^ A list of updates to be applied in case of the constraint being violated. The expression takes the current and excluded value to produce the updates.
@@ -263,11 +263,11 @@ insertSelectWithConflict unique query = void . insertSelectWithConflictCount uni
 -- @since 3.1.3
 insertSelectWithConflictCount :: forall a val m. (
     FinalResult a,
-    KnowResult a ~ (Unique val), 
-    MonadIO m, 
-    PersistEntity val) => 
+    KnowResult a ~ (Unique val),
+    MonadIO m,
+    PersistEntity val) =>
   a
-  -> SqlQuery (SqlExpr (Insertion val)) 
+  -> SqlQuery (SqlExpr (Insertion val))
   -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
   -> SqlWriteT m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
@@ -292,7 +292,7 @@ insertSelectWithConflictCount unique query conflictQuery = do
         TLB.fromText "ON CONFLICT ON CONSTRAINT \"",
         constraint,
         TLB.fromText "\" DO "
-      ] ++ if null updates then [TLB.fromText "NOTHING"] else [      
+      ] ++ if null updates then [TLB.fromText "NOTHING"] else [
         TLB.fromText "UPDATE SET ",
         updatesTLB
       ]),values)

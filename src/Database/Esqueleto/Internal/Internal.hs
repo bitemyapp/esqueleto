@@ -1053,12 +1053,12 @@ instance FinalResult (Unique val) where
 instance (FinalResult b) => FinalResult (a -> b) where
   finalR f = finalR (f undefined)
 
--- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You 
--- can supply just the constructor itself, or a value of the type - the library is capable of figuring 
+-- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You
+-- can supply just the constructor itself, or a value of the type - the library is capable of figuring
 -- it out from there.
 --
 -- @since 3.1.3
-toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) => 
+toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) =>
   a -> UniqueDef
 toUniqueDef uniqueConstructor = uniqueDef
   where
@@ -1071,9 +1071,9 @@ toUniqueDef uniqueConstructor = uniqueDef
     uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
 
 -- | Render updates to be use in a SET clause for a given sql backend.
--- 
+--
 -- @since 3.1.3
-renderUpdates :: (BackendCompatible SqlBackend backend) => 
+renderUpdates :: (BackendCompatible SqlBackend backend) =>
     backend
     -> [SqlExpr (Update val)]
     -> (TLB.Builder, [PersistValue])
@@ -2025,6 +2025,13 @@ unsafeSqlCastAs _ (ECompositeKey _) = throw (CompositeKeyErr SqlCastAsError)
 
 class UnsafeSqlFunctionArgument a where
   toArgList :: a -> [SqlExpr (Value ())]
+
+-- | Useful for 0-argument functions, like @now@ in Postgresql.
+--
+-- @since 3.2.1
+instance UnsafeSqlFunctionArgument () where
+  toArgList _ = []
+
 instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
   toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
 instance UnsafeSqlFunctionArgument a =>

@@ -1,3 +1,10 @@
+3.2.1
+========
+
+- @parsonsmatt
+  = [#159](https://github.com/bitemyapp/esqueleto/pull/159): Add an instance of `UnsafeSqlFunction ()` for 0-argument SQL
+  functions.
+
 3.2.0
 ========
 

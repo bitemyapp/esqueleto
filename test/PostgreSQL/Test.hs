@@ -25,7 +25,7 @@ import qualified Data.List as L
 import Data.Ord (comparing)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
@@ -492,6 +492,14 @@ testPostgresModule = do
       run $ do
         [Value (ret :: String)] <- select $ return (EP.chr (val 65))
         liftIO $ ret `shouldBe` "A"
+
+    it "allows unit for functions" $ do
+      vals <- run $ do
+        let
+          fn :: SqlExpr (Value UTCTime)
+          fn = ES.unsafeSqlFunction "now" ()
+        select $ pure fn
+      vals `shouldSatisfy` ((1 ==) . length)
 
     it "works with now" $
       run $ do
