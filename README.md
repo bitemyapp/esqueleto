@@ -247,7 +247,7 @@ In order to use these functions, you need to explicitly import their correspondi
 
 Not all RDBMSs specific functions and operators are expose on each RDBMS module, there is
 also the problem of calling user defined functions. To overcome this problem Esqueleto
-exports a number of unsafe functions to call any function, operator or value. This functions
+exports a number of unsafe functions to call any function, operator or value. These functions
 can be found in Database.Esqueleto.Internal.Sql module.
 
 Warning: the functions discussed in this section must always be used with an explicit type signature
