@@ -245,16 +245,9 @@ In order to use these functions, you need to explicitly import their correspondi
 
 ### Unsafe functions, operators and values
 
-Not all RDBMSs specific functions and operators are expose on each RDBMS module, there is
-also the problem of calling user defined functions. To overcome this problem, Esqueleto
-exports a number of unsafe functions to call any function, operator or value. These functions
-can be found in Database.Esqueleto.Internal.Sql module.
+Esqueleto doesn't support every possible function, and it can't - many functions aren't available on every RDBMS platform, and sometimes the same functionality is hidden behind different names. To overcome this problem, Esqueleto exports a number of unsafe functions to call any function, operator or value. These functions can be found in Database.Esqueleto.Internal.Sql module.
 
-Warning: the functions discussed in this section must always be used with an explicit type signature
-as they are too general in order to maintain type safety, and you will need to indicate some
-type when you want to get results back from the database so better set types earlier rather 
-than late. This functions are also vulnerable to sql injection attacks so their use must be
-limited and with care, more on this later.
+Warning: the functions discussed in this section must always be used with an explicit type signature,and the user must be careful to provide a type signature that corresponds correctly with the underlying code. The functions have extremely general types, and if you allow type inference to figure everything out for you, it may not correspond with the underlying SQL types that you want. This interface is effectively the FFI to SQL database, so take care!
 
 The most common use of these functions is for calling RDBMS specific or custom functions,
 for that end we use `unsafeSqlFunction`. For example, if we wish to consult the postgres
@@ -263,10 +256,10 @@ for that end we use `unsafeSqlFunction`. For example, if we wish to consult the 
 ```haskell
 postgresTime :: (MonadIO m, MonadLogger m) => SqlWriteT m UTCTime
 postgresTime = 
-  select (return now) >>= return . head
+  head <$> select (pure now)
   where
     now :: SqlExpr (Value UTCTime) 
-    now = unsafeSqlFunction (fromText "now") ([] :: [SqlExpr (Value Int)])
+    now = unsafeSqlFunction "now" ()
 ```
 
 which generates this SQL:
@@ -276,11 +269,9 @@ SELECT now()
 ```
 
 With the `now` function we could now use the current time of the postgres RDBMS on any query.
-Do notice that `now` does not use any arguments, so we use an empty list cast to a valid
-`UnsafeSqlFunctionArgument` instance to represent no arguments. 
-
-Note: make () an instance of `UnsafeSqlFunctionArgument` for when no arguments are needed, this
-casting is quite dumb.
+Do notice that `now` does not use any arguments, so we use `()` that is an instance of
+`UnsafeSqlFunctionArgument` to represent no arguments, an empty list cast to a correct value
+will yield the same result as `()`.
 
 We can also use `unsafeSqlFunction` for more complex functions with customs values using 
 `unsafeSqlValue` which turns any string into a sql value of whatever type we want, disclaimer:
@@ -290,12 +281,12 @@ if you use it badly you will cause a runtime error. For example, say we want to 
 ```haskell
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
 postgresTimestampDay = 
-  select (return $ dayPart date) >>= return . head
+  head <$> select (return $ dayPart date)
   where
     dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
-    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     date :: SqlExpr (Value UTCTime)
-    date = unsafeSqlValue . fromText $ "TIMESTAMP \'2001-02-16 20:38:40\'"
+    date = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\'"
 ```
 
 which generates this SQL:
@@ -312,11 +303,12 @@ on the current system time, we could:
 
 ```haskell
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
-postgresTimestampDay = 
-  liftIO getCurrentTime >>= \t -> select (return $ dayPart (toTIMESTAMP $ val t)) >>= return . head
+postgresTimestampDay = do
+  currentTime <- liftIO getCurrentTime
+  head <$> select (return $ dayPart (toTIMESTAMP $ val currentTime))
   where
     dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
-    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     toTIMESTAMP :: SqlExpr (Value UTCTime) -> SqlExpr (Value UTCTime)
     toTIMESTAMP = unsafeSqlCastAs "TIMESTAMP"
 ```
@@ -354,7 +346,7 @@ myEvilQuery =
   select (return nowWithInjection) >>= liftIO . print
   where
     nowWithInjection :: SqlExpr (Value UTCTime) 
-    nowWithInjection = unsafeSqlFunction (fromText "0; DROP TABLE bar; select now") ([] :: [SqlExpr (Value Int)])
+    nowWithInjection = unsafeSqlFunction "0; DROP TABLE bar; select now" ([] :: [SqlExpr (Value Int)])
 ```
 
 which generates this SQL:
@@ -373,9 +365,9 @@ myEvilQuery =
   select (return $ dayPart dateWithInjection) >>= liftIO . print
   where
     dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
-    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     dateWithInjection :: SqlExpr (Value UTCTime)
-    dateWithInjection = unsafeSqlValue . fromText $ "TIMESTAMP \'2001-02-16 20:38:40\');DROP TABLE bar; select (16"
+    dateWithInjection = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\');DROP TABLE bar; select (16"
 ```
 
 which generates this SQL:
