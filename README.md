@@ -250,7 +250,7 @@ also the problem of calling user defined functions. To overcome this problem Esq
 exports a number of unsafe functions to call any function, operator or value. This functions
 can be found on Database.Esqueleto.Internal.Sql module.
 
-Warning: the functions discuss on section should always be use with an explicit type signature
+Warning: the functions discussed in this section must always be used with an explicit type signature
 as they are too general in order to maintain type safety, and you will need to indicate some
 type when you want to get results back from the database so better set types earlier rather 
 than late. This functions are also vulnerable to sql injection attacks so their use must be
