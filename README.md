@@ -295,7 +295,7 @@ which generates this SQL:
 SELECT date_part('day', TIMESTAMP '2001-02-16 20:38:40')
 ```
 
-Using `unsafeSqlValue` we were able to also define the type of the value.
+Using `unsafeSqlValue` we were required to also define the type of the value.
 
 Another useful unsafe function is `unsafeSqlCastAs`, which allows us to cast any type
 to another within a query. For example, say we want to use our previews `dayPart` function
