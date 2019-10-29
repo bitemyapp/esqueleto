@@ -104,6 +104,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Asdf
     shoop ShoopId
     deriving Show Eq
+  Another
+    why BazId
+  YetAnother
+    argh ShoopId
 
   Person
     name String
@@ -2210,6 +2214,17 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
             on $ baz ^. BazId ==. shoop ^. ShoopBaz
             on $ asdf ^. AsdfShoop ==. shoop ^. ShoopId
             pure (f ^. FooName)
+        it "indirect association across" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(f `InnerJoin` b `LeftOuterJoin` (baz `InnerJoin` shoop) `InnerJoin` asdf `InnerJoin` another `InnerJoin` yetAnother) -> do
+            on $ f ^. FooId ==. b ^. BarQuux
+            on $ f ^. FooId ==. baz ^. BazBlargh
+            on $ baz ^. BazId ==. shoop ^. ShoopBaz
+            on $ asdf ^. AsdfShoop ==. shoop ^. ShoopId
+            on $ another ^. AnotherWhy ==. baz ^. BazId
+            on $ yetAnother ^. YetAnotherArgh ==. shoop ^. ShoopId
+            pure (f ^. FooName)
 
       describe "rightmost nesting" $ do
         it "direct associations" $ do
@@ -2229,7 +2244,6 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
             on $ f ^. FooId ==. baz ^. BazBlargh
             on $ baz ^. BazId ==. shoop ^. ShoopBaz
             pure (f ^. FooName)
-
 
 listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
