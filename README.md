@@ -256,7 +256,10 @@ for that end we use `unsafeSqlFunction`. For example, if we wish to consult the 
 ```haskell
 postgresTime :: (MonadIO m, MonadLogger m) => SqlWriteT m UTCTime
 postgresTime = 
-  head <$> select (pure now)
+  result <- select (pure now)
+  case result of
+    [x] -> pure x
+    _ -> error "now() is guaranteed to return a single result"
   where
     now :: SqlExpr (Value UTCTime) 
     now = unsafeSqlFunction "now" ()
@@ -281,7 +284,10 @@ if you use it badly you will cause a runtime error. For example, say we want to 
 ```haskell
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
 postgresTimestampDay = 
-  head <$> select (return $ dayPart date)
+  result <- select (return $ dayPart date)
+  case result of
+    [x] -> pure x
+    _ -> error "dayPart is guaranteed to return a single result"
   where
     dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
@@ -305,7 +311,10 @@ on the current system time, we could:
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
 postgresTimestampDay = do
   currentTime <- liftIO getCurrentTime
-  head <$> select (return $ dayPart (toTIMESTAMP $ val currentTime))
+  result <- select (return $ dayPart (toTIMESTAMP $ val currentTime))
+  case result of
+    [x] -> pure x
+    _ -> error "dayPart is guaranteed to return a single result"
   where
     dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
