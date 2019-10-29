@@ -95,6 +95,12 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Bar
     quux FooId
     deriving Show Eq Ord
+  Baz
+    blargh FooId
+    deriving Show Eq
+  Shoop
+    baz BazId
+    deriving Show Eq
 
   Person
     name String
@@ -2152,6 +2158,50 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
         pure (a, b)
       listsEqualOn a (map (\(x, y) -> (y, x)) b) id
 
+    it "works with joins in subselect" $ do
+      run $ void $
+        select $
+        from $ \(p `InnerJoin` r) -> do
+        on $ p ^. PersonId ==. r ^. ReplyGuy
+        pure . (,) (p ^. PersonName) $
+          subSelect $
+          from $ \(c `InnerJoin` bp) -> do
+          on $ bp ^. BlogPostId ==. c ^. CommentBlog
+          pure (c ^. CommentBody)
+
+    describe "works with nested joins" $ do
+      it "unnested" $ do
+        run $ void $
+          select $
+          from $ \(f `InnerJoin` b `LeftOuterJoin` baz `InnerJoin` shoop) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
+      it "leftmost nesting" $ do
+        run $ void $
+          select $
+          from $ \((f `InnerJoin` b) `LeftOuterJoin` baz `InnerJoin` shoop) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
+      it "middle nesting" $ do
+        run $ void $
+          select $
+          from $ \(f `InnerJoin` (b `LeftOuterJoin` baz) `InnerJoin` shoop) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
+      it "rightmost nesting" $ do
+        run $ void $
+          select $
+          from $ \(f `InnerJoin` b `LeftOuterJoin` (baz `InnerJoin` shoop)) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
 
 
 listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
