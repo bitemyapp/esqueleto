@@ -345,7 +345,7 @@ SELECT 'hi''; DROP TABLE foo; select ''bye'''
 ```
 
 And the printed value is `hi\'; DROP TABLE foo; select \'bye\'` and no table is dropped. This is good
-and makes the use of strings values save, unfortunately this is not the case when using unsafe functions.
+and makes the use of strings values safe. Unfortunately this is not the case when using unsafe functions.
 Let's see an example of defining a new evil `now` function:
 
 ```haskell
