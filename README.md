@@ -256,7 +256,7 @@ type when you want to get results back from the database so better set types ear
 than late. This functions are also vulnerable to sql injection attacks so their use must be
 limited and with care, more on this later.
 
-The most common use of this functions is for calling RDBMS specific or custom functions,
+The most common use of these functions is for calling RDBMS specific or custom functions,
 for that end we use `unsafeSqlFunction`. For example, if we wish to consult the postgres
 `now` function we could so as follow:
 
