@@ -64,7 +64,6 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Text.Blaze.Html (Html)
 
-import qualified Debug.Trace as Debug
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
@@ -1579,7 +1578,6 @@ collectOnClauses
   -> [FromClause]
   -> Either (SqlExpr (Value Bool)) [FromClause]
 collectOnClauses sqlBackend = go Set.empty []
-  -- . (\fcs -> Debug.trace (mappend "FromClauses: " (show fcs)) fcs)
   where
     go is []  (f@(FromStart i _) : fs) =
       fmap (f:) (go (Set.insert i is) [] fs) -- fast path
@@ -1636,45 +1634,33 @@ collectOnClauses sqlBackend = go Set.empty []
                 <$> tryMatch idents expr l
 
               matchPartial = do
-                -- Debug.traceM $ "matchPartial"
-                -- Debug.traceM $ "matchPartial: identsInOnClause: " <> show identsInOnClause
-                -- Debug.traceM $ "matchPartial: seen idents: " <> show idents
                 ll <- findLeftmostIdent l
-                -- Debug.traceM $ "matchPartial: ll: " <> show ll
                 rr <- findLeftmostIdent r
-                -- Debug.traceM $ "matchPartial: rr: " <> show rr
                 guard $
                   Set.isSubsetOf
                     identsInOnClause
                     (Set.fromList [ll, rr])
-                -- Debug.traceM "matchPartial: passed subset check"
                 guard $ k /= CrossJoinKind
-                -- Debug.traceM "matchPartial: passed cross join kind check"
                 guard $ Maybe.isNothing onClause
-                -- Debug.traceM "matchPartial: passed isNothing check!"
                 pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
 
               matchC =
                 case onClause of
                   Nothing
                     | "?" `T.isInfixOf` renderedExpr ->
-                      -- Debug.trace ("matchC success" <> show identsInOnClause) $
                         return (idents, FromJoin l k r (Just expr))
                     | Set.null identsInOnClause ->
-                      -- Debug.trace ("matchC success" <> show identsInOnClause) $
                         return (idents, FromJoin l k r (Just expr))
                     | otherwise ->
                         Nothing
                   Just _ ->
                     Nothing
               matchTable = do
-                -- Debug.traceM $ "matchTable: " <> show identsInOnClause
                 i1 <- findLeftmostIdent r
                 i2 <- findRightmostIdent l
                 guard $ Set.fromList [i1, i2] `Set.isSubsetOf` identsInOnClause
                 guard $ k /= CrossJoinKind
                 guard $ Maybe.isNothing onClause
-                -- Debug.traceM $ "matchTable: succeed " <> show identsInOnClause
                 pure (Set.fromList [i1, i2] <> idents, FromJoin l k r (Just expr))
 
         _ ->

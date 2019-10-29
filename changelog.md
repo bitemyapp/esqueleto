@@ -1,8 +1,15 @@
+3.2.2
+========
+
+- @parsonsmatt
+  - [#161](https://github.com/bitemyapp/esqueleto/pull/161/): Fix an issue where
+    nested joins didn't get the right on clause.
+
 3.2.1
 ========
 
 - @parsonsmatt
-  = [#159](https://github.com/bitemyapp/esqueleto/pull/159): Add an instance of `UnsafeSqlFunction ()` for 0-argument SQL
+  - [#159](https://github.com/bitemyapp/esqueleto/pull/159): Add an instance of `UnsafeSqlFunction ()` for 0-argument SQL
   functions.
 
 3.2.0
