@@ -243,6 +243,150 @@ There are many differences between SQL syntax and functions supported by differe
 
 In order to use these functions, you need to explicitly import their corresponding modules.
 
+### Unsafe functions, operators and values
+
+Not all RDBMSs specific functions and operators are expose on each RDBMS module, there is
+also the problem of calling user defined functions. To overcome this problem Esqueleto
+exports a number of unsafe functions to call any function, operator or value. This functions
+can be found on Database.Esqueleto.Internal.Sql module.
+
+Warning: the functions discuss on section should always be use with an explicit type signature
+as they are too general in order to maintain type safety, and you will need to indicate some
+type when you want to get results back from the database so better set types earlier rather 
+than late. This functions are also vulnerable to sql injection attacks so their use must be
+limited and with care, more on this later.
+
+The most common use of this functions is for calling RDBMS specific or custom functions,
+for that end we use `unsafeSqlFunction`. For example, if we wish to consult the postgres
+`now` function we could so as follow:
+
+```haskell
+postgresTime :: (MonadIO m, MonadLogger m) => SqlWriteT m UTCTime
+postgresTime = 
+  select (return now) >>= return . head
+  where
+    now :: SqlExpr (Value UTCTime) 
+    now = unsafeSqlFunction (fromText "now") ([] :: [SqlExpr (Value Int)])
+```
+
+which generates this SQL:
+
+```sql
+SELECT now()
+```
+
+With the `now` function we could now use the current time of the postgres RDBMS on any query.
+Do notice that `now` does not use any arguments, so we use an empty list cast to a valid
+`UnsafeSqlFunctionArgument` instance to represent no arguments. 
+
+Note: make () an instance of `UnsafeSqlFunctionArgument` for when no arguments are needed, this
+casting is quite dumb.
+
+We can also use `unsafeSqlFunction` for more complex functions with customs values using 
+`unsafeSqlValue` which turns any string into a sql value of whatever type we want, disclaimer:
+if you use it badly you will cause a runtime error. For example, say we want to try postgres'
+`date_part` function and get the day of a timestamp, we could use:
+
+```haskell
+postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
+postgresTimestampDay = 
+  select (return $ dayPart date) >>= return . head
+  where
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    date :: SqlExpr (Value UTCTime)
+    date = unsafeSqlValue . fromText $ "TIMESTAMP \'2001-02-16 20:38:40\'"
+```
+
+which generates this SQL:
+
+```sql
+SELECT date_part('day', TIMESTAMP '2001-02-16 20:38:40')
+```
+
+Using `unsafeSqlValue` we were able to also define the type of the value.
+
+Another useful unsafe function is `unsafeSqlCastAs`, which allows us to cast any type
+to another within a query. For example, say we want to use our previews `dayPart` function
+on the current system time, we could:
+
+```haskell
+postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
+postgresTimestampDay = 
+  liftIO getCurrentTime >>= \t -> select (return $ dayPart (toTIMESTAMP $ val t)) >>= return . head
+  where
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    toTIMESTAMP :: SqlExpr (Value UTCTime) -> SqlExpr (Value UTCTime)
+    toTIMESTAMP = unsafeSqlCastAs "TIMESTAMP"
+```
+
+which generates this SQL:
+
+```sql
+SELECT date_part('day', CAST('2019-10-28 23:19:39.400898344Z' AS TIMESTAMP))
+```
+
+### SQL injection
+
+Esqueleto uses parameterization to prevent sql injections on values and arguments
+on all queries, for example, if we have:
+
+```haskell
+myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
+myEvilQuery = 
+  select (return $ val ("hi\'; DROP TABLE foo; select \'bye\'" :: String)) >>= liftIO . print
+```
+
+which generates this SQL(when using postgres):
+
+```sql
+SELECT 'hi''; DROP TABLE foo; select ''bye'''
+```
+
+And the printed value is `hi\'; DROP TABLE foo; select \'bye\'` and no table is drop. This is good
+and makes the use of strings values save, unfortunately this is not the case when using unsafe functions.
+Let's see an example of defining a new evil `now` function:
+
+```haskell
+myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
+myEvilQuery = 
+  select (return nowWithInjection) >>= liftIO . print
+  where
+    nowWithInjection :: SqlExpr (Value UTCTime) 
+    nowWithInjection = unsafeSqlFunction (fromText "0; DROP TABLE bar; select now") ([] :: [SqlExpr (Value Int)])
+```
+
+which generates this SQL:
+
+```sql
+SELECT 0; DROP TABLE bar; select now()
+```
+
+If we were to run the above code we would see the postgres time printed but the table `bar`
+will be erased with no indication whatsoever. Another example of this behavior is seen when using
+`unsafeSqlValue`:
+
+```haskell
+myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
+myEvilQuery = 
+  select (return $ dayPart dateWithInjection) >>= liftIO . print
+  where
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart s = unsafeSqlFunction (fromText "date_part") (unsafeSqlValue (fromText "\'day\'") :: SqlExpr (Value String) ,s)
+    dateWithInjection :: SqlExpr (Value UTCTime)
+    dateWithInjection = unsafeSqlValue . fromText $ "TIMESTAMP \'2001-02-16 20:38:40\');DROP TABLE bar; select (16"
+```
+
+which generates this SQL:
+
+```sql
+SELECT date_part('day', TIMESTAMP '2001-02-16 20:38:40');DROP TABLE bar; select (16)
+```
+
+This will print 16 and also erase the `bar` table. The main take away of this examples is to
+never use any user or third party input inside an unsafe function without first parsing it or
+heavily sanitizing the input.
 
 ### Tests and Postgres
 
