@@ -1626,7 +1626,7 @@ collectOnClauses sqlBackend = go Set.empty []
     tryMatch idents expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
-          matchR <|> matchTable <|> matchL <|> matchPartial <|> matchC -- right to left
+          matchTable <|> matchR <|> matchC <|> matchL <|> matchPartial -- right to left
             where
               matchR = fmap (\r' -> FromJoin l k r' onClause)
                 <$> tryMatch idents expr r
@@ -1634,15 +1634,15 @@ collectOnClauses sqlBackend = go Set.empty []
                 <$> tryMatch idents expr l
 
               matchPartial = do
-                ll <- findLeftmostIdent l
-                rr <- findLeftmostIdent r
+                i1 <- findLeftmostIdent l
+                i2 <- findLeftmostIdent r
                 guard $
                   Set.isSubsetOf
                     identsInOnClause
-                    (Set.fromList [ll, rr])
+                    (Set.fromList [i1, i2])
                 guard $ k /= CrossJoinKind
                 guard $ Maybe.isNothing onClause
-                pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
+                pure (idents, FromJoin l k r (Just expr))
 
               matchC =
                 case onClause of
