@@ -64,6 +64,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Text.Blaze.Html (Html)
 
+import qualified Debug.Trace as Debug
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
@@ -1125,7 +1126,7 @@ data JoinKind =
   | LeftOuterJoinKind  -- ^ @LEFT OUTER JOIN@
   | RightOuterJoinKind -- ^ @RIGHT OUTER JOIN@
   | FullOuterJoinKind  -- ^ @FULL OUTER JOIN@
-    deriving Eq
+    deriving (Eq, Show)
 
 
 -- | (Internal) Functions that operate on types (that should be)
@@ -1538,6 +1539,33 @@ data FromClause =
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
 
+instance Show FromClause where
+  show fc = case fc of
+    FromStart i _ ->
+      "(FromStart " <> show i <> ")"
+    FromJoin lhs jk rhs mexpr ->
+      mconcat
+        [ "(FromJoin "
+        , show lhs
+        , " "
+        , show jk
+        , " "
+        , show rhs
+        , case mexpr of
+            Nothing -> ""
+            Just expr -> "(" <> render' expr <> ")"
+        , ")"
+      ]
+    OnClause expr ->
+      "(OnClause " <> render' expr <> ")"
+
+
+    where
+      dummy = SqlBackend
+        { connEscapeName = \(DBName x) -> x
+        }
+      render' = T.unpack . renderExpr dummy
+
 
 -- | A part of a @SET@ clause.
 newtype SetClause = SetClause (SqlExpr (Value ()))
@@ -1551,6 +1579,7 @@ collectOnClauses
   -> [FromClause]
   -> Either (SqlExpr (Value Bool)) [FromClause]
 collectOnClauses sqlBackend = go Set.empty []
+  -- . (\fcs -> Debug.trace (mappend "FromClauses: " (show fcs)) fcs)
   where
     go is []  (f@(FromStart i _) : fs) =
       fmap (f:) (go (Set.insert i is) [] fs) -- fast path
@@ -1599,39 +1628,53 @@ collectOnClauses sqlBackend = go Set.empty []
     tryMatch idents expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
-          matchTable <|> matchR <|> matchC <|> matchL <|> matchPartial -- right to left
+          matchR <|> matchTable <|> matchL <|> matchPartial <|> matchC -- right to left
             where
               matchR = fmap (\r' -> FromJoin l k r' onClause)
                 <$> tryMatch idents expr r
               matchL = fmap (\l' -> FromJoin l' k r onClause)
                 <$> tryMatch idents expr l
+
               matchPartial = do
-                i1 <- findLeftmostIdent l
-                i2 <- findRightmostIdent r
+                -- Debug.traceM $ "matchPartial"
+                -- Debug.traceM $ "matchPartial: identsInOnClause: " <> show identsInOnClause
+                -- Debug.traceM $ "matchPartial: seen idents: " <> show idents
+                ll <- findLeftmostIdent l
+                -- Debug.traceM $ "matchPartial: ll: " <> show ll
+                rr <- findLeftmostIdent r
+                -- Debug.traceM $ "matchPartial: rr: " <> show rr
                 guard $
                   Set.isSubsetOf
                     identsInOnClause
-                    (Set.fromList [i1, i2])
+                    (Set.fromList [ll, rr])
+                -- Debug.traceM "matchPartial: passed subset check"
                 guard $ k /= CrossJoinKind
+                -- Debug.traceM "matchPartial: passed cross join kind check"
                 guard $ Maybe.isNothing onClause
+                -- Debug.traceM "matchPartial: passed isNothing check!"
                 pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
+
               matchC =
                 case onClause of
                   Nothing
                     | "?" `T.isInfixOf` renderedExpr ->
+                      -- Debug.trace ("matchC success" <> show identsInOnClause) $
                         return (idents, FromJoin l k r (Just expr))
                     | Set.null identsInOnClause ->
+                      -- Debug.trace ("matchC success" <> show identsInOnClause) $
                         return (idents, FromJoin l k r (Just expr))
                     | otherwise ->
                         Nothing
                   Just _ ->
                     Nothing
               matchTable = do
+                -- Debug.traceM $ "matchTable: " <> show identsInOnClause
                 i1 <- findLeftmostIdent r
                 i2 <- findRightmostIdent l
                 guard $ Set.fromList [i1, i2] `Set.isSubsetOf` identsInOnClause
                 guard $ k /= CrossJoinKind
                 guard $ Maybe.isNothing onClause
+                -- Debug.traceM $ "matchTable: succeed " <> show identsInOnClause
                 pure (Set.fromList [i1, i2] <> idents, FromJoin l k r (Just expr))
 
         _ ->
