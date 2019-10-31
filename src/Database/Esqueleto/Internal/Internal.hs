@@ -64,6 +64,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Text.Blaze.Html (Html)
 
+
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
@@ -470,11 +471,11 @@ subSelectForeign
   -> (SqlExpr (Entity val1) -> SqlExpr (Value a))
   -- ^ A function to extract a value from the foreign reference table.
   -> SqlExpr (Value a)
-subSelectForeign expr foreignKey with =
+subSelectForeign expr foreignKey k =
   subSelectUnsafe $
   from $ \table -> do
   where_ $ expr ^. foreignKey ==. table ^. persistIdField
-  pure (with table)
+  pure (k table)
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
 -- because it can throw runtime exceptions in two cases:
@@ -1125,7 +1126,7 @@ data JoinKind =
   | LeftOuterJoinKind  -- ^ @LEFT OUTER JOIN@
   | RightOuterJoinKind -- ^ @RIGHT OUTER JOIN@
   | FullOuterJoinKind  -- ^ @FULL OUTER JOIN@
-    deriving Eq
+    deriving (Eq, Show)
 
 
 -- | (Internal) Functions that operate on types (that should be)
@@ -1538,6 +1539,40 @@ data FromClause =
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
 
+collectIdents :: FromClause -> Set Ident
+collectIdents fc = case fc of
+  FromStart i _ -> Set.singleton i
+  FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
+  OnClause _ -> mempty
+
+instance Show FromClause where
+  show fc = case fc of
+    FromStart i _ ->
+      "(FromStart " <> show i <> ")"
+    FromJoin lhs jk rhs mexpr ->
+      mconcat
+        [ "(FromJoin "
+        , show lhs
+        , " "
+        , show jk
+        , " "
+        , case mexpr of
+            Nothing -> "(no on clause)"
+            Just expr -> "(" <> render' expr <> ")"
+        , " "
+        , show rhs
+        , ")"
+      ]
+    OnClause expr ->
+      "(OnClause " <> render' expr <> ")"
+
+
+    where
+      dummy = SqlBackend
+        { connEscapeName = \(DBName x) -> x
+        }
+      render' = T.unpack . renderExpr dummy
+
 
 -- | A part of a @SET@ clause.
 newtype SetClause = SetClause (SqlExpr (Value ()))
@@ -1551,6 +1586,7 @@ collectOnClauses
   -> [FromClause]
   -> Either (SqlExpr (Value Bool)) [FromClause]
 collectOnClauses sqlBackend = go Set.empty []
+ --  . (\fc -> Debug.trace ("From Clauses: " <> show fc) fc)
   where
     go is []  (f@(FromStart i _) : fs) =
       fmap (f:) (go (Set.insert i is) [] fs) -- fast path
@@ -1568,6 +1604,7 @@ collectOnClauses sqlBackend = go Set.empty []
       -> SqlExpr (Value Bool)
       -> Either (SqlExpr (Value Bool)) (Set Ident, [FromClause])
     findMatching idents fromClauses expr =
+      -- Debug.trace ("From Clause: " <> show fromClauses) $
       case fromClauses of
         f : acc ->
           let
@@ -1605,16 +1642,24 @@ collectOnClauses sqlBackend = go Set.empty []
                 <$> tryMatch idents expr r
               matchL = fmap (\l' -> FromJoin l' k r onClause)
                 <$> tryMatch idents expr l
+
               matchPartial = do
+                --Debug.traceM $ "matchPartial"
+                --Debug.traceM $ "matchPartial: identsInOnClause: " <> show identsInOnClause
                 i1 <- findLeftmostIdent l
-                i2 <- findRightmostIdent r
+                i2 <- findLeftmostIdent r
+                let leftIdents = collectIdents l
+                -- Debug.traceM $ "matchPartial: i1: " <> show i1
+                -- Debug.traceM $ "matchPartial: i2: " <> show i2
+                -- Debug.traceM $ "matchPartial: idents: " <> show idents
                 guard $
                   Set.isSubsetOf
                     identsInOnClause
-                    (Set.fromList [i1, i2])
+                    (Set.fromList [i1, i2] <> leftIdents)
                 guard $ k /= CrossJoinKind
                 guard $ Maybe.isNothing onClause
-                pure (Set.fromList [] <> idents, FromJoin l k r (Just expr))
+                pure (idents, FromJoin l k r (Just expr))
+
               matchC =
                 case onClause of
                   Nothing

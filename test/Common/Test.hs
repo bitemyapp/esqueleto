@@ -95,6 +95,19 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Bar
     quux FooId
     deriving Show Eq Ord
+  Baz
+    blargh FooId
+    deriving Show Eq
+  Shoop
+    baz BazId
+    deriving Show Eq
+  Asdf
+    shoop ShoopId
+    deriving Show Eq
+  Another
+    why BazId
+  YetAnother
+    argh ShoopId
 
   Person
     name String
@@ -110,6 +123,9 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     body String
     blog BlogPostId
     deriving Eq Show
+  CommentReply
+    body String
+    comment CommentId
   Profile
     name String
     person PersonId
@@ -2152,7 +2168,82 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
         pure (a, b)
       listsEqualOn a (map (\(x, y) -> (y, x)) b) id
 
+    it "works with joins in subselect" $ do
+      run $ void $
+        select $
+        from $ \(p `InnerJoin` r) -> do
+        on $ p ^. PersonId ==. r ^. ReplyGuy
+        pure . (,) (p ^. PersonName) $
+          subSelect $
+          from $ \(c `InnerJoin` bp) -> do
+          on $ bp ^. BlogPostId ==. c ^. CommentBlog
+          pure (c ^. CommentBody)
 
+    describe "works with nested joins" $ do
+      it "unnested" $ do
+        run $ void $
+          selectRethrowingQuery $
+          from $ \(f `InnerJoin` b `LeftOuterJoin` baz `InnerJoin` shoop) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
+      it "leftmost nesting" $ do
+        run $ void $
+          selectRethrowingQuery $
+          from $ \((f `InnerJoin` b) `LeftOuterJoin` baz `InnerJoin` shoop) -> do
+          on $ f ^. FooId ==. b ^. BarQuux
+          on $ f ^. FooId ==. baz ^. BazBlargh
+          on $ baz ^. BazId ==. shoop ^. ShoopBaz
+          pure ( f ^. FooName)
+      describe "middle nesting" $ do
+        it "direct association" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(p `InnerJoin` (bp `LeftOuterJoin` c) `LeftOuterJoin` cr) -> do
+            on $ p ^. PersonId ==. bp ^. BlogPostAuthorId
+            on $ just (bp ^. BlogPostId) ==. c ?. CommentBlog
+            on $ c ?. CommentId ==. cr ?. CommentReplyComment
+            pure (p,bp,c,cr)
+        it "indirect association" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(f `InnerJoin` b `LeftOuterJoin` (baz `InnerJoin` shoop) `InnerJoin` asdf) -> do
+            on $ f ^. FooId ==. b ^. BarQuux
+            on $ f ^. FooId ==. baz ^. BazBlargh
+            on $ baz ^. BazId ==. shoop ^. ShoopBaz
+            on $ asdf ^. AsdfShoop ==. shoop ^. ShoopId
+            pure (f ^. FooName)
+        it "indirect association across" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(f `InnerJoin` b `LeftOuterJoin` (baz `InnerJoin` shoop) `InnerJoin` asdf `InnerJoin` another `InnerJoin` yetAnother) -> do
+            on $ f ^. FooId ==. b ^. BarQuux
+            on $ f ^. FooId ==. baz ^. BazBlargh
+            on $ baz ^. BazId ==. shoop ^. ShoopBaz
+            on $ asdf ^. AsdfShoop ==. shoop ^. ShoopId
+            on $ another ^. AnotherWhy ==. baz ^. BazId
+            on $ yetAnother ^. YetAnotherArgh ==. shoop ^. ShoopId
+            pure (f ^. FooName)
+
+      describe "rightmost nesting" $ do
+        it "direct associations" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(p `InnerJoin` bp `LeftOuterJoin` (c `LeftOuterJoin` cr)) -> do
+            on $ p ^. PersonId ==. bp ^. BlogPostAuthorId
+            on $ just (bp ^. BlogPostId) ==. c ?. CommentBlog
+            on $ c ?. CommentId ==. cr ?. CommentReplyComment
+            pure (p,bp,c,cr)
+
+        it "indirect association" $ do
+          run $ void $
+            selectRethrowingQuery $
+            from $ \(f `InnerJoin` b `LeftOuterJoin` (baz `InnerJoin` shoop)) -> do
+            on $ f ^. FooId ==. b ^. BarQuux
+            on $ f ^. FooId ==. baz ^. BazBlargh
+            on $ baz ^. BazId ==. shoop ^. ShoopBaz
+            pure (f ^. FooName)
 
 listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
