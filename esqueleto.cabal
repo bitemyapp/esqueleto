@@ -49,7 +49,6 @@ library
     , attoparsec >= 0.13 && < 0.14
     , blaze-html
     , bytestring
-    , containers
     , conduit >=1.3
     , containers
     , monad-logger
