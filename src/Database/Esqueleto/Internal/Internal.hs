@@ -2068,6 +2068,13 @@ unsafeSqlCastAs t (ERaw p f) =
     in ("CAST" <> parens ( parensM p b <> " AS " <> TLB.fromText t), v )
 unsafeSqlCastAs _ (ECompositeKey _) = throw (CompositeKeyErr SqlCastAsError)
 
+-- | (Internal) This class allows 'unsafeSqlFunction' to work with different
+-- numbers of arguments; specifically it allows providing arguments to a sql
+-- function via an n-tuple of @SqlExpr (Value _)@ values, which are not all
+-- necessarily required to be the same type. There are instances for up to
+-- 10-tuples, but for sql functions which take more than 10 arguments, you can
+-- also nest tuples, as e.g. @toArgList ((a,b),(c,d))@ is the same as
+-- @toArgList (a,b,c,d)@.
 class UnsafeSqlFunctionArgument a where
   toArgList :: a -> [SqlExpr (Value ())]
 
@@ -2097,7 +2104,69 @@ instance ( UnsafeSqlFunctionArgument a
          , UnsafeSqlFunctionArgument d
          ) => UnsafeSqlFunctionArgument (a, b, c, d) where
   toArgList = toArgList . from4
-
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e) where
+  toArgList = toArgList . from5
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         , UnsafeSqlFunctionArgument f
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f) where
+  toArgList = toArgList . from6
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         , UnsafeSqlFunctionArgument f
+         , UnsafeSqlFunctionArgument g
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f, g) where
+  toArgList = toArgList . from7
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         , UnsafeSqlFunctionArgument f
+         , UnsafeSqlFunctionArgument g
+         , UnsafeSqlFunctionArgument h
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f, g, h) where
+  toArgList = toArgList . from8
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         , UnsafeSqlFunctionArgument f
+         , UnsafeSqlFunctionArgument g
+         , UnsafeSqlFunctionArgument h
+         , UnsafeSqlFunctionArgument i
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f, g, h, i) where
+  toArgList = toArgList . from9
+-- | @since 3.2.3
+instance ( UnsafeSqlFunctionArgument a
+         , UnsafeSqlFunctionArgument b
+         , UnsafeSqlFunctionArgument c
+         , UnsafeSqlFunctionArgument d
+         , UnsafeSqlFunctionArgument e
+         , UnsafeSqlFunctionArgument f
+         , UnsafeSqlFunctionArgument g
+         , UnsafeSqlFunctionArgument h
+         , UnsafeSqlFunctionArgument i
+         , UnsafeSqlFunctionArgument j
+         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f, g, h, i, j) where
+  toArgList = toArgList . from10
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
@@ -2805,6 +2874,9 @@ instance ( SqlSelect a ra
 from5P :: Proxy (a,b,c,d,e) -> Proxy ((a,b),(c,d),e)
 from5P = const Proxy
 
+from5 :: (a,b,c,d,e) -> ((a,b),(c,d),e)
+from5 (a,b,c,d,e) = ((a,b),(c,d),e)
+
 to5 :: ((a,b),(c,d),e) -> (a,b,c,d,e)
 to5 ((a,b),(c,d),e) = (a,b,c,d,e)
 
@@ -2830,6 +2902,9 @@ instance ( SqlSelect a ra
 
 from6P :: Proxy (a,b,c,d,e,f) -> Proxy ((a,b),(c,d),(e,f))
 from6P = const Proxy
+
+from6 :: (a,b,c,d,e,f) -> ((a,b),(c,d),(e,f))
+from6 (a,b,c,d,e,f) = ((a,b),(c,d),(e,f))
 
 to6 :: ((a,b),(c,d),(e,f)) -> (a,b,c,d,e,f)
 to6 ((a,b),(c,d),(e,f)) = (a,b,c,d,e,f)
@@ -2858,6 +2933,9 @@ instance ( SqlSelect a ra
 
 from7P :: Proxy (a,b,c,d,e,f,g) -> Proxy ((a,b),(c,d),(e,f),g)
 from7P = const Proxy
+
+from7 :: (a,b,c,d,e,f,g) -> ((a,b),(c,d),(e,f),g)
+from7 (a,b,c,d,e,f,g) = ((a,b),(c,d),(e,f),g)
 
 to7 :: ((a,b),(c,d),(e,f),g) -> (a,b,c,d,e,f,g)
 to7 ((a,b),(c,d),(e,f),g) = (a,b,c,d,e,f,g)
@@ -2889,6 +2967,9 @@ instance ( SqlSelect a ra
 from8P :: Proxy (a,b,c,d,e,f,g,h) -> Proxy ((a,b),(c,d),(e,f),(g,h))
 from8P = const Proxy
 
+from8 :: (a,b,c,d,e,f,g,h) -> ((a,b),(c,d),(e,f),(g,h))
+from8 (a,b,c,d,e,f,g,h) = ((a,b),(c,d),(e,f),(g,h))
+
 to8 :: ((a,b),(c,d),(e,f),(g,h)) -> (a,b,c,d,e,f,g,h)
 to8 ((a,b),(c,d),(e,f),(g,h)) = (a,b,c,d,e,f,g,h)
 
@@ -2919,6 +3000,9 @@ instance ( SqlSelect a ra
 
 from9P :: Proxy (a,b,c,d,e,f,g,h,i) -> Proxy ((a,b),(c,d),(e,f),(g,h),i)
 from9P = const Proxy
+
+from9 :: (a,b,c,d,e,f,g,h,i) -> ((a,b),(c,d),(e,f),(g,h),i)
+from9 (a,b,c,d,e,f,g,h,i) = ((a,b),(c,d),(e,f),(g,h),i)
 
 to9 :: ((a,b),(c,d),(e,f),(g,h),i) -> (a,b,c,d,e,f,g,h,i)
 to9 ((a,b),(c,d),(e,f),(g,h),i) = (a,b,c,d,e,f,g,h,i)
@@ -2952,6 +3036,9 @@ instance ( SqlSelect a ra
 
 from10P :: Proxy (a,b,c,d,e,f,g,h,i,j) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j))
 from10P = const Proxy
+
+from10 :: (a,b,c,d,e,f,g,h,i,j) -> ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
 
 to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
 to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)

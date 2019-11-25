@@ -1,3 +1,9 @@
+3.2.3
+========
+
+- @hdgarrood
+  - [#163](https://github.com/bitemyapp/esqueleto/pull/163): Allow `unsafeSqlFunction` to take up to 10 arguments without needing to nest tuples.
+
 3.2.2
 ========
 
