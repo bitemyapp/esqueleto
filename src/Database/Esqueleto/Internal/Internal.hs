@@ -681,6 +681,41 @@ coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return
 lower_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 lower_  = unsafeSqlFunction "LOWER"
 
+-- | @UPPER@ function.
+-- /Since: 3.3.0/
+upper_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+upper_  = unsafeSqlFunction "UPPER"
+
+-- | @TRIM@ function.
+-- /Since: 3.3.0/
+trim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+trim_  = unsafeSqlFunction "TRIM"
+
+-- | @RTRIM@ function.
+-- /Since: 3.3.0/
+rtrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+rtrim_  = unsafeSqlFunction "RTRIM"
+
+-- | @LTRIM@ function.
+-- /Since: 3.3.0/
+ltrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+ltrim_  = unsafeSqlFunction "LTRIM"
+
+-- | @LENGTH@ function.
+-- /Since: 3.3.0/
+length_ :: (SqlString s, Num a) => SqlExpr (Value s) -> SqlExpr (Value a)
+length_ = unsafeSqlFunction "LENGTH"
+
+-- | @LEFT@ function.
+-- /Since: 3.3.0/
+left_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+left_ = unsafeSqlFunction "LEFT"
+
+-- | @RIGHT@ function.
+-- /Since: 3.3.0/
+right_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+right_ = unsafeSqlFunction "RIGHT"
+
 -- | @LIKE@ operator.
 like :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
 like    = unsafeSqlBinOp    " LIKE "

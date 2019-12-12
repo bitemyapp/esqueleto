@@ -1,3 +1,9 @@
+3.3.0
+========
+
+- @charukiewicz, @belevy, @joemalin95
+  - [#166](https://github.com/bitemyapp/esqueleto/pull/166): Add several common SQL string functions: `upper_`, `trim_`, `ltrim_`, `rtrim_`, `length_`, `left_`, `right_`
+
 3.2.3
 ========
 
