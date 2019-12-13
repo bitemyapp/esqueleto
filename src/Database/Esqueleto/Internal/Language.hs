@@ -51,7 +51,8 @@ module Database.Esqueleto.Internal.Language
              , random_, round_, ceiling_, floor_
              , min_, max_, sum_, avg_, castNum, castNumM
              , coalesce, coalesceDefault
-             , lower_, like, ilike, (%), concat_, (++.), castString
+             , lower_, upper_, trim_, ltrim_, rtrim_, length_, left_, right_
+             , like, ilike, (%), concat_, (++.), castString
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
