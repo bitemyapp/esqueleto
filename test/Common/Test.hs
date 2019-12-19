@@ -848,9 +848,9 @@ testSelectSubQuery run = do
       run $ do
         p1e <- insert' p1
         let q = from $ \p -> do
-                  return ( p ^. PersonName )
+                  return ( p ^. PersonName, p ^. PersonAge)
         ret <- select $ fromQuery q pure       
-        liftIO $ ret `shouldBe` [ (Alias "John") ]
+        liftIO $ ret `shouldBe` [ (Alias $ personName p1, Alias $ personAge p1) ]
 
 renderQuery q = do
  conn <- ask

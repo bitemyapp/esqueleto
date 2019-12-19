@@ -130,14 +130,14 @@ fromFinish (EPreprocessedFrom ret f') = Q $ do
   return ret
 
 fromQuery
-  :: (SqlSelect a' r, ToAlias a a', ToAliasReference b b')
+  :: (SqlSelect a' r, SqlSelect b' r', ToAlias a a', ToAliasReference b b')
   => SqlQuery a
   -> (a' -> SqlQuery b)
   -> SqlQuery b'
 fromQuery subquery f = do
     subqueryAlias <- newIdentFor (DBName "subquery")
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
-    aliasedValue <- toAlias sideData ret
+    aliasedValue <- toAlias ret
     identState <- Q $ lift S.get
     Q $ W.tell mempty{sdFromClause = [FromQuery subqueryAlias (\info -> toRawSql SELECT info (Q $ W.WriterT $ S.StateT $ (\_ -> pure ((aliasedValue, sideData), identState))))]}
     Q $ lift $ S.modify (\s -> s{inUse = HS.difference (inUse s) (HS.fromList (concat $ toIdents <$> (sdFromClause sideData)))})
@@ -152,41 +152,44 @@ fromQuery subquery f = do
         _ -> []
         
 
+-- Tedious tuple magic
 class ToAlias a b | a -> b where
-  toAlias :: SideData -> a -> SqlQuery b
+  toAlias :: a -> SqlQuery b
 
 instance ToAlias (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
-  toAlias sideData = pure
+  toAlias = pure
 
 instance ToAlias (SqlExpr (Value a)) (SqlExpr (Alias a)) where
-  toAlias sideData v = do 
+  toAlias v = do 
     ident <- newIdentFor (DBName "value")
     pure $ EAliasedValue ident v
 
-{--
 instance ( ToAlias a a', ToAlias b b') => ToAlias (a,b) (a',b') where
-  toAlias (a,b) = do 
-      sqlQuery1 <- toAlias a
-      sqlQuery2 <- toAlias b
-      pure $ (,) <$> sqlQuery1 <*> sqlQuery2
+  toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
 
 instance ( ToAlias a a'
          , ToAlias b b'
          , ToAlias c c'
          ) => ToAlias (a,b,c) (a',b',c') where
-  toAlias x = fmap (fmap to3) $ (toAlias $ from3 x)
+  toAlias x = to3 <$> (toAlias $ from3 x)
 
 instance ( ToAlias a a'
          , ToAlias b b'
          , ToAlias c c'
          , ToAlias d d'
          ) => ToAlias (a,b,c,d) (a',b',c',d') where
-  toAlias x = fmap (fmap to4) $ (toAlias $ from4 x)
+  toAlias x = to4 <$> (toAlias $ from4 x)
 
---}
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         , ToAlias d d'
+         , ToAlias e e'
+         ) => ToAlias (a,b,c,d,e) (a',b',c',d',e') where
+  toAlias x = to5 <$> (toAlias $ from5 x)
 
--- This is vaguely generic, b should always contain aliases in the instances
-class ToAliasReference a b | a -> b where
+-- more tedious tuple magic 
+class ToAliasReference a b | a -> b, b -> a where
   toAliasReference :: Ident -> a -> b
 
 instance ToAliasReference (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
@@ -199,21 +202,23 @@ instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          ) => ToAliasReference (a,b,c) ( a', b', c') where
-  toAliasReference ident (a,b,c) = ( toAliasReference ident a 
-                                   , toAliasReference ident b
-                                   , toAliasReference ident c
-                                   )
+  toAliasReference ident = to3 . toAliasReference ident . from3
+
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          , ToAliasReference d d'
          ) => ToAliasReference (a,b,c,d) (a',b',c',d') where
-  toAliasReference ident (a,b,c,d) = (,,,)  (toAliasReference ident a)
-                                            (toAliasReference ident b)
-                                            (toAliasReference ident c)
-                                            (toAliasReference ident d)
+  toAliasReference ident = to4 . toAliasReference ident . from4 
 
---}
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
+  toAliasReference ident = to5 . toAliasReference ident . from5
+
 
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
