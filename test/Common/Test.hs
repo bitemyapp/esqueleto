@@ -851,6 +851,16 @@ testSelectSubQuery run = do
                   return ( p ^. PersonName, p ^. PersonAge)
         ret <- select $ fromQuery q pure       
         liftIO $ ret `shouldBe` [ (Alias $ personName p1, Alias $ personAge p1) ]
+    it "lets you order by alias" $ do
+      run $ do
+        _ <- insert' p1
+        _ <- insert' p3
+        let q = from $ \p -> do
+                  return ( p ^. PersonName, p ^. PersonAge)
+        ret <- select $ fromQuery q $ \(name, age) -> do 
+            orderBy [ asc age ]
+            pure name
+        liftIO $ ret `shouldBe` [ Alias $ personName p3, Alias $ personName p1 ]
 
 renderQuery q = do
  conn <- ask

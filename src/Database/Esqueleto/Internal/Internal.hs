@@ -314,13 +314,19 @@ groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr
 orderBy :: [SqlExpr OrderBy] -> SqlQuery ()
 orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
 
--- | Ascending order of this field or SqlExpression.
-asc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-asc  = EOrderBy ASC
+class SqlOrderBy a where
+  -- | Ascending order of this field or SqlExpression.
+  asc :: SqlExpr a -> SqlExpr OrderBy 
+  -- | Descending order of this field or SqlExpression.
+  desc :: SqlExpr a -> SqlExpr OrderBy
 
--- | Descending order of this field or SqlExpression.
-desc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-desc = EOrderBy DESC
+instance SqlOrderBy (Value a) where
+  asc = EOrderBy ASC
+  desc = EOrderBy DESC
+
+instance SqlOrderBy (Alias a) where
+  asc = EOrderByAlias ASC
+  desc = EOrderByAlias DESC
 
 -- | @LIMIT@.  Limit the number of returned rows.
 limit :: Int64 -> SqlQuery ()
@@ -1068,6 +1074,7 @@ then_ = ()
 else_ :: expr a -> expr a
 else_ = id
 
+
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
@@ -1095,6 +1102,7 @@ instance Functor Alias where
 instance Applicative Alias where
   (<*>) (Alias f) (Alias a) = Alias (f a)
   pure = Alias
+
 
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
@@ -2794,6 +2802,8 @@ makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk
       let fs = f info
           vals = repeat []
       in zip (map (<> orderByType t) fs) vals
+    mk (EOrderByAlias t (EAliasedValue i _)) = [((useIdent info i) <> (orderByType t), mempty)]
+    mk (EOrderByAlias t (EAliasReference sourceIdent columnIdent)) = [((useIdent info sourceIdent <> "." <> useIdent info columnIdent) <> orderByType t, mempty)]
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
