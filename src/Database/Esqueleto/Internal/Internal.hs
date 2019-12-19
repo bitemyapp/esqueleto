@@ -129,6 +129,92 @@ fromFinish (EPreprocessedFrom ret f') = Q $ do
   W.tell mempty { sdFromClause = [f'] }
   return ret
 
+fromQuery
+  :: (SqlSelect a' r, ToAlias a a', ToAliasReference b b')
+  => SqlQuery a
+  -> (a' -> SqlQuery b)
+  -> SqlQuery b'
+fromQuery subquery f = do
+    subqueryAlias <- newIdentFor (DBName "subquery")
+    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
+    aliasedValue <- toAlias sideData ret
+    identState <- Q $ lift S.get
+    Q $ W.tell mempty{sdFromClause = [FromQuery subqueryAlias (\info -> toRawSql SELECT info (Q $ W.WriterT $ S.StateT $ (\_ -> pure ((aliasedValue, sideData), identState))))]}
+    Q $ lift $ S.modify (\s -> s{inUse = HS.difference (inUse s) (HS.fromList (concat $ toIdents <$> (sdFromClause sideData)))})
+    outerQueryResults <- f aliasedValue
+    pure $ toAliasReference subqueryAlias outerQueryResults
+  where
+
+    toIdents fromClause = 
+      case fromClause of
+        FromStart (I i) _ -> [i]
+        FromJoin r _ l _ -> toIdents r ++ toIdents l
+        _ -> []
+        
+
+class ToAlias a b | a -> b where
+  toAlias :: SideData -> a -> SqlQuery b
+
+instance ToAlias (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
+  toAlias sideData = pure
+
+instance ToAlias (SqlExpr (Value a)) (SqlExpr (Alias a)) where
+  toAlias sideData v = do 
+    ident <- newIdentFor (DBName "value")
+    pure $ EAliasedValue ident v
+
+{--
+instance ( ToAlias a a', ToAlias b b') => ToAlias (a,b) (a',b') where
+  toAlias (a,b) = do 
+      sqlQuery1 <- toAlias a
+      sqlQuery2 <- toAlias b
+      pure $ (,) <$> sqlQuery1 <*> sqlQuery2
+
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         ) => ToAlias (a,b,c) (a',b',c') where
+  toAlias x = fmap (fmap to3) $ (toAlias $ from3 x)
+
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         , ToAlias d d'
+         ) => ToAlias (a,b,c,d) (a',b',c',d') where
+  toAlias x = fmap (fmap to4) $ (toAlias $ from4 x)
+
+--}
+
+-- This is vaguely generic, b should always contain aliases in the instances
+class ToAliasReference a b | a -> b where
+  toAliasReference :: Ident -> a -> b
+
+instance ToAliasReference (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
+  toAliasReference aliasSource (EAliasedValue aliasIdent _) = EAliasReference aliasSource aliasIdent
+
+instance ( ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) ( a', b' ) where
+  toAliasReference ident (a,b) = (toAliasReference ident a,  toAliasReference ident b)
+
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         ) => ToAliasReference (a,b,c) ( a', b', c') where
+  toAliasReference ident (a,b,c) = ( toAliasReference ident a 
+                                   , toAliasReference ident b
+                                   , toAliasReference ident c
+                                   )
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         ) => ToAliasReference (a,b,c,d) (a',b',c',d') where
+  toAliasReference ident (a,b,c,d) = (,,,)  (toAliasReference ident a)
+                                            (toAliasReference ident b)
+                                            (toAliasReference ident c)
+                                            (toAliasReference ident d)
+
+--}
+
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
 where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
@@ -994,6 +1080,17 @@ instance Monad Value where
   (>>=) x f = valueJoin $ fmap f x
     where valueJoin (Value v) = v
 
+-- | A single value that has been aliased. These can be made using toAlias.
+-- fromQuery will automatically alias any values returned by the sub query
+newtype Alias a = Alias { unAlias :: a } deriving (Eq, Ord, Show, Typeable)
+
+instance Functor Alias where
+  fmap f (Alias a) = Alias (f a)
+
+instance Applicative Alias where
+  (<*>) (Alias f) (Alias a) = Alias (f a)
+  pure = Alias
+
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
@@ -1573,12 +1670,14 @@ data FromClause =
     FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
+  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 collectIdents :: FromClause -> Set Ident
 collectIdents fc = case fc of
   FromStart i _ -> Set.singleton i
   FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
   OnClause _ -> mempty
+  FromQuery _ _ -> mempty
 
 instance Show FromClause where
   show fc = case fc of
@@ -1600,6 +1699,8 @@ instance Show FromClause where
       ]
     OnClause expr ->
       "(OnClause " <> render' expr <> ")"
+    FromQuery ident _->
+      "(FromQuery " <> show ident <> ")"
 
 
     where
@@ -1658,10 +1759,12 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromStart i _) = Just i
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
+    findRightmostIdent (FromQuery _ _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
+    findLeftmostIdent (FromQuery _ _) = Nothing
 
     tryMatch
       :: Set Ident
@@ -1838,6 +1941,13 @@ data SqlExpr a where
   -- interpolated by the SQL backend.
   ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
 
+
+  -- A raw expression with an alias 
+  EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Alias a)
+
+  -- A reference to an aliased field in a table or subquery
+  EAliasReference :: Ident -> Ident -> SqlExpr (Alias a)
+
   -- A composite key.
   --
   -- Persistent uses the same 'PersistList' constructor for both
@@ -1886,6 +1996,8 @@ data SqlExpr a where
 
   -- A 'SqlExpr' accepted only by 'orderBy'.
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
+  EOrderByAlias :: OrderByType -> SqlExpr (Alias a) -> SqlExpr OrderBy
+
   EOrderRandom :: SqlExpr OrderBy
 
   -- A 'SqlExpr' accepted only by 'distinctOn'.
@@ -2610,6 +2722,9 @@ makeFrom info mode fs = ret
               , maybe mempty makeOnClause monClause
               ]
     mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
+    mk _ (FromQuery ident f) = 
+      let (queryText, queryVals) = f info
+      in ((parens queryText) <> " AS " <> useIdent info ident, queryVals)
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def
@@ -2800,6 +2915,15 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
   sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
   sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
 
+instance PersistField a => SqlSelect (SqlExpr (Alias a)) (Alias a) where
+  sqlSelectCols info (EAliasedValue ident x) =
+    let (b, vals) = sqlSelectCols info x
+    in (b <> " AS " <> (useIdent info ident), vals)
+  sqlSelectCols info (EAliasReference sourceIdent columnIdent) =
+    ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), [])
+  sqlSelectColCount = const 1
+  sqlSelectProcessRow [pv] = Alias <$> fromPersistValue pv
+  sqlSelectProcessRow pvs  = Alias <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
 materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])

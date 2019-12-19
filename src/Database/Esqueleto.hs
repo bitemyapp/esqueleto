@@ -64,8 +64,11 @@ module Database.Esqueleto
   , then_
   , else_
   , from
+  , fromQuery
   , Value(..)
   , ValueList(..)
+  , Alias(..)
+  , toAlias
   , OrderBy
   , DistinctOn
   , LockingKind(..)

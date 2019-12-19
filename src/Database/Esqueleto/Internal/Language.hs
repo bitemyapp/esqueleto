@@ -14,10 +14,13 @@
 module Database.Esqueleto.Internal.Language
   ( -- * The pretty face
     from
+  , fromQuery
   , Value(..)
   , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
+  , Alias(..)
+  , toAlias
   , InnerJoin(..)
   , CrossJoin(..)
   , LeftOuterJoin(..)

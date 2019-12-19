@@ -841,6 +841,25 @@ testSelectJoin run = do
               return p
           liftIO $ (entityVal <$> ps) `shouldBe` [p1]
 
+testSelectSubQuery :: Run -> Spec
+testSelectSubQuery run = do
+  describe "select subquery" $ do
+    it "works" $ do
+      run $ do
+        p1e <- insert' p1
+        let q = from $ \p -> do
+                  return ( p ^. PersonName )
+        ret <- select $ fromQuery q pure       
+        liftIO $ ret `shouldBe` [ (Alias "John") ]
+
+renderQuery q = do
+ conn <- ask
+ pure (queryToText conn q)
+
+queryToText conn q =  
+  let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+  in TLB.toLazyText tlb
+
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
   describe "select where_" $ do
@@ -2256,6 +2275,7 @@ tests run = do
     testSelectSource run
     testSelectFrom run
     testSelectJoin run
+    testSelectSubQuery run
     testSelectWhere run
     testSelectOrderBy run
     testSelectDistinct run
