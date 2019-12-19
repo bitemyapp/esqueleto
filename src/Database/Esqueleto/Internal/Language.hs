@@ -19,7 +19,6 @@ module Database.Esqueleto.Internal.Language
   , ValueList(..)
   , SomeValue(..)
   , ToSomeValues(..)
-  , Alias(..)
   , toAlias
   , InnerJoin(..)
   , CrossJoin(..)

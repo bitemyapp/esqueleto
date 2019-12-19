@@ -155,10 +155,8 @@ fromQuery subquery f = do
 class ToAlias a b | a -> b where
   toAlias :: a -> SqlQuery b
 
-instance ToAlias (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
-  toAlias = pure
-
-instance ToAlias (SqlExpr (Value a)) (SqlExpr (Alias a)) where
+instance ToAlias (SqlExpr (Value a)) (SqlExpr (Value a)) where
+  toAlias v@(EAliasedValue _ _) = pure v
   toAlias v = do 
     ident <- newIdentFor (DBName "value")
     pure $ EAliasedValue ident v
@@ -191,11 +189,11 @@ instance ( ToAlias a a'
 class ToAliasReference a b | a -> b where
   toAliasReference :: Ident -> a -> SqlQuery b
 
-instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Alias a)) where
-  toAliasReference _ v = toAlias v
-
-instance ToAliasReference (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
+instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Value a)) where
   toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EAliasReference aliasSource aliasIdent
+  toAliasReference _           v@(ERaw _ _)                 = toAlias v
+  toAliasReference _           v@(ECompositeKey _)          = toAlias v
+  toAliasReference _           v@(EAliasReference _ _)      = pure v 
 
 instance ( ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) ( a', b' ) where
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
@@ -206,13 +204,12 @@ instance ( ToAliasReference a a'
          ) => ToAliasReference (a,b,c) ( a', b', c') where
   toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
 
-{--
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          , ToAliasReference d d'
          ) => ToAliasReference (a,b,c,d) (a',b',c',d') where
-  toAliasReference ident = to4 . toAliasReference ident . from4 
+  toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
 
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
@@ -220,9 +217,8 @@ instance ( ToAliasReference a a'
          , ToAliasReference d d'
          , ToAliasReference e e'
          ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
-  toAliasReference ident = to5 . toAliasReference ident . from5
+  toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
---}
 
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
@@ -318,19 +314,13 @@ groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr
 orderBy :: [SqlExpr OrderBy] -> SqlQuery ()
 orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
 
-class SqlOrderBy a where
-  -- | Ascending order of this field or SqlExpression.
-  asc :: SqlExpr a -> SqlExpr OrderBy 
-  -- | Descending order of this field or SqlExpression.
-  desc :: SqlExpr a -> SqlExpr OrderBy
+-- | Ascending order of this field or SqlExpression.
+asc :: SqlExpr (Value a) -> SqlExpr OrderBy 
+asc = EOrderBy ASC
 
-instance SqlOrderBy (Value a) where
-  asc = EOrderBy ASC
-  desc = EOrderBy DESC
-
-instance SqlOrderBy (Alias a) where
-  asc = EOrderByAlias ASC
-  desc = EOrderByAlias DESC
+-- | Descending order of this field or SqlExpression.
+desc :: SqlExpr (Value a) -> SqlExpr OrderBy
+desc = EOrderBy DESC
 
 -- | @LIMIT@.  Limit the number of returned rows.
 limit :: Int64 -> SqlQuery ()
@@ -653,34 +643,33 @@ joinV (ERaw p f)        = ERaw p f
 joinV (ECompositeKey f) = ECompositeKey f
 
 
-class SqlCountable typ where
-  countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr typ -> SqlExpr (Value a) 
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a) 
+countHelper open close (ERaw _ f) = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . f
+countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
+countHelper open close (EAliasedValue i _) = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i) <> close, mempty))
+countHelper open close (EAliasReference i i') = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i <> "." <> useIdent b i') <> close, mempty))
+-- | @COUNT(*)@ value.
 
-instance SqlCountable (Value a) where
-  countHelper open close (ERaw _ f) = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . f
-  countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
-
-instance SqlCountable (Alias a) where
-  countHelper open close (EAliasedValue i _) = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i) <> close, mempty))
-  countHelper open close (EAliasReference i i') = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i <> "." <> useIdent b i') <> close, mempty))
 -- | @COUNT(*)@ value.
 countRows :: Num a => SqlExpr (Value a)
 countRows     = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: (SqlCountable typ, Num a) => SqlExpr typ -> SqlExpr (Value a)
+count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
 count         = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- /Since: 2.4.1/
-countDistinct :: (SqlCountable typ, Num a) => SqlExpr typ -> SqlExpr (Value a)
+countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                         in ("NOT " <> parensM p b, vals)
 not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
+not_ (EAliasedValue _ _) = throw (AliasedValueErr NotError)
+not_ (EAliasReference _ _) = throw (AliasedValueErr NotError)
 
 
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
@@ -965,6 +954,8 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 (<#) :: (a -> b) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
 (<#) _ (ERaw _ f)        = EInsert Proxy f
 (<#) _ (ECompositeKey _) = throw (CompositeKeyErr ToInsertionError)
+(<#) _ (EAliasedValue _ _) = throw (AliasedValueErr ToInsertionError)
+(<#) _ (EAliasReference _ _) = throw (AliasedValueErr ToInsertionError)
 
 
 -- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
@@ -974,6 +965,8 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
       (gb, gv) = g x
   in (fb <> ", " <> gb, fv ++ gv)
 (EInsert _ _) <&> (ECompositeKey _) = throw (CompositeKeyErr CombineInsertionError)
+(EInsert _ _) <&> (EAliasedValue _ _) = throw (AliasedValueErr CombineInsertionError)
+(EInsert _ _) <&> (EAliasReference _ _) = throw (AliasedValueErr CombineInsertionError)
 
 -- | @CASE@ statement.  For example:
 --
@@ -1107,18 +1100,6 @@ instance Monad Value where
   (>>=) x f = valueJoin $ fmap f x
     where valueJoin (Value v) = v
 
--- | A single value that has been aliased. These can be made using toAlias.
--- fromQuery will automatically alias any values returned by the sub query
-newtype Alias a = Alias { unAlias :: a } deriving (Eq, Ord, Show, Typeable)
-
-instance Functor Alias where
-  fmap f (Alias a) = Alias (f a)
-
-instance Applicative Alias where
-  (<*>) (Alias f) (Alias a) = Alias (f a)
-  pure = Alias
-
-
 -- | A list of single values.  There's a limited set of functions
 -- able to work with this data type (such as 'subList_select',
 -- 'valList', 'in_' and 'exists').
@@ -1128,7 +1109,6 @@ newtype ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 -- | A wrapper type for for any @expr (Value a)@ for all a.
 data SomeValue where
   SomeValue :: SqlExpr (Value a) -> SomeValue
-  SomeAlias :: SqlExpr (Alias a) -> SomeValue
 
 -- | A class of things that can be converted into a list of SomeValue. It has
 -- instances for tuples and is the reason why 'groupBy' can take tuples, like
@@ -1596,13 +1576,14 @@ instance ( FromPreprocess a
 -- | Exception data type for @esqueleto@ internal errors
 data EsqueletoError =
     CompositeKeyErr CompositeKeyError
+  | AliasedValueErr UnexpectedValueError
   | UnexpectedCaseErr UnexpectedCaseError
   | SqlBinOpCompositeErr SqlBinOpCompositeError
   deriving (Show)
 
 instance Exception EsqueletoError
 
-data CompositeKeyError =
+data UnexpectedValueError =
     NotError
   | ToInsertionError
   | CombineInsertionError
@@ -1616,6 +1597,8 @@ data CompositeKeyError =
   | MakeHavingError
   deriving (Show)
 
+type CompositeKeyError = UnexpectedValueError
+
 data UnexpectedCaseError =
     EmptySqlExprValueList
   | MakeFromError
@@ -1624,6 +1607,7 @@ data UnexpectedCaseError =
   | NewIdentForError
   | UnsafeSqlCaseError
   | OperationNotSupported
+  | NotImplemented
   deriving (Show)
 
 data SqlBinOpCompositeError =
@@ -1972,10 +1956,10 @@ data SqlExpr a where
 
 
   -- A raw expression with an alias 
-  EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Alias a)
+  EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Value a)
 
   -- A reference to an aliased field in a table or subquery
-  EAliasReference :: Ident -> Ident -> SqlExpr (Alias a)
+  EAliasReference :: Ident -> Ident -> SqlExpr (Value a)
 
   -- A composite key.
   --
@@ -2025,7 +2009,6 @@ data SqlExpr a where
 
   -- A 'SqlExpr' accepted only by 'orderBy'.
   EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
-  EOrderByAlias :: OrderByType -> SqlExpr (Alias a) -> SqlExpr OrderBy
 
   EOrderRandom :: SqlExpr OrderBy
 
@@ -2056,9 +2039,6 @@ data OrderByType = ASC | DESC
 
 instance ToSomeValues (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
-
-instance ToSomeValues (SqlExpr (Alias a)) where
-  toSomeValues a = [SomeAlias a]
 
 fieldName :: (PersistEntity val, PersistField typ)
           => IdentInfo -> EntityField val typ -> TLB.Builder
@@ -2115,7 +2095,9 @@ unsafeSqlCase when (ERaw p1 f1) = ERaw Never buildCase
             (b2, vals2) = f2 info
         in ( b0 <> " WHEN " <> parensM p1' b1 <> " THEN " <> parensM p2 b2, vals0 <> vals1 <> vals2 )
     foldHelp _ _ _ = throw (CompositeKeyErr FoldHelpError)
-unsafeSqlCase _ (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
+unsafeSqlCase _ (ECompositeKey _)   = throw (CompositeKeyErr SqlCaseError)
+unsafeSqlCase _ (EAliasedValue _ _)   = throw (AliasedValueErr SqlCaseError)
+unsafeSqlCase _ (EAliasReference _ _) = throw (AliasedValueErr SqlCaseError)
 
 
 -- | (Internal) Create a custom binary operator.  You /should/
@@ -2147,6 +2129,10 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
              in  build (parensM p b1, vals)
           construct (ECompositeKey f) =
             ERaw Parens $ \info -> (uncommas $ f info, mempty)
+          construct (EAliasedValue i _) = 
+            ERaw Never $ \info -> (useIdent info i, mempty)
+          construct (EAliasReference sourceIdent columnIdent) = 
+            ERaw Never $ \info -> (useIdent info sourceIdent <> "." <> useIdent info columnIdent, mempty)
 {-# INLINE unsafeSqlBinOp #-}
 
 
@@ -2242,7 +2228,9 @@ unsafeSqlCastAs t (ERaw p f) =
   ERaw Never $ \info ->
     let (b, v) = f info
     in ("CAST" <> parens ( parensM p b <> " AS " <> TLB.fromText t), v )
-unsafeSqlCastAs _ (ECompositeKey _) = throw (CompositeKeyErr SqlCastAsError)
+unsafeSqlCastAs _ (ECompositeKey _)     = throw (CompositeKeyErr SqlCastAsError)
+unsafeSqlCastAs _ (EAliasedValue _ _)   = throw (AliasedValueErr SqlCastAsError)
+unsafeSqlCastAs _ (EAliasReference _ _) = throw (AliasedValueErr SqlCastAsError)
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
 -- numbers of arguments; specifically it allows providing arguments to a sql
@@ -2349,8 +2337,10 @@ instance ( UnsafeSqlFunctionArgument a
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue (ERaw p f)        = ERaw p f
-veryUnsafeCoerceSqlExprValue (ECompositeKey f) = ECompositeKey f
+veryUnsafeCoerceSqlExprValue (ERaw p f)             = ERaw p f
+veryUnsafeCoerceSqlExprValue (ECompositeKey f)      = ECompositeKey f
+veryUnsafeCoerceSqlExprValue (EAliasedValue i v)    = EAliasedValue i (veryUnsafeCoerceSqlExprValue v)
+veryUnsafeCoerceSqlExprValue (EAliasReference i i') = EAliasReference i i' 
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
@@ -2770,25 +2760,32 @@ makeFrom info mode fs = ret
 
     makeOnClause (ERaw _ f)        = first (" ON " <>) (f info)
     makeOnClause (ECompositeKey _) = throw (CompositeKeyErr MakeOnClauseError)
+    makeOnClause (EAliasedValue _ _) = throw (AliasedValueErr MakeOnClauseError)
+    makeOnClause (EAliasReference _ _) = throw (AliasedValueErr MakeOnClauseError)
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
       OnClauseWithoutMatchingJoinException $
       TL.unpack $ TLB.toLazyText $ fst (f info)
     mkExc (ECompositeKey _) = throw (CompositeKeyErr MakeExcError)
+    mkExc (EAliasedValue _ _) = throw (AliasedValueErr MakeExcError)
+    mkExc (EAliasReference _ _) = throw (AliasedValueErr MakeExcError)
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
 makeSet info os = first ("\nSET " <>) . uncommas' $ concatMap mk os
   where
-    mk (SetClause (ERaw _ f))        = [f info]
-    mk (SetClause (ECompositeKey _)) = throw (CompositeKeyErr MakeSetError) -- FIXME
+    mk (SetClause (ERaw _ f))            = [f info]
+    mk (SetClause (ECompositeKey _))     = throw (CompositeKeyErr MakeSetError) -- FIXME
+    mk (SetClause (EAliasedValue _ v))   = throw (AliasedValueErr MakeSetError) 
+    mk (SetClause (EAliasReference _ _)) = throw (AliasedValueErr MakeSetError)
 
 makeWhere :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
-makeWhere _    NoWhere                   = mempty
-makeWhere info (Where (ERaw _ f))        = first ("\nWHERE " <>) (f info)
-makeWhere _    (Where (ECompositeKey _)) = throw (CompositeKeyErr MakeWhereError)
-
+makeWhere _    NoWhere                       = mempty
+makeWhere info (Where (ERaw _ f))            = first ("\nWHERE " <>) (f info)
+makeWhere _    (Where (ECompositeKey _))     = throw (CompositeKeyErr MakeWhereError)
+makeWhere info (Where (EAliasedValue _ _))   = throw (AliasedValueErr MakeWhereError)
+makeWhere info (Where (EAliasReference _ _)) = throw (AliasedValueErr MakeWhereError)
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
 makeGroupBy _ (GroupBy []) = (mempty, [])
@@ -2800,13 +2797,15 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
     match :: SomeValue -> (TLB.Builder, [PersistValue])
     match (SomeValue (ERaw _ f)) = f info
     match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
-    match (SomeAlias (EAliasedValue i _)) = (useIdent info i, mempty)
-    match (SomeAlias (EAliasReference sourceIdent columnIdent)) = ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), mempty)
+    match (SomeValue (EAliasedValue i _)) = (useIdent info i, mempty)
+    match (SomeValue (EAliasReference sourceIdent columnIdent)) = ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), mempty)
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
-makeHaving _    NoWhere                    = mempty
-makeHaving info (Where (ERaw _ f))         = first ("\nHAVING " <>) (f info)
-makeHaving _    (Where (ECompositeKey _)) = throw (CompositeKeyErr MakeHavingError)
+makeHaving _    NoWhere                       = mempty
+makeHaving info (Where (ERaw _ f))            = first ("\nHAVING " <>) (f info)
+makeHaving _    (Where (ECompositeKey _))     = throw (CompositeKeyErr MakeHavingError)
+makeHaving _    (Where (EAliasedValue _ _))   = throw (AliasedValueErr MakeHavingError)
+makeHaving _    (Where (EAliasReference _ _)) = throw (AliasedValueErr MakeHavingError)
 
 -- makeHaving, makeWhere and makeOrderBy
 makeOrderByNoNewline ::
@@ -2820,8 +2819,8 @@ makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk
       let fs = f info
           vals = repeat []
       in zip (map (<> orderByType t) fs) vals
-    mk (EOrderByAlias t (EAliasedValue i _)) = [((useIdent info i) <> (orderByType t), mempty)]
-    mk (EOrderByAlias t (EAliasReference sourceIdent columnIdent)) = [((useIdent info sourceIdent <> "." <> useIdent info columnIdent) <> orderByType t, mempty)]
+    mk (EOrderBy t (EAliasedValue i _)) = [((useIdent info i) <> (orderByType t), mempty)]
+    mk (EOrderBy t (EAliasReference sourceIdent columnIdent)) = [((useIdent info sourceIdent <> "." <> useIdent info columnIdent) <> orderByType t, mempty)]
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
@@ -2948,16 +2947,6 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
   sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
   sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
 
-instance PersistField a => SqlSelect (SqlExpr (Alias a)) (Alias a) where
-  sqlSelectCols info (EAliasedValue ident x) =
-    let (b, vals) = sqlSelectCols info x
-    in (b <> " AS " <> (useIdent info ident), vals)
-  sqlSelectCols info (EAliasReference sourceIdent columnIdent) =
-    ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), [])
-  sqlSelectColCount = const 1
-  sqlSelectProcessRow [pv] = Alias <$> fromPersistValue pv
-  sqlSelectProcessRow pvs  = Alias <$> fromPersistValue (PersistList pvs)
-
 -- | Materialize a @SqlExpr (Value a)@.
 materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
 materializeExpr info (ERaw p f) =
@@ -2966,7 +2955,11 @@ materializeExpr info (ERaw p f) =
 materializeExpr info (ECompositeKey f) =
   let bs = f info
   in (uncommas $ map (parensM Parens) bs, [])
-
+materializeExpr info (EAliasedValue ident x) =
+  let (b, vals) = materializeExpr info x
+  in (b <> " AS " <> (useIdent info ident), vals)
+materializeExpr info (EAliasReference sourceIdent columnIdent) =
+  ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), [])
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
 -- from a 'select' query.
@@ -3506,7 +3499,10 @@ renderExpr sqlBackend e =
         . mconcat
         . mkInfo
         $ (sqlBackend, initialIdentState)
-
+    EAliasedValue _ _   -> 
+      throw $ UnexpectedCaseErr NotImplemented
+    EAliasReference _ _ -> 
+      throw $ UnexpectedCaseErr NotImplemented
 -- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
 -- keys, and will blow up if you give it one.
 --

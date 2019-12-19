@@ -850,7 +850,7 @@ testSelectSubQuery run = do
         let q = from $ \p -> do
                   return ( p ^. PersonName, p ^. PersonAge)
         ret <- select $ fromQuery q pure       
-        liftIO $ ret `shouldBe` [ (Alias $ personName p1, Alias $ personAge p1) ]
+        liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
     it "lets you order by alias" $ do
       run $ do
         _ <- insert' p1
@@ -860,7 +860,7 @@ testSelectSubQuery run = do
         ret <- select $ fromQuery q $ \(name, age) -> do 
             orderBy [ asc age ]
             pure name
-        liftIO $ ret `shouldBe` [ Alias $ personName p3, Alias $ personName p1 ]
+        liftIO $ ret `shouldBe` [ Value $ personName p3, Value $ personName p1 ]
 
     it "supports groupBy" $ do
       run $ do
@@ -873,12 +873,12 @@ testSelectSubQuery run = do
                 on $ lord ^. LordId ==. deed ^. DeedOwnerId
                 return (lord ^. LordId, deed ^. DeedId)
 
-        (ret :: [(Alias (Key Lord), Alias Int)]) <- select $ fromQuery q $ \(lordId,deedId) -> do
+        (ret :: [(Value (Key Lord), Value Int)]) <- select $ fromQuery q $ \(lordId,deedId) -> do
                  groupBy (lordId)
                  return (lordId, count deedId)
 
-        liftIO $ ret `shouldMatchList` [ (Alias l3k, Alias 7)
-                                       , (Alias l1k, Alias 3) ]
+        liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
+                                       , (Value l1k, Value 3) ]
 
 renderQuery q = do
  conn <- ask

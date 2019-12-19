@@ -67,7 +67,6 @@ module Database.Esqueleto
   , fromQuery
   , Value(..)
   , ValueList(..)
-  , Alias(..)
   , toAlias
   , OrderBy
   , DistinctOn
