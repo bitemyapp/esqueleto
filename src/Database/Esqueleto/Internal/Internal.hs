@@ -142,7 +142,7 @@ fromQuery subquery f = do
     Q $ W.tell mempty{sdFromClause = [FromQuery subqueryAlias (\info -> toRawSql SELECT info (Q $ W.WriterT $ S.StateT $ (\_ -> pure ((aliasedValue, sideData), identState))))]}
     Q $ lift $ S.modify (\s -> s{inUse = HS.difference (inUse s) (HS.fromList (concat $ toIdents <$> (sdFromClause sideData)))})
     outerQueryResults <- f aliasedValue
-    pure $ toAliasReference subqueryAlias outerQueryResults
+    toAliasReference subqueryAlias outerQueryResults
   where
 
     toIdents fromClause = 
@@ -151,7 +151,6 @@ fromQuery subquery f = do
         FromJoin r _ l _ -> toIdents r ++ toIdents l
         _ -> []
         
-
 -- Tedious tuple magic
 class ToAlias a b | a -> b where
   toAlias :: a -> SqlQuery b
@@ -189,21 +188,25 @@ instance ( ToAlias a a'
   toAlias x = to5 <$> (toAlias $ from5 x)
 
 -- more tedious tuple magic 
-class ToAliasReference a b | a -> b, b -> a where
-  toAliasReference :: Ident -> a -> b
+class ToAliasReference a b | a -> b where
+  toAliasReference :: Ident -> a -> SqlQuery b
+
+instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Alias a)) where
+  toAliasReference _ v = toAlias v
 
 instance ToAliasReference (SqlExpr (Alias a)) (SqlExpr (Alias a)) where
-  toAliasReference aliasSource (EAliasedValue aliasIdent _) = EAliasReference aliasSource aliasIdent
+  toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EAliasReference aliasSource aliasIdent
 
 instance ( ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) ( a', b' ) where
-  toAliasReference ident (a,b) = (toAliasReference ident a,  toAliasReference ident b)
+  toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
 
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          ) => ToAliasReference (a,b,c) ( a', b', c') where
-  toAliasReference ident = to3 . toAliasReference ident . from3
+  toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
 
+{--
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
@@ -219,6 +222,7 @@ instance ( ToAliasReference a a'
          ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
   toAliasReference ident = to5 . toAliasReference ident . from5
 
+--}
 
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
@@ -648,18 +652,29 @@ joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
 joinV (ERaw p f)        = ERaw p f
 joinV (ECompositeKey f) = ECompositeKey f
 
+
+class SqlCountable typ where
+  countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr typ -> SqlExpr (Value a) 
+
+instance SqlCountable (Value a) where
+  countHelper open close (ERaw _ f) = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . f
+  countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
+
+instance SqlCountable (Alias a) where
+  countHelper open close (EAliasedValue i _) = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i) <> close, mempty))
+  countHelper open close (EAliasReference i i') = ERaw Never $ (\b -> ("COUNT" <> open <> parens (useIdent b i <> "." <> useIdent b i') <> close, mempty))
 -- | @COUNT(*)@ value.
 countRows :: Num a => SqlExpr (Value a)
 countRows     = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+count :: (SqlCountable typ, Num a) => SqlExpr typ -> SqlExpr (Value a)
 count         = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- /Since: 2.4.1/
-countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+countDistinct :: (SqlCountable typ, Num a) => SqlExpr typ -> SqlExpr (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
@@ -1113,6 +1128,7 @@ newtype ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 -- | A wrapper type for for any @expr (Value a)@ for all a.
 data SomeValue where
   SomeValue :: SqlExpr (Value a) -> SomeValue
+  SomeAlias :: SqlExpr (Alias a) -> SomeValue
 
 -- | A class of things that can be converted into a list of SomeValue. It has
 -- instances for tuples and is the reason why 'groupBy' can take tuples, like
@@ -2041,6 +2057,9 @@ data OrderByType = ASC | DESC
 instance ToSomeValues (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
 
+instance ToSomeValues (SqlExpr (Alias a)) where
+  toSomeValues a = [SomeAlias a]
+
 fieldName :: (PersistEntity val, PersistField typ)
           => IdentInfo -> EntityField val typ -> TLB.Builder
 fieldName info = fromDBName info . fieldDB . persistFieldDef
@@ -2069,9 +2088,6 @@ ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlEx
 ifNotEmptyList EEmptyList b _ = val b
 ifNotEmptyList (EList _)  _ x = x
 
-countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a)
-countHelper open close (ERaw _ f) = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . f
-countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
 
 
 ----------------------------------------------------------------------
@@ -2784,6 +2800,8 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
     match :: SomeValue -> (TLB.Builder, [PersistValue])
     match (SomeValue (ERaw _ f)) = f info
     match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
+    match (SomeAlias (EAliasedValue i _)) = (useIdent info i, mempty)
+    match (SomeAlias (EAliasReference sourceIdent columnIdent)) = ((useIdent info sourceIdent) <> "." <> (useIdent info columnIdent), mempty)
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere                    = mempty

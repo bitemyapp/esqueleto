@@ -73,6 +73,7 @@ module Database.Esqueleto.Internal.Sql
   , toArgList
   , builderToText
   , Ident(..)
+  , toAlias
   ) where
 
 import Database.Esqueleto.Internal.Internal

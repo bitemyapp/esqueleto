@@ -862,6 +862,24 @@ testSelectSubQuery run = do
             pure name
         liftIO $ ret `shouldBe` [ Alias $ personName p3, Alias $ personName p1 ]
 
+    it "supports groupBy" $ do
+      run $ do
+        l1k <- insert l1
+        l3k <- insert l3
+        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
+
+        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
+        let q = from $ \( lord `InnerJoin` deed ) -> do
+                on $ lord ^. LordId ==. deed ^. DeedOwnerId
+                return (lord ^. LordId, deed ^. DeedId)
+
+        (ret :: [(Alias (Key Lord), Alias Int)]) <- select $ fromQuery q $ \(lordId,deedId) -> do
+                 groupBy (lordId)
+                 return (lordId, count deedId)
+
+        liftIO $ ret `shouldMatchList` [ (Alias l3k, Alias 7)
+                                       , (Alias l1k, Alias 3) ]
+
 renderQuery q = do
  conn <- ask
  pure (queryToText conn q)
