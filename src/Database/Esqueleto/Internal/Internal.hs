@@ -161,6 +161,12 @@ instance ToAlias (SqlExpr (Value a)) (SqlExpr (Value a)) where
     ident <- newIdentFor (DBName "value")
     pure $ EAliasedValue ident v
 
+instance ToAlias (SqlExpr (Entity a)) (SqlExpr (Entity a)) where
+  toAlias v@(EAliasedEntity _ _) = pure v
+  toAlias (EEntity tableIdent) = do 
+    ident <- newIdentFor (DBName "value")
+    pure $ EAliasedEntity ident tableIdent
+
 instance ( ToAlias a a', ToAlias b b') => ToAlias (a,b) (a',b') where
   toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
 
@@ -194,6 +200,11 @@ instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Value a)) where
   toAliasReference _           v@(ERaw _ _)                 = toAlias v
   toAliasReference _           v@(ECompositeKey _)          = toAlias v
   toAliasReference _           v@(EAliasReference _ _)      = pure v 
+
+instance ToAliasReference (SqlExpr (Entity a)) (SqlExpr (Entity a)) where
+  toAliasReference aliasSource (EAliasedEntity ident tableIdent) = pure $ EAliasedEntityReference aliasSource ident
+  toAliasReference aliasSource e@(EEntity _) = toAlias e 
+  toAliasReference aliasSource e@(EAliasedEntityReference _ _) = pure e
 
 instance ( ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) ( a', b' ) where
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
@@ -593,12 +604,20 @@ subSelectUnsafe = sub SELECT
   => SqlExpr (Entity val)
   -> EntityField val typ
   -> SqlExpr (Value typ)
-EEntity ident ^. field
+e ^. field
   | isComposite = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
   | otherwise   = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
   where
     isComposite = isIdField field && hasCompositeKey ed
-    dot info x  = useIdent info ident <> "." <> fromDBName info (fieldDB x)
+    dot info x  = 
+      case e of
+        EEntity ident ->
+          useIdent info ident <> "." <> fromDBName info (fieldDB x)
+        EAliasedEntity ident _ ->
+          useIdent info (aliasedIdent info x ident)
+        EAliasedEntityReference sourceIdent baseIdent ->
+          useIdent info sourceIdent <> "."  <> useIdent info (aliasedIdent info x baseIdent)
+    aliasedIdent info x (I ident) = I (ident <> "_" <> TL.toStrict (TLB.toLazyText (fromDBName info (fieldDB x))))
     ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
     Just pdef   = entityPrimary ed
 
@@ -1943,6 +1962,10 @@ useIdent info (I ident) = fromDBName info $ DBName ident
 data SqlExpr a where
   -- An entity, created by 'from' (cf. 'fromStart').
   EEntity  :: Ident -> SqlExpr (Entity val)
+  --                Base     Table
+  EAliasedEntity :: Ident -> Ident -> SqlExpr (Entity val)
+  --                         Source   Base 
+  EAliasedEntityReference :: Ident -> Ident -> SqlExpr (Entity val)
 
   -- Just a tag stating that something is nullable.
   EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
@@ -2919,10 +2942,27 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         name = useIdent info ident <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
+  sqlSelectCols info expr@(EAliasedEntity (I aliasIdent) tableIdent) = ret
+      where
+        process ed = uncommas $
+                     map ((name <>) . aliasName) $
+                     entityColumnNames ed (fst info)
+        aliasName columnName = (TLB.fromText columnName) <> " AS " <> useIdent info (I (aliasIdent <> "_" <> columnName))
+        name = useIdent info tableIdent <> "."
+        ret = let ed = entityDef $ getEntityVal $ return expr
+              in (process ed, mempty)
+  sqlSelectCols info expr@(EAliasedEntityReference sourceIdent (I aliasIdent)) = ret
+      where
+        process ed = uncommas $
+                     map ((name <>) . aliasName) $
+                     entityColumnNames ed (fst info)
+        aliasName columnName = useIdent info (I (aliasIdent <> "_" <> columnName))
+        name = useIdent info sourceIdent <> "."
+        ret = let ed = entityDef $ getEntityVal $ return expr
+              in (process ed, mempty)
   sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
   sqlSelectProcessRow = parseEntityValues ed
     where ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
-
 getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
 getEntityVal = const Proxy
 

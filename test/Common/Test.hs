@@ -880,6 +880,14 @@ testSelectSubQuery run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
+    it "supports entities" $ do
+      run $ do
+        p1e <- insert' p1
+        let (q :: SqlQuery (SqlExpr (Entity Person))) = from (\p -> return p)
+            q' = fromQuery q return
+        (ret :: [Entity Person])<- select q'
+        liftIO $ (entityVal <$> ret) `shouldBe` [ p1 ]
+
 renderQuery q = do
  conn <- ask
  pure (queryToText conn q)
