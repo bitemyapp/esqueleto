@@ -195,7 +195,7 @@ class ToAliasReference a b | a -> b where
   toAliasReference :: Ident -> a -> SqlQuery b
 
 instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Value a)) where
-  toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource aliasIdent
+  toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
   toAliasReference _           v@(ERaw _ _)                 = toAlias v
   toAliasReference _           v@(ECompositeKey _)          = toAlias v
   toAliasReference _           v@(EValueReference _ _)      = pure v 
@@ -604,18 +604,28 @@ subSelectUnsafe = sub SELECT
   -> EntityField val typ
   -> SqlExpr (Value typ)
 e ^. field
-  | isComposite = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
-  | otherwise   = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
+  | isComposite   = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
+  | isReference e = makeValueReference (persistFieldDef field) e
+  | otherwise     = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
   where
     isComposite = isIdField field && hasCompositeKey ed
+
+    isReference (EAliasedEntityReference _ _) = True
+    isReference _ = False
+
+    makeValueReference :: FieldDef -> SqlExpr (Entity val) -> SqlExpr (Value typ)
+    makeValueReference x (EAliasedEntityReference sourceIdent baseIdent) =
+      EValueReference sourceIdent (aliasedEntityColumnIdent baseIdent x)  
+    makeValueReference _ _ = undefined -- Protected by isReference guard
+
     dot info x  = 
       case e of
         EEntity ident ->
           useIdent info ident <> "." <> fromDBName info (fieldDB x)
         EAliasedEntity ident _ ->
           useIdent info $ aliasedEntityColumnIdent ident x info
-        EAliasedEntityReference sourceIdent baseIdent ->
-          fst $ valueReferenceToRawSql sourceIdent (aliasedEntityColumnIdent baseIdent x info) info
+        EAliasedEntityReference _ _ ->
+          undefined -- defined above
 
     ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
     Just pdef   = entityPrimary ed
@@ -2008,7 +2018,7 @@ data SqlExpr a where
   EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Value a)
 
   -- A reference to an aliased field in a table or subquery
-  EValueReference :: Ident -> Ident -> SqlExpr (Value a)
+  EValueReference :: Ident -> (IdentInfo -> Ident) -> SqlExpr (Value a)
 
   -- A composite key.
   --
@@ -2929,9 +2939,9 @@ aliasedValueIdentToRawSql :: Ident -> IdentInfo -> (TLB.Builder, [PersistValue])
 aliasedValueIdentToRawSql i info =
   (useIdent info i, mempty)
 
-valueReferenceToRawSql ::  Ident -> Ident -> IdentInfo -> (TLB.Builder, [PersistValue])
-valueReferenceToRawSql sourceIdent columnIdent info =
-  (useIdent info sourceIdent <> "." <> useIdent info columnIdent, mempty)
+valueReferenceToRawSql ::  Ident -> (IdentInfo -> Ident) -> IdentInfo -> (TLB.Builder, [PersistValue])
+valueReferenceToRawSql sourceIdent columnIdentF info =
+  (useIdent info sourceIdent <> "." <> useIdent info (columnIdentF info), mempty)
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> IdentInfo -> Ident
 aliasedEntityColumnIdent (I baseIdent) field info =
