@@ -851,6 +851,7 @@ testSelectSubQuery run = do
                   return ( p ^. PersonName, p ^. PersonAge)
         ret <- select $ fromQuery q pure       
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
+
     it "lets you order by alias" $ do
       run $ do
         _ <- insert' p1
@@ -879,22 +880,6 @@ testSelectSubQuery run = do
 
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
-
-    it "supports entities" $ do
-      run $ do
-        p1e <- insert' p1
-        let (q :: SqlQuery (SqlExpr (Entity Person))) = from (\p -> return p)
-            q' = fromQuery q return
-        (ret :: [Entity Person])<- select q'
-        liftIO $ (entityVal <$> ret) `shouldBe` [ p1 ]
-
-renderQuery q = do
- conn <- ask
- pure (queryToText conn q)
-
-queryToText conn q =  
-  let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
-  in TLB.toLazyText tlb
 
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
