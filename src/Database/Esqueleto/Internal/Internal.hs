@@ -135,21 +135,19 @@ fromQuery
   -> (a' -> SqlQuery b)
   -> SqlQuery b'
 fromQuery subquery f = do
-    subqueryAlias <- newIdentFor (DBName "subquery")
+    -- We want to update the IdentState without writing the query to side data
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
     aliasedValue <- toAlias ret
-    identState <- Q $ lift S.get
-    Q $ W.tell mempty{sdFromClause = [FromQuery subqueryAlias (\info -> toRawSql SELECT info (Q $ W.WriterT $ S.StateT $ (\_ -> pure ((aliasedValue, sideData), identState))))]}
-    Q $ lift $ S.modify (\s -> s{inUse = HS.difference (inUse s) (HS.fromList (concat $ toIdents <$> (sdFromClause sideData)))})
+    -- Make a fake query with the aliased results, this allows us to ensure that the query is only run once
+    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+    -- Add the FromQuery that renders the subquery to our side data
+    subqueryAlias <- newIdentFor (DBName "subquery")
+    Q $ W.tell mempty{sdFromClause = [FromQuery subqueryAlias (\info -> toRawSql SELECT info aliasedQuery)]}
+    -- Pass the aliased results of the subquery to the outer query
     outerQueryResults <- f aliasedValue
+    -- create aliased references from the outer query results (e.g value from subquery will be `subquery`.`value`), 
+    -- this is probably overkill as the aliases should already be unique but seems to be good practice.
     toAliasReference subqueryAlias outerQueryResults
-  where
-
-    toIdents fromClause = 
-      case fromClause of
-        FromStart (I i) _ -> [i]
-        FromJoin r _ l _ -> toIdents r ++ toIdents l
-        _ -> []
         
 -- Tedious tuple magic
 class ToAlias a b | a -> b where
