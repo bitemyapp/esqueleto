@@ -658,6 +658,7 @@ isNothing v =
       EValueReference i i' -> isNullExpr $ valueReferenceToRawSql i i'
       ECompositeKey f      -> ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
   where 
+    isNullExpr :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value Bool)
     isNullExpr g = ERaw Parens $ first ((<> " IS NULL")) . g
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
@@ -690,6 +691,7 @@ countHelper open close v =
         EValueReference i i' -> countRawSql $ valueReferenceToRawSql i i'
         ECompositeKey _ -> countRows 
   where 
+    countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
     countRawSql x = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . x
 
 -- | @COUNT(*)@ value.
