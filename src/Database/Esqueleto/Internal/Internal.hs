@@ -651,15 +651,14 @@ val v = ERaw Never $ const ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
 isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
-isNothing (ECompositeKey f) = ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
-isNothing v = ERaw Parens $ first ((<> " IS NULL")) . g
+isNothing v = 
+    case v of 
+      ERaw p f             -> isNullExpr $ first (parensM p) . f
+      EAliasedValue i _    -> isNullExpr $ aliasedValueIdentToRawSql i
+      EValueReference i i' -> isNullExpr $ valueReferenceToRawSql i i'
+      ECompositeKey f      -> ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
   where 
-    g =
-      case v of 
-        ERaw p f             -> first (parensM p) . f
-        EAliasedValue i _    -> aliasedValueIdentToRawSql i
-        EValueReference i i' -> valueReferenceToRawSql i i'
-        ECompositeKey _      -> undefined -- defined above
+    isNullExpr g = ERaw Parens $ first ((<> " IS NULL")) . g
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
@@ -684,15 +683,14 @@ joinV (EValueReference i i') = EValueReference i i'
 
 
 countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a) 
-countHelper _ _ (ECompositeKey _) = countRows -- Assumes no NULLs on a PK
-countHelper open close v = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . x
+countHelper open close v = 
+    case v of
+        ERaw _ f -> countRawSql f 
+        EAliasedValue i _ -> countRawSql $ aliasedValueIdentToRawSql i
+        EValueReference i i' -> countRawSql $ valueReferenceToRawSql i i'
+        ECompositeKey _ -> countRows 
   where 
-    x =
-      case v of
-        ERaw _ f -> f 
-        EAliasedValue i _ -> aliasedValueIdentToRawSql i
-        EValueReference i i' -> valueReferenceToRawSql i i'
-        ECompositeKey _ -> undefined -- defined above
+    countRawSql x = ERaw Never $ first (\b -> "COUNT" <> open <> parens b <> close) . x
 
 -- | @COUNT(*)@ value.
 countRows :: Num a => SqlExpr (Value a)
