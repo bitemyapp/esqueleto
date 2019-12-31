@@ -899,6 +899,25 @@ testSelectSubQuery run = do
 
         liftIO $ ret `shouldMatchList` [ (Value 1) ]
 
+    it "unions" $ do
+        run $ do
+          _ <- insert p1
+          _ <- insert p2
+          let q = fromSetOperation $ 
+                  (SelectQuery $ from $ \p -> do
+                    where_ $ not_ $ isNothing $ p ^. PersonAge
+                    return (p ^. PersonName))
+                  `Union`
+                  (SelectQuery $ from $ \p -> do
+                    where_ $ isNothing $ p ^. PersonAge
+                    return (p ^. PersonName))
+                  `Union`
+                  (SelectQuery $ from $ \p -> do
+                    where_ $ isNothing $ p ^. PersonAge
+                    return (p ^. PersonName))
+          names <- select q
+          liftIO $ names `shouldMatchList` [ (Value $ personName p1)
+                                           , (Value $ personName p2) ]
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
   describe "select where_" $ do

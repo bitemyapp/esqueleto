@@ -15,6 +15,7 @@ module Database.Esqueleto.Internal.Language
   ( -- * The pretty face
     from
   , fromQuery
+  , fromSetOperation
   , Value(..)
   , ValueList(..)
   , SomeValue(..)
@@ -40,6 +41,7 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , From
   , FromPreprocess
+  , SqlSetOperation(..)
   , when_
   , then_
   , else_

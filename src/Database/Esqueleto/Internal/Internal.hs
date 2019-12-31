@@ -151,7 +151,7 @@ fromQuery subquery f = do
         
 -- Tedious tuple magic
 class ToAlias a b | a -> b where
-  toAlias :: a -> SqlQuery b
+  toAlias     :: a -> SqlQuery b
 
 instance ToAlias (SqlExpr (Value a)) (SqlExpr (Value a)) where
   toAlias v@(EAliasedValue _ _) = pure v
@@ -1358,8 +1358,68 @@ data OnClauseWithoutMatchingJoinException =
 instance Exception OnClauseWithoutMatchingJoinException where
 
 
+data SqlSetOperation a =
+    Union (SqlSetOperation a) (SqlSetOperation a)
+  | UnionAll (SqlSetOperation a) (SqlSetOperation a)
+  | Except (SqlSetOperation a) (SqlSetOperation a)
+  | Intersect (SqlSetOperation a) (SqlSetOperation a)
+  | SelectQuery (SqlQuery a)
+
+
+fromSetOperation :: (SqlSelect a' r, ToAlias a a', ToAliasReference a' a'') 
+                 => SqlSetOperation a 
+                 -> SqlQuery a''
+fromSetOperation operation = do
+  (aliasedOperation, ret) <- aliasQueries operation
+  ident <- newIdentFor (DBName "u")
+  Q $ W.tell $ mempty {sdFromClause = [FromQuery ident $ operationToSql aliasedOperation]}
+  toAliasReference ident ret
+
+  where
+    aliasQueries o =
+      case o of
+        SelectQuery q -> do 
+          (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ q
+          prevState <- Q $ lift S.get
+          aliasedRet <- toAlias ret
+          Q $ lift $ S.put prevState
+          pure (SelectQuery $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
+        Union     o1 o2 -> do
+          (o1', ret) <- aliasQueries o1
+          (o2', _  ) <- aliasQueries o2
+          pure (Union o1' o2', ret)
+        UnionAll  o1 o2 -> do 
+          (o1', ret) <- aliasQueries o1
+          (o2', _  ) <- aliasQueries o2
+          pure (UnionAll o1' o2', ret)
+        Except    o1 o2 -> do 
+          (o1', ret) <- aliasQueries o1
+          (o2', _  ) <- aliasQueries o2
+          pure (Except o1' o2', ret)
+        Intersect o1 o2 -> do 
+          (o1', ret) <- aliasQueries o1
+          (o2', _  ) <- aliasQueries o2
+          pure (Intersect o1' o2', ret)
+
+    operationToSql o info =
+      case o of
+        SelectQuery q   -> toRawSql SELECT info q
+        Union     o1 o2 -> doSetOperation "UNION"     info o1 o2
+        UnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
+        Except    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
+        Intersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
+
+    doSetOperation operationText info o1 o2 =
+          let 
+            (q1, v1) = operationToSql o1 info
+            (q2, v2) = operationToSql o2 info
+          in (q1 <> " " <> operationText <> " " <> q2, v1 <> v2)
+
+
 -- | (Internal) Phantom type used to process 'from' (see 'fromStart').
 data PreprocessedFrom a
+
+
 
 
 -- | Phantom type used by 'orderBy', 'asc' and 'desc'.
