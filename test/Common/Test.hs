@@ -881,6 +881,24 @@ testSelectSubQuery run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
+    it "Can count results of aggregate query" $ do
+      run $ do
+        l1k <- insert l1
+        l3k <- insert l3
+        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
+
+        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
+        let q = from $ \( lord `InnerJoin` deed ) -> do
+                on $ lord ^. LordId ==. deed ^. DeedOwnerId
+                groupBy (lord ^. LordId)
+                return (lord ^. LordId, count (deed ^. DeedId))
+
+        (ret :: [(Value Int)]) <- select $ fromQuery q $ \(lordId, deedCount) -> do
+                 where_ $ deedCount >. val (3 :: Int) 
+                 return (count lordId)
+
+        liftIO $ ret `shouldMatchList` [ (Value 1) ]
+
 testSelectWhere :: Run -> Spec
 testSelectWhere run = do
   describe "select where_" $ do
