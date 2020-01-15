@@ -1368,7 +1368,7 @@ testUpdate run = do
           on $ lord ^. LordId ==. deed ^. DeedOwnerId
           groupBy ((lord ^. LordId, lord ^. LordDogs), deed ^. DeedContract)
           return (lord ^. LordId, count $ deed ^. DeedId)
-        liftIO $ length ret `shouldBe` 7
+        liftIO $ length ret `shouldBe` 10
     it "GROUP BY works with HAVING" $
       run $ do
         p1k <- insert p1
