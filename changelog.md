@@ -2,8 +2,7 @@
 ========
 
 - @parsonsmatt
-  - [#???](https://github.com/bitemyapp/esqueleto/pull/???): Add documentation
-    to `groupBy` to explain tuple nesting.
+  - [#170](https://github.com/bitemyapp/esqueleto/pull/170) Add documentation to `groupBy` to explain tuple nesting.
 
 3.3.1
 ========
