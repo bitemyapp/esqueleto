@@ -1355,6 +1355,20 @@ testUpdate run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
+    it "GROUP BY works with nested tuples" $ do
+      run $ do
+        l1k <- insert l1
+        l3k <- insert l3
+        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
+
+        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
+
+        (ret :: [(Value (Key Lord), Value Int)]) <- select $ from $
+          \ ( lord `InnerJoin` deed ) -> do
+          on $ lord ^. LordId ==. deed ^. DeedOwnerId
+          groupBy ((lord ^. LordId, lord ^. LordDogs), deed ^. DeedContract)
+          return (lord ^. LordId, count $ deed ^. DeedId)
+        liftIO $ length ret `shouldBe` 7
     it "GROUP BY works with HAVING" $
       run $ do
         p1k <- insert p1

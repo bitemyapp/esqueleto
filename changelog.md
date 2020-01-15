@@ -1,3 +1,10 @@
+3.3.1.1
+========
+
+- @parsonsmatt
+  - [#???](https://github.com/bitemyapp/esqueleto/pull/???): Add documentation
+    to `groupBy` to explain tuple nesting.
+
 3.3.1
 ========
 

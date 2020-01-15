@@ -453,7 +453,8 @@ deleteKey = Database.Persist.delete
 --   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
 --   'pure' (foo, bar)
 -- @
--- /Since: 3.1.2/
+--
+-- @since 3.1.2
 associateJoin
   :: forall e1 e0
    . Ord (Key e0)
