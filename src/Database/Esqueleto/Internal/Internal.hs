@@ -213,6 +213,25 @@ on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 --   print name
 --   print (count :: Int)
 -- @
+--
+-- === Need more columns?
+--
+-- The 'ToSomeValues' class is defined for 'SqlExpr' and tuples of 'SqlExpr's.
+-- We only have definitions for up to 8 elements in a tuple right now, so it's
+-- possible that you may need to have more than 8 elements.
+--
+-- For example, consider a query with a 'groupBy' call like this:
+--
+-- @
+-- groupBy (e0, e1, e2, e3, e4, e5, e6, e7)
+-- @
+--
+-- This is the biggest you can get with a single tuple. However, you can easily
+-- nest the tuples to add more:
+--
+-- @
+-- groupBy ((e0, e1, e2, e3, e4, e5, e6, e7), e8, e9)
+-- @
 groupBy :: (ToSomeValues a) => a -> SqlQuery ()
 groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
