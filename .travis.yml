@@ -21,6 +21,11 @@ env:
     - GHCVER=8.2
     - GHCVER=8.4
     - GHCVER=8.6
+    - GHCVER=nightly
+
+jobs:
+  allow_failures:
+    - GHCVER=nightly
 
 install:
   - export STACK_YAML=stack-$GHCVER.yaml
