@@ -1,0 +1,4 @@
+resolver: nightly-2020-01-24
+packages:
+  - '.'
+  - 'examples'

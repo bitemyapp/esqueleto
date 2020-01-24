@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts
            , GADTs
            , GeneralizedNewtypeDeriving
+           , DerivingStrategies
+           , StandaloneDeriving
            , MultiParamTypeClasses
            , OverloadedStrings
            , QuasiQuotes
