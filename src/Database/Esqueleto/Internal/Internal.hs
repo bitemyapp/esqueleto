@@ -1370,6 +1370,72 @@ class ToBaseId ent where
 from :: From a => (a -> SqlQuery b) -> SqlQuery b
 from = (from_ >>=)
 
+data FromParts a where 
+  Table           :: PersistEntity ent => FromParts (SqlExpr (Entity ent))
+  InnerJoin'      :: FromParts a -> (FromParts b, (a,b) -> SqlExpr (Value Bool)) -> FromParts (a,b)
+  CrossJoin'      :: FromParts a -> (FromParts b, (a,b) -> SqlExpr (Value Bool)) -> FromParts (a,b)
+  LeftOuterJoin'  :: ToMaybe b mb 
+                  => FromParts a 
+                  -> ( FromParts b 
+                     , (a, mb) -> SqlExpr (Value Bool)
+                     )
+                  -> FromParts (a, mb)
+  RightOuterJoin' :: ToMaybe a ma 
+                  => FromParts a 
+                  -> (FromParts b, (ma, b) -> SqlExpr (Value Bool)) 
+                  -> FromParts (ma, b)
+  FullOuterJoin'  :: (ToMaybe a ma, ToMaybe b mb)
+                  => FromParts a 
+                  -> (FromParts b, (ma, mb) -> SqlExpr (Value Bool))
+                  -> FromParts (ma, mb)
+
+class ToMaybe a b where
+  toMaybe :: a -> b 
+
+instance ToMaybe (SqlExpr (Maybe a)) (SqlExpr (Maybe a)) where
+  toMaybe = id
+instance ToMaybe (SqlExpr (Entity a)) (SqlExpr (Maybe (Entity a))) where
+  toMaybe = EMaybe
+instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a,b) (a',b') where
+  toMaybe (a,b) = (toMaybe a, toMaybe b) 
+-- TODO: allow more sized tuples
+
+fromParts :: FromParts a -> SqlQuery a
+fromParts parts = do 
+  (a, clause) <- runFrom parts
+  Q $ W.tell mempty{sdFromClause=[clause]}
+  pure a
+    where
+      runFrom :: FromParts a -> SqlQuery (a, FromClause)
+      runFrom e@Table = do 
+        let ed = entityDef $ getVal e
+        ident <- newIdentFor (entityDB ed)
+        let entity = EEntity ident
+        pure $ (entity, FromStart ident ed)
+          where 
+            getVal :: PersistEntity ent => FromParts (SqlExpr (Entity ent)) -> Proxy ent
+            getVal = const Proxy
+      runFrom (InnerJoin' leftPart (rightPart, on')) = do 
+        (leftVal, leftFrom) <- runFrom leftPart
+        (rightVal, rightFrom) <- runFrom rightPart
+        pure $ ((leftVal, rightVal), FromJoin leftFrom InnerJoinKind rightFrom (Just (on' (leftVal, rightVal))))
+      runFrom (CrossJoin' leftPart (rightPart, on')) = do 
+        (leftVal, leftFrom) <- runFrom leftPart
+        (rightVal, rightFrom) <- runFrom rightPart
+        pure $ ((leftVal, rightVal), FromJoin leftFrom CrossJoinKind rightFrom (Just (on' (leftVal, rightVal))))
+      runFrom (LeftOuterJoin' leftPart (rightPart, on')) = do
+        (leftVal, leftFrom) <- runFrom leftPart
+        (rightVal, rightFrom) <- runFrom rightPart
+        pure $ ((leftVal, toMaybe rightVal), FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' (leftVal, toMaybe rightVal))))
+      runFrom (RightOuterJoin' leftPart (rightPart, on')) = do 
+        (leftVal, leftFrom) <- runFrom leftPart
+        (rightVal, rightFrom) <- runFrom rightPart
+        pure $ ((toMaybe leftVal, rightVal), FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' (toMaybe leftVal, rightVal))))
+      runFrom (FullOuterJoin' leftPart (rightPart, on')) = do
+        (leftVal, leftFrom) <- runFrom leftPart
+        (rightVal, rightFrom) <- runFrom rightPart
+        pure $ ((toMaybe leftVal, toMaybe rightVal), FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' (toMaybe leftVal, toMaybe rightVal))))
+
 
 -- | (Internal) Class that implements the tuple 'from' magic (see
 -- 'fromStart').

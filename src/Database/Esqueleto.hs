@@ -65,6 +65,7 @@ module Database.Esqueleto
   , then_
   , else_
   , from
+  , fromParts
   , Value(..)
   , ValueList(..)
   , OrderBy
@@ -77,6 +78,8 @@ module Database.Esqueleto
   , LeftOuterJoin(..)
   , RightOuterJoin(..)
   , FullOuterJoin(..)
+  , JoinKind(..)
+  , FromParts(..)
   , OnClauseWithoutMatchingJoinException(..)
 
     -- * SQL backend

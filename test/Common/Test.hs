@@ -2259,6 +2259,26 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
             on $ baz ^. BazId ==. shoop ^. ShoopBaz
             pure (f ^. FooName)
 
+testFromTable :: Run -> Spec
+testFromTable run = do
+  describe "fromTable" $ do
+    it "compiles" $ do
+      run $ void $ do 
+        let q = do 
+              ((persons, profiles), posts) <- 
+                fromParts $ Table @Person 
+                     `InnerJoin'` ( Table @Profile
+                                  , \(people, profiles) -> 
+                                      people ^. PersonId ==. profiles ^. ProfilePerson) 
+                 `LeftOuterJoin'` ( Table @BlogPost
+                                  , \((people, _), posts) -> 
+                                      just (people ^. PersonId) ==. posts ?. BlogPostAuthorId
+                                  ) 
+              pure (persons, posts, profiles)
+        --error . show =<< renderQuerySelect q
+        pure ()
+        
+
 listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
 
@@ -2284,6 +2304,7 @@ tests run = do
     testCountingRows run
     testRenderSql run
     testOnClauseOrder run
+    testFromTable run
 
 
 insert' :: ( Functor m

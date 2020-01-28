@@ -14,6 +14,7 @@
 module Database.Esqueleto.Internal.Language
   ( -- * The pretty face
     from
+  , fromParts
   , Value(..)
   , ValueList(..)
   , SomeValue(..)
@@ -38,6 +39,7 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , From
   , FromPreprocess
+  , FromParts(..)
   , when_
   , then_
   , else_
