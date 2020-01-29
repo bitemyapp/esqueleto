@@ -14,7 +14,6 @@
 module Database.Esqueleto.Internal.Language
   ( -- * The pretty face
     from
-  , fromParts
   , Value(..)
   , ValueList(..)
   , SomeValue(..)
@@ -39,11 +38,10 @@ module Database.Esqueleto.Internal.Language
   , PreprocessedFrom
   , From
   , FromPreprocess
-  , FromParts(..)
   , when_
   , then_
   , else_
-  , where_, on, on_, groupBy, orderBy, rand, asc, desc, limit, offset
+  , where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , sub_select, (^.), (?.)
              , val, isNothing, just, nothing, joinV, withNonNull

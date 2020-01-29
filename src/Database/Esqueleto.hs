@@ -38,7 +38,7 @@ module Database.Esqueleto
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    where_, on, on_, groupBy, orderBy, rand, asc, desc, limit, offset
+    where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , sub_select, (^.), (?.)
              , val, isNothing, just, nothing, joinV, withNonNull
@@ -65,7 +65,6 @@ module Database.Esqueleto
   , then_
   , else_
   , from
-  , fromParts
   , Value(..)
   , ValueList(..)
   , OrderBy
@@ -79,7 +78,6 @@ module Database.Esqueleto
   , RightOuterJoin(..)
   , FullOuterJoin(..)
   , JoinKind(..)
-  , FromParts(..)
   , OnClauseWithoutMatchingJoinException(..)
 
     -- * SQL backend

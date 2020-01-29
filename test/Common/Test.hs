@@ -70,6 +70,8 @@ import Control.Monad.Trans.Reader (ReaderT)
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
 import Database.Esqueleto
+import Database.Esqueleto.Experimental hiding (from, on)
+import qualified Database.Esqueleto.Experimental as Experimental
 import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
@@ -2259,16 +2261,16 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
             on $ baz ^. BazId ==. shoop ^. ShoopBaz
             pure (f ^. FooName)
 
-testFromTable :: Run -> Spec
-testFromTable run = do
-  describe "fromParts" $ do
+testExperimentalFrom :: Run -> Spec
+testExperimentalFrom run = do
+  describe "Experimental From" $ do
     it "supports basic table queries" $ do
       run $ do
         p1e <- insert' p1
         _   <- insert' p2
         p3e <- insert' p3
         peopleWithAges <- select $ do 
-          people <- fromParts $ Table @Person
+          people <- Experimental.from $ Table @Person
           where_ $ not_ $ isNothing $ people ^. PersonAge
           return people
         liftIO $ peopleWithAges `shouldMatchList` [p1e, p3e]
@@ -2280,11 +2282,10 @@ testFromTable run = do
         d1e <- insert' $ Deed "1" (entityKey l1e)
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
-          (lords, deeds) <- fromParts $
-                               Table @Lord
-                `InnerJoin` ( Table @Deed
-                             , \(l,d) -> l ^. LordId ==. d ^. DeedOwnerId
-                             )
+          (lords, deeds) <- 
+            Experimental.from $ Table @Lord
+                    `InnerJoin` Table @Deed
+              `Experimental.on` (\(l,d) -> l ^. LordId ==. d ^. DeedOwnerId)
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, d1e)
                                              , (l1e, d2e)
@@ -2298,9 +2299,9 @@ testFromTable run = do
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
           (lords, deeds) <- 
-            fromParts $ Table @Lord
+            Experimental.from $ Table @Lord
                 `LeftOuterJoin` Table @Deed
-                  `on_` (\(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                  `Experimental.on` (\(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
                                 
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
@@ -2312,8 +2313,8 @@ testFromTable run = do
         insert_ l1
         insert_ l2
         insert_ l3
-        delete $ void $ fromParts $ Table @Lord
-        lords <- select $ fromParts $ Table @Lord
+        delete $ void $ Experimental.from $ Table @Lord
+        lords <- select $ Experimental.from $ Table @Lord
         liftIO $ lords `shouldMatchList` []
 
     it "supports implicit cross joins" $ do
@@ -2321,10 +2322,10 @@ testFromTable run = do
         l1e <- insert' l1
         l2e <- insert' l2
         ret <- select $ do
-          lords1 <- fromParts $ Table @Lord
-          lords2 <- fromParts $ Table @Lord
+          lords1 <- Experimental.from $ Table @Lord
+          lords2 <- Experimental.from $ Table @Lord
           pure (lords1, lords2)
-        ret2 <- select . fromParts $ Table @Lord `CrossJoin` Table @Lord
+        ret2 <- select . Experimental.from $ Table @Lord `CrossJoin` Table @Lord
         liftIO $ ret `shouldMatchList` ret2
         liftIO $ ret `shouldMatchList` [ (l1e, l1e)
                                        , (l1e, l2e)
@@ -2336,13 +2337,13 @@ testFromTable run = do
       run $ void $ do 
         let q = do 
               ((persons, profiles), posts) <- 
-                fromParts $ Table @Person 
-                     `InnerJoin` Table @Profile
-                        `on_` (\(people, profiles) -> 
-                                people ^. PersonId ==. profiles ^. ProfilePerson) 
-                 `LeftOuterJoin` Table @BlogPost
-                        `on_` (\((people, _), posts) -> 
-                                  just (people ^. PersonId) ==. posts ?. BlogPostAuthorId) 
+                Experimental.from $  Table @Person 
+                         `InnerJoin` Table @Profile
+                   `Experimental.on` (\(people, profiles) -> 
+                                        people ^. PersonId ==. profiles ^. ProfilePerson) 
+                     `LeftOuterJoin` Table @BlogPost
+                   `Experimental.on` (\((people, _), posts) -> 
+                                        just (people ^. PersonId) ==. posts ?. BlogPostAuthorId) 
               pure (persons, posts, profiles)
         --error . show =<< renderQuerySelect q
         pure ()
@@ -2373,7 +2374,7 @@ tests run = do
     testCountingRows run
     testRenderSql run
     testOnClauseOrder run
-    testFromTable run
+    testExperimentalFrom run
 
 
 insert' :: ( Functor m
