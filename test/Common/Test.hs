@@ -2315,6 +2315,23 @@ testFromTable run = do
         delete $ void $ fromParts $ Table @Lord
         lords <- select $ fromParts $ Table @Lord
         liftIO $ lords `shouldMatchList` []
+
+    it "supports implicit cross joins" $ do
+      run $ do
+        l1e <- insert' l1
+        l2e <- insert' l2
+        ret <- select $ do
+          lords1 <- fromParts $ Table @Lord
+          lords2 <- fromParts $ Table @Lord
+          pure (lords1, lords2)
+        ret2 <- select $ do
+          fromParts $ Table @Lord `CrossJoin'` (Table @Lord, \_ -> val True)
+        liftIO $ ret `shouldMatchList` ret2
+        liftIO $ ret `shouldMatchList` [ (l1e, l1e)
+                                       , (l1e, l2e)
+                                       , (l2e, l1e)
+                                       , (l2e, l2e)
+                                       ]
           
     it "compiles" $ do
       run $ void $ do 
