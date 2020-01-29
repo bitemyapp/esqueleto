@@ -2307,6 +2307,14 @@ testFromTable run = do
                                              , (l1e, Just d2e)
                                              , (l2e, Nothing)
                                              ]
+    it "supports delete" $ do
+      run $ do
+        insert_ l1
+        insert_ l2
+        insert_ l3
+        delete $ void $ fromParts $ Table @Lord
+        lords <- select $ fromParts $ Table @Lord
+        liftIO $ lords `shouldMatchList` []
           
     it "compiles" $ do
       run $ void $ do 
