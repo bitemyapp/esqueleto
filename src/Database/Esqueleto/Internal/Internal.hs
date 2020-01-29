@@ -1352,6 +1352,7 @@ class IsJoinKind join where
   -- | (Internal) Reify a @JoinKind@ from a @JOIN@.  This
   -- function is non-strict.
   reifyJoinKind :: join a b -> JoinKind
+
 instance IsJoinKind InnerJoin where
   smartJoin a b = a `InnerJoin` b
   reifyJoinKind _ = InnerJoinKind

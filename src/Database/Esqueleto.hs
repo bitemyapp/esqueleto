@@ -80,6 +80,7 @@ module Database.Esqueleto
   , LeftOuterJoin(..)
   , RightOuterJoin(..)
   , FullOuterJoin(..)
+  , JoinKind(..)
   , OnClauseWithoutMatchingJoinException(..)
   , SqlSetOperation(..)
 
