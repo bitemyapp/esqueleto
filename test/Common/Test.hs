@@ -139,13 +139,13 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     county String maxlen=100
     dogs Int Maybe
     Primary county
-    deriving Show
+    deriving Eq Show
 
   Deed
     contract String maxlen=100
     ownerId LordId maxlen=100
     Primary contract
-    deriving Show
+    deriving Eq Show
 
   Follow
     follower PersonId
@@ -2261,7 +2261,53 @@ testOnClauseOrder run = describe "On Clause Ordering" $ do
 
 testFromTable :: Run -> Spec
 testFromTable run = do
-  describe "fromTable" $ do
+  describe "fromParts" $ do
+    it "supports basic table queries" $ do
+      run $ do
+        p1e <- insert' p1
+        _   <- insert' p2
+        p3e <- insert' p3
+        peopleWithAges <- select $ do 
+          people <- fromParts $ Table @Person
+          where_ $ not_ $ isNothing $ people ^. PersonAge
+          return people
+        liftIO $ peopleWithAges `shouldMatchList` [p1e, p3e]
+
+    it "supports inner joins" $ do
+      run $ do
+        l1e <- insert' l1
+        _   <- insert  l2
+        d1e <- insert' $ Deed "1" (entityKey l1e)
+        d2e <- insert' $ Deed "2" (entityKey l1e)
+        lordDeeds <- select $ do
+          (lords, deeds) <- fromParts $
+                               Table @Lord
+                `InnerJoin'` ( Table @Deed
+                             , \(l,d) -> l ^. LordId ==. d ^. DeedOwnerId
+                             )
+          pure (lords, deeds)
+        liftIO $ lordDeeds `shouldMatchList` [ (l1e, d1e)
+                                             , (l1e, d2e)
+                                             ]
+
+    it "supports outer joins" $ do
+      run $ do
+        l1e <- insert' l1
+        l2e <- insert' l2
+        d1e <- insert' $ Deed "1" (entityKey l1e)
+        d2e <- insert' $ Deed "2" (entityKey l1e)
+        lordDeeds <- select $ do
+          (lords, deeds) <- 
+            fromParts $ Table @Lord
+                `LeftOuterJoin'` ( Table @Deed
+                                 , \(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId
+                                 )
+          pure (lords, deeds)
+        liftIO $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
+                                             , (l1e, Just d2e)
+                                             , (l2e, Nothing)
+                                             ]
+          
     it "compiles" $ do
       run $ void $ do 
         let q = do 
