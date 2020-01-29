@@ -2282,7 +2282,7 @@ testFromTable run = do
         lordDeeds <- select $ do
           (lords, deeds) <- fromParts $
                                Table @Lord
-                `InnerJoin'` ( Table @Deed
+                `InnerJoin` ( Table @Deed
                              , \(l,d) -> l ^. LordId ==. d ^. DeedOwnerId
                              )
           pure (lords, deeds)
@@ -2299,7 +2299,7 @@ testFromTable run = do
         lordDeeds <- select $ do
           (lords, deeds) <- 
             fromParts $ Table @Lord
-                `LeftOuterJoin'` ( Table @Deed
+                `LeftOuterJoin` ( Table @Deed
                                  , \(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId
                                  )
           pure (lords, deeds)
@@ -2341,10 +2341,10 @@ testFromTable run = do
         let q = do 
               ((persons, profiles), posts) <- 
                 fromParts $ Table @Person 
-                     `InnerJoin'` ( Table @Profile
+                     `InnerJoin` ( Table @Profile
                                   , \(people, profiles) -> 
                                       people ^. PersonId ==. profiles ^. ProfilePerson) 
-                 `LeftOuterJoin'` ( Table @BlogPost
+                 `LeftOuterJoin` ( Table @BlogPost
                                   , \((people, _), posts) -> 
                                       just (people ^. PersonId) ==. posts ?. BlogPostAuthorId
                                   ) 
