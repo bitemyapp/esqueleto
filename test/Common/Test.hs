@@ -2299,9 +2299,9 @@ testFromTable run = do
         lordDeeds <- select $ do
           (lords, deeds) <- 
             fromParts $ Table @Lord
-                `LeftOuterJoin` ( Table @Deed
-                                 , \(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId
-                                 )
+                `LeftOuterJoin` Table @Deed
+                  `on_` (\(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                                
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
                                              , (l1e, Just d2e)
@@ -2324,12 +2324,8 @@ testFromTable run = do
           lords1 <- fromParts $ Table @Lord
           lords2 <- fromParts $ Table @Lord
           pure (lords1, lords2)
-        {-- Impossible to do explicit CrossJoin on postgresql since all joins in esqueleto need 
-         -- an on condition but this is illegal syntax for a cross join.
-        ret2 <- select $ do
-          fromParts $ Table @Lord `CrossJoin'` (Table @Lord, \_ -> val True)
+        ret2 <- select . fromParts $ Table @Lord `CrossJoin` Table @Lord
         liftIO $ ret `shouldMatchList` ret2
-        --}
         liftIO $ ret `shouldMatchList` [ (l1e, l1e)
                                        , (l1e, l2e)
                                        , (l2e, l1e)
@@ -2341,13 +2337,12 @@ testFromTable run = do
         let q = do 
               ((persons, profiles), posts) <- 
                 fromParts $ Table @Person 
-                     `InnerJoin` ( Table @Profile
-                                  , \(people, profiles) -> 
-                                      people ^. PersonId ==. profiles ^. ProfilePerson) 
-                 `LeftOuterJoin` ( Table @BlogPost
-                                  , \((people, _), posts) -> 
-                                      just (people ^. PersonId) ==. posts ?. BlogPostAuthorId
-                                  ) 
+                     `InnerJoin` Table @Profile
+                        `on_` (\(people, profiles) -> 
+                                people ^. PersonId ==. profiles ^. ProfilePerson) 
+                 `LeftOuterJoin` Table @BlogPost
+                        `on_` (\((people, _), posts) -> 
+                                  just (people ^. PersonId) ==. posts ?. BlogPostAuthorId) 
               pure (persons, posts, profiles)
         --error . show =<< renderQuerySelect q
         pure ()

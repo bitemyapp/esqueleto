@@ -1373,13 +1373,15 @@ from = (from_ >>=)
 
 data FromParts a where 
   Table         :: PersistEntity ent => FromParts (SqlExpr (Entity ent))
-  InnerJoinFrom :: FromParts a -> (FromParts b, (a,b) -> SqlExpr (Value Bool)) -> FromParts (a,b)
-  CrossJoinFrom :: FromParts a -> (FromParts b, (a,b) -> SqlExpr (Value Bool)) -> FromParts (a,b)
+  InnerJoinFrom :: FromParts a 
+                -> (FromParts b, (a,b) -> SqlExpr (Value Bool)) 
+                -> FromParts (a,b)
+  CrossJoinFrom :: FromParts a 
+                -> FromParts b 
+                -> FromParts (a,b)
   LeftJoinFrom  :: ToMaybe b mb
                 => FromParts a 
-                -> ( FromParts b 
-                   , (a, mb) -> SqlExpr (Value Bool)
-                   )
+                -> (FromParts b, (a, mb) -> SqlExpr (Value Bool))
                 -> FromParts (a, mb)
   RightJoinFrom :: ToMaybe a ma 
                 => FromParts a 
@@ -1390,6 +1392,9 @@ data FromParts a where
                 -> (FromParts b, (ma, mb) -> SqlExpr (Value Bool))
                 -> FromParts (ma, mb)
 
+on_ :: ToFromParts a a' => a -> b -> (a, b)
+on_ = (,)
+infix 9 `on_`
 
 {-- Type class magic to allow the use of the `InnerJoin` family of data constructors in fromParts --}
 class ToFromParts a b | a -> b where
@@ -1424,8 +1429,8 @@ instance (ToFromParts a a', ToFromParts b b')
   toFromParts (InnerJoin lhs (rhs, on')) = InnerJoinFrom (toFromParts lhs) (toFromParts rhs, on')
 
 instance (ToFromParts a a', ToFromParts b b') 
-       => ToFromParts (CrossJoin a (b, (a',b') -> SqlExpr (Value Bool))) (a', b') where
-  toFromParts (CrossJoin lhs (rhs, on')) = CrossJoinFrom (toFromParts lhs) (toFromParts rhs, on')
+       => ToFromParts (CrossJoin a b) (a', b') where
+  toFromParts (CrossJoin lhs rhs) = CrossJoinFrom (toFromParts lhs) (toFromParts rhs)
 
 class ToMaybe a b where
   toMaybe :: a -> b 
@@ -1457,10 +1462,10 @@ fromParts parts = do
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
         pure $ ((leftVal, rightVal), FromJoin leftFrom InnerJoinKind rightFrom (Just (on' (leftVal, rightVal))))
-      runFrom (CrossJoinFrom leftPart (rightPart, on')) = do 
+      runFrom (CrossJoinFrom leftPart rightPart) = do 
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((leftVal, rightVal), FromJoin leftFrom CrossJoinKind rightFrom (Just (on' (leftVal, rightVal))))
+        pure $ ((leftVal, rightVal), FromJoin leftFrom CrossJoinKind rightFrom Nothing)
       runFrom (LeftJoinFrom leftPart (rightPart, on')) = do
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
