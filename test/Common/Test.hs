@@ -2324,9 +2324,12 @@ testFromTable run = do
           lords1 <- fromParts $ Table @Lord
           lords2 <- fromParts $ Table @Lord
           pure (lords1, lords2)
+        {-- Impossible to do explicit CrossJoin on postgresql since all joins in esqueleto need 
+         -- an on condition but this is illegal syntax for a cross join.
         ret2 <- select $ do
           fromParts $ Table @Lord `CrossJoin'` (Table @Lord, \_ -> val True)
         liftIO $ ret `shouldMatchList` ret2
+        --}
         liftIO $ ret `shouldMatchList` [ (l1e, l1e)
                                        , (l1e, l2e)
                                        , (l2e, l1e)
