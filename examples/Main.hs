@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE DerivingStrategies, FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}

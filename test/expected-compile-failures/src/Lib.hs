@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances, DerivingStrategies #-}
 module Lib where
 
 import Control.Monad.IO.Class (MonadIO)
