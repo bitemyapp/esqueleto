@@ -65,11 +65,8 @@ module Database.Esqueleto
   , then_
   , else_
   , from
-  , fromQuery
-  , fromSetOperation
   , Value(..)
   , ValueList(..)
-  , toAlias
   , OrderBy
   , DistinctOn
   , LockingKind(..)
@@ -82,8 +79,6 @@ module Database.Esqueleto
   , FullOuterJoin(..)
   , JoinKind(..)
   , OnClauseWithoutMatchingJoinException(..)
-  , SqlSetOperation(..)
-
     -- * SQL backend
   , SqlQuery
   , SqlExpr

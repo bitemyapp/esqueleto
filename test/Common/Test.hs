@@ -848,21 +848,25 @@ testSelectSubQuery run = do
   describe "select subquery" $ do
     it "works" $ do
       run $ do
-        p1e <- insert' p1
-        let q = from $ \p -> do
-                  return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ fromQuery q pure       
+        _ <- insert' p1
+        let q = do 
+                p <- Experimental.from $ Table @Person
+                return ( p ^. PersonName, p ^. PersonAge)
+        ret <- select $ Experimental.from $ SelectQuery q        
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
     it "lets you order by alias" $ do
       run $ do
         _ <- insert' p1
         _ <- insert' p3
-        let q = from $ \p -> do
-                  return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ fromQuery q $ \(name, age) -> do 
-            orderBy [ asc age ]
-            pure name
+        let q = do
+                (name, age) <- 
+                  Experimental.from $ SubQuery $ do 
+                      p <- Experimental.from $ Table @Person
+                      return ( p ^. PersonName, p ^. PersonAge)
+                orderBy [ asc age ]
+                pure name
+        ret <- select q
         liftIO $ ret `shouldBe` [ Value $ personName p3, Value $ personName p1 ]
 
     it "supports groupBy" $ do
@@ -872,13 +876,17 @@ testSelectSubQuery run = do
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
-        let q = from $ \( lord `InnerJoin` deed ) -> do
-                on $ lord ^. LordId ==. deed ^. DeedOwnerId
+        let q = do 
+                (lord, deed) <- Experimental.from $ Table @Lord 
+                                        `InnerJoin` Table @Deed
+                                  `Experimental.on` (\(lord, deed) -> 
+                                                       lord ^. LordId ==. deed ^. DeedOwnerId)
                 return (lord ^. LordId, deed ^. DeedId)
-
-        (ret :: [(Value (Key Lord), Value Int)]) <- select $ fromQuery q $ \(lordId,deedId) -> do
+            q' = do
+                 (lordId, deedId) <- Experimental.from $ SubQuery q 
                  groupBy (lordId)
                  return (lordId, count deedId)
+        (ret :: [(Value (Key Lord), Value Int)]) <- select q'
 
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
@@ -890,31 +898,55 @@ testSelectSubQuery run = do
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
-        let q = from $ \( lord `InnerJoin` deed ) -> do
-                on $ lord ^. LordId ==. deed ^. DeedOwnerId
+        let q = do
+                (lord, deed) <- Experimental.from $ Table @Lord 
+                                        `InnerJoin` Table @Deed
+                                  `Experimental.on` (\(lord, deed) ->
+                                                      lord ^. LordId ==. deed ^. DeedOwnerId)
                 groupBy (lord ^. LordId)
                 return (lord ^. LordId, count (deed ^. DeedId))
 
-        (ret :: [(Value Int)]) <- select $ fromQuery q $ \(lordId, deedCount) -> do
+        (ret :: [(Value Int)]) <- select $ do 
+                 (lordId, deedCount) <- Experimental.from $ SubQuery q 
                  where_ $ deedCount >. val (3 :: Int) 
                  return (count lordId)
 
         liftIO $ ret `shouldMatchList` [ (Value 1) ]
 
+    it "joins on subqueries" $ do
+      run $ do
+        l1k <- insert l1
+        l3k <- insert l3
+        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
+
+        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
+        let q = do 
+                (lord, deed) <- Experimental.from $ Table @Lord
+                        `InnerJoin` (SelectQuery $ Experimental.from $ Table @Deed)
+                        `Experimental.on` (\(lord,deed) -> 
+                                             lord ^. LordId ==. deed ^. DeedOwnerId)
+                groupBy (lord ^. LordId)
+                return (lord ^. LordId, count (deed ^. DeedId))
+        (ret :: [(Value (Key Lord), Value Int)]) <- select q
+        liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
+                                       , (Value l1k, Value 3) ]
     it "unions" $ do
         run $ do
           _ <- insert p1
           _ <- insert p2
-          let q = fromSetOperation $ 
-                  (SelectQuery $ from $ \p -> do
+          let q = Experimental.from $ 
+                  (SelectQuery $ do  
+                    p <- Experimental.from $ Table @Person
                     where_ $ not_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
                   `Union`
-                  (SelectQuery $ from $ \p -> do
+                  (SelectQuery $ do
+                    p <- Experimental.from $ Table @Person 
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
                   `Union`
-                  (SelectQuery $ from $ \p -> do
+                  (SelectQuery $ do 
+                    p <- Experimental.from $ Table @Person 
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
           names <- select q
@@ -2410,6 +2442,7 @@ testExperimentalFrom run = do
                                        , (l2e, l2e)
                                        ]
           
+
     it "compiles" $ do
       run $ void $ do 
         let q = do 
