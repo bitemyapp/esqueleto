@@ -5,6 +5,7 @@
            , MultiParamTypeClasses
            , UndecidableInstances
            , OverloadedStrings
+           , CPP
  #-}
 
 module Database.Esqueleto.Experimental where
@@ -12,6 +13,10 @@ module Database.Esqueleto.Experimental where
 import qualified Control.Monad.Trans.Writer as W
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup
+#endif
+import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Internal 
