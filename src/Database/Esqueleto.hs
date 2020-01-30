@@ -79,7 +79,6 @@ module Database.Esqueleto
   , FullOuterJoin(..)
   , JoinKind(..)
   , OnClauseWithoutMatchingJoinException(..)
-
     -- * SQL backend
   , SqlQuery
   , SqlExpr
