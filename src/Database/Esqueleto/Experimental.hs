@@ -37,8 +37,8 @@ import Database.Esqueleto.Internal.Internal
           , Mode(..)
           , toRawSql
           , Ident(..)
-          , to3, to4, to5
-          , from3, from4, from5
+          , to3, to4, to5, to6, to7, to8
+          , from3, from4, from5, from6, from7, from8
           )
 
 data (:&) a b = a :& b
@@ -135,11 +135,67 @@ class ToMaybe a b where
 
 instance ToMaybe (SqlExpr (Maybe a)) (SqlExpr (Maybe a)) where
   toMaybe = id
+
 instance ToMaybe (SqlExpr (Entity a)) (SqlExpr (Maybe (Entity a))) where
   toMaybe = EMaybe
+
 instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a :& b) (a' :& b') where
-  toMaybe (a :& b) = (toMaybe a :& toMaybe b) 
--- TODO: allow more sized tuples
+  toMaybe (a :& b) = (toMaybe a :& toMaybe b)
+
+instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a,b) (a',b') where
+  toMaybe (a, b) = (toMaybe a, toMaybe b)
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         ) => ToMaybe (a,b,c) (a',b',c') where
+  toMaybe = to3 . toMaybe . from3
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         , ToMaybe d d'
+         ) => ToMaybe (a,b,c,d) (a',b',c',d') where
+  toMaybe = to4 . toMaybe . from4
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         , ToMaybe d d'
+         , ToMaybe e e'
+         ) => ToMaybe (a,b,c,d,e) (a',b',c',d',e') where
+  toMaybe = to5 . toMaybe . from5
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         , ToMaybe d d'
+         , ToMaybe e e'
+         , ToMaybe f f'
+         ) => ToMaybe (a,b,c,d,e,f) (a',b',c',d',e',f') where
+  toMaybe = to6 . toMaybe . from6
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         , ToMaybe d d'
+         , ToMaybe e e'
+         , ToMaybe f f'
+         , ToMaybe g g'
+         ) => ToMaybe (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+  toMaybe = to7 . toMaybe . from7
+
+instance ( ToMaybe a a'
+         , ToMaybe b b'
+         , ToMaybe c c'
+         , ToMaybe d d'
+         , ToMaybe e e'
+         , ToMaybe f f'
+         , ToMaybe g g'
+         , ToMaybe h h'
+         ) => ToMaybe (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+  toMaybe = to8 . toMaybe . from8
+
 
 from :: ToFrom a a' => a -> SqlQuery a'
 from parts = do 
@@ -284,6 +340,37 @@ instance ( ToAlias a a'
          ) => ToAlias (a,b,c,d,e) (a',b',c',d',e') where
   toAlias x = to5 <$> (toAlias $ from5 x)
 
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         , ToAlias d d'
+         , ToAlias e e'
+         , ToAlias f f'
+         ) => ToAlias (a,b,c,d,e,f) (a',b',c',d',e',f') where
+  toAlias x = to6 <$> (toAlias $ from6 x)
+
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         , ToAlias d d'
+         , ToAlias e e'
+         , ToAlias f f'
+         , ToAlias g g'
+         ) => ToAlias (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+  toAlias x = to7 <$> (toAlias $ from7 x)
+
+instance ( ToAlias a a'
+         , ToAlias b b'
+         , ToAlias c c'
+         , ToAlias d d'
+         , ToAlias e e'
+         , ToAlias f f'
+         , ToAlias g g'
+         , ToAlias h h'
+         ) => ToAlias (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+  toAlias x = to8 <$> (toAlias $ from8 x)
+
+
 -- more tedious tuple magic 
 class ToAliasReference a b | a -> b where
   toAliasReference :: Ident -> a -> SqlQuery b
@@ -323,3 +410,32 @@ instance ( ToAliasReference a a'
          ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
   toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         ) => ToAliasReference (a,b,c,d,e,f) (a',b',c',d',e',f') where
+  toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
+
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         , ToAliasReference g g'
+         ) => ToAliasReference (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+  toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
+
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         , ToAliasReference g g'
+         , ToAliasReference h h'
+         ) => ToAliasReference (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+  toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
