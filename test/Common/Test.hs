@@ -877,9 +877,9 @@ testSelectSubQuery run = do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do 
-                (lord, deed) <- Experimental.from $ Table @Lord 
+                (lord :& deed) <- Experimental.from $ Table @Lord 
                                         `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord, deed) -> 
+                                  `Experimental.on` (\(lord :& deed) -> 
                                                        lord ^. LordId ==. deed ^. DeedOwnerId)
                 return (lord ^. LordId, deed ^. DeedId)
             q' = do
@@ -899,9 +899,9 @@ testSelectSubQuery run = do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do
-                (lord, deed) <- Experimental.from $ Table @Lord 
+                (lord :& deed) <- Experimental.from $ Table @Lord 
                                         `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord, deed) ->
+                                  `Experimental.on` (\(lord :& deed) ->
                                                       lord ^. LordId ==. deed ^. DeedOwnerId)
                 groupBy (lord ^. LordId)
                 return (lord ^. LordId, count (deed ^. DeedId))
@@ -921,9 +921,9 @@ testSelectSubQuery run = do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do 
-                (lord, deed) <- Experimental.from $ Table @Lord
+                (lord :& deed) <- Experimental.from $ Table @Lord
                         `InnerJoin` (SelectQuery $ Experimental.from $ Table @Deed)
-                        `Experimental.on` (\(lord,deed) -> 
+                        `Experimental.on` (\(lord :& deed) -> 
                                              lord ^. LordId ==. deed ^. DeedOwnerId)
                 groupBy (lord ^. LordId)
                 return (lord ^. LordId, count (deed ^. DeedId))
@@ -2391,10 +2391,10 @@ testExperimentalFrom run = do
         d1e <- insert' $ Deed "1" (entityKey l1e)
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
-          (lords, deeds) <- 
+          (lords :& deeds) <- 
             Experimental.from $ Table @Lord
                     `InnerJoin` Table @Deed
-              `Experimental.on` (\(l,d) -> l ^. LordId ==. d ^. DeedOwnerId)
+              `Experimental.on` (\(l :& d) -> l ^. LordId ==. d ^. DeedOwnerId)
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, d1e)
                                              , (l1e, d2e)
@@ -2407,10 +2407,10 @@ testExperimentalFrom run = do
         d1e <- insert' $ Deed "1" (entityKey l1e)
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
-          (lords, deeds) <- 
+          (lords :& deeds) <- 
             Experimental.from $ Table @Lord
                 `LeftOuterJoin` Table @Deed
-                  `Experimental.on` (\(l,d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                  `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
                                 
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
@@ -2434,7 +2434,9 @@ testExperimentalFrom run = do
           lords1 <- Experimental.from $ Table @Lord
           lords2 <- Experimental.from $ Table @Lord
           pure (lords1, lords2)
-        ret2 <- select . Experimental.from $ Table @Lord `CrossJoin` Table @Lord
+        ret2 <- select $ do 
+          (lords1 :& lords2) <- Experimental.from $ Table @Lord `CrossJoin` Table @Lord
+          pure (lords1,lords2)
         liftIO $ ret `shouldMatchList` ret2
         liftIO $ ret `shouldMatchList` [ (l1e, l1e)
                                        , (l1e, l2e)
@@ -2446,13 +2448,13 @@ testExperimentalFrom run = do
     it "compiles" $ do
       run $ void $ do 
         let q = do 
-              ((persons, profiles), posts) <- 
+              (persons :& profiles :& posts) <- 
                 Experimental.from $  Table @Person 
                          `InnerJoin` Table @Profile
-                   `Experimental.on` (\(people, profiles) -> 
+                   `Experimental.on` (\(people :& profiles) -> 
                                         people ^. PersonId ==. profiles ^. ProfilePerson) 
                      `LeftOuterJoin` Table @BlogPost
-                   `Experimental.on` (\((people, _), posts) -> 
+                   `Experimental.on` (\(people :& _ :& posts) -> 
                                         just (people ^. PersonId) ==. posts ?. BlogPostAuthorId) 
               pure (persons, posts, profiles)
         --error . show =<< renderQuerySelect q

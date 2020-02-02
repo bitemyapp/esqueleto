@@ -1,11 +1,12 @@
-{-# LANGUAGE FlexibleContexts
+{-# LANGUAGE CPP
+           , FlexibleContexts
            , FlexibleInstances
            , FunctionalDependencies
            , GADTs
            , MultiParamTypeClasses
+           , TypeOperators
            , UndecidableInstances
            , OverloadedStrings
-           , CPP
  #-}
 
 module Database.Esqueleto.Experimental where
@@ -40,6 +41,9 @@ import Database.Esqueleto.Internal.Internal
           , from3, from4, from5
           )
 
+data (:&) a b = a :& b
+infixl 2 :&
+
 data SqlSetOperation a =
     Union (SqlSetOperation a) (SqlSetOperation a)
   | UnionAll (SqlSetOperation a) (SqlSetOperation a)
@@ -56,23 +60,23 @@ data From a where
                 => SqlSetOperation a
                 -> From a''
   InnerJoinFrom :: From a 
-                -> (From b, (a,b) -> SqlExpr (Value Bool)) 
-                -> From (a,b)
+                -> (From b, (a :& b) -> SqlExpr (Value Bool)) 
+                -> From (a :& b)
   CrossJoinFrom :: From a 
                 -> From b 
-                -> From (a,b)
+                -> From (a :& b)
   LeftJoinFrom  :: ToMaybe b mb
                 => From a 
-                -> (From b, (a, mb) -> SqlExpr (Value Bool))
-                -> From (a, mb)
+                -> (From b, (a :& mb) -> SqlExpr (Value Bool))
+                -> From (a :& mb)
   RightJoinFrom :: ToMaybe a ma 
                 => From a 
-                -> (From b, (ma, b) -> SqlExpr (Value Bool)) 
-                -> From (ma, b)
+                -> (From b, (ma :& b) -> SqlExpr (Value Bool)) 
+                -> From (ma :& b)
   FullJoinFrom  :: (ToMaybe a ma, ToMaybe b mb)
                 => From a 
-                -> (From b, (ma, mb) -> SqlExpr (Value Bool))
-                -> From (ma, mb)
+                -> (From b, (ma :& mb) -> SqlExpr (Value Bool))
+                -> From (ma :& mb)
 
 on :: ToFrom a a' => a -> b -> (a, b)
 on = (,)
@@ -100,30 +104,30 @@ instance (SqlSelect a' r, SqlSelect a'' r', ToAlias a a', ToAliasReference a' a'
 instance (ToFrom a a', ToFrom b b', ToMaybe b' mb) =>
           ToFrom (LeftOuterJoin 
                         a
-                        (b, (a', mb) -> SqlExpr (Value Bool))
-                      ) (a', mb) where
+                        (b, (a' :& mb) -> SqlExpr (Value Bool))
+                      ) (a' :& mb) where
   toFrom (LeftOuterJoin lhs (rhs, on')) = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
 
 instance (ToFrom a a', ToFrom b b', ToMaybe a' ma, ToMaybe b' mb) =>
           ToFrom (FullOuterJoin 
                         a
-                        (b, (ma, mb) -> SqlExpr (Value Bool))
-                      ) (ma, mb) where
+                        (b, (ma :& mb) -> SqlExpr (Value Bool))
+                      ) (ma :& mb) where
   toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
 
 instance (ToFrom a a', ToFrom b b', ToMaybe a' ma) =>
           ToFrom (RightOuterJoin 
                         a
-                        (b, (ma, b') -> SqlExpr (Value Bool))
-                      ) (ma, b') where
+                        (b, (ma :& b') -> SqlExpr (Value Bool))
+                      ) (ma :& b') where
   toFrom (RightOuterJoin lhs (rhs, on')) = RightJoinFrom (toFrom lhs) (toFrom rhs, on')
 
 instance (ToFrom a a', ToFrom b b') 
-       => ToFrom (InnerJoin a (b, (a',b') -> SqlExpr (Value Bool))) (a', b') where
+       => ToFrom (InnerJoin a (b, (a' :& b') -> SqlExpr (Value Bool))) (a' :& b') where
   toFrom (InnerJoin lhs (rhs, on')) = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
 
 instance (ToFrom a a', ToFrom b b') 
-       => ToFrom (CrossJoin a b) (a', b') where
+       => ToFrom (CrossJoin a b) (a' :& b') where
   toFrom (CrossJoin lhs rhs) = CrossJoinFrom (toFrom lhs) (toFrom rhs)
 
 class ToMaybe a b where
@@ -133,8 +137,8 @@ instance ToMaybe (SqlExpr (Maybe a)) (SqlExpr (Maybe a)) where
   toMaybe = id
 instance ToMaybe (SqlExpr (Entity a)) (SqlExpr (Maybe (Entity a))) where
   toMaybe = EMaybe
-instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a,b) (a',b') where
-  toMaybe (a,b) = (toMaybe a, toMaybe b) 
+instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a :& b) (a' :& b') where
+  toMaybe (a :& b) = (toMaybe a :& toMaybe b) 
 -- TODO: allow more sized tuples
 
 from :: ToFrom a a' => a -> SqlQuery a'
@@ -216,23 +220,28 @@ from parts = do
       runFrom (InnerJoinFrom leftPart (rightPart, on')) = do 
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((leftVal, rightVal), FromJoin leftFrom InnerJoinKind rightFrom (Just (on' (leftVal, rightVal))))
+        let ret = leftVal :& rightVal
+        pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
       runFrom (CrossJoinFrom leftPart rightPart) = do 
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((leftVal, rightVal), FromJoin leftFrom CrossJoinKind rightFrom Nothing)
+        let ret = leftVal :& rightVal
+        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
       runFrom (LeftJoinFrom leftPart (rightPart, on')) = do
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((leftVal, toMaybe rightVal), FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' (leftVal, toMaybe rightVal))))
+        let ret = leftVal :& (toMaybe rightVal)
+        pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
       runFrom (RightJoinFrom leftPart (rightPart, on')) = do 
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((toMaybe leftVal, rightVal), FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' (toMaybe leftVal, rightVal))))
+        let ret = (toMaybe leftVal) :& rightVal
+        pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
       runFrom (FullJoinFrom leftPart (rightPart, on')) = do
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
-        pure $ ((toMaybe leftVal, toMaybe rightVal), FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' (toMaybe leftVal, toMaybe rightVal))))
+        let ret = (toMaybe leftVal) :& (toMaybe rightVal)
+        pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
 
 -- Tedious tuple magic
 class ToAlias a b | a -> b where
