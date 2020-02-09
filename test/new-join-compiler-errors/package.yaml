@@ -1,0 +1,46 @@
+name:                new-join-compiler-errors
+version:             0.1.0.0
+github:              bitemyapp/esqueleto
+license:             BSD3
+author:              Ben Levy 
+maintainer:          benjaminlevy007@gmail.com 
+copyright:           2020 Ben Levy
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub at <https://github.com/bitemyapp/esqueleto/test/new-join-compiler-errors#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- esqueleto
+- persistent
+- persistent-template
+
+default-extensions:
+- FlexibleContexts
+- FlexibleInstances
+- GADTs
+- GeneralizedNewtypeDeriving
+- MultiParamTypeClasses
+- NoMonomorphismRestriction
+- OverloadedStrings
+- QuasiQuotes
+- ScopedTypeVariables
+- StandaloneDeriving
+- TemplateHaskell
+- TypeFamilies
+
+library:
+  source-dirs: src
+
+executables:
+  bad-errors: 
+    main:                Main.hs
+    source-dirs:         bad-errors
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - new-join-compiler-errors
