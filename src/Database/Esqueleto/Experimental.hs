@@ -1,10 +1,12 @@
 {-# LANGUAGE CPP
+           , DataKinds
            , FlexibleContexts
            , FlexibleInstances
            , FunctionalDependencies
            , GADTs
            , MultiParamTypeClasses
            , TypeOperators
+           , TypeFamilies
            , UndecidableInstances
            , OverloadedStrings
  #-}
@@ -17,7 +19,6 @@ import Control.Monad.Trans.Class (lift)
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
-import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Internal 
@@ -40,6 +41,7 @@ import Database.Esqueleto.Internal.Internal
           , to3, to4, to5, to6, to7, to8
           , from3, from4, from5, from6, from7, from8
           )
+import GHC.TypeLits
 
 data (:&) a b = a :& b
 infixl 2 :&
@@ -53,10 +55,10 @@ data SqlSetOperation a =
 
 data From a where 
   Table         :: PersistEntity ent => From (SqlExpr (Entity ent))
-  SubQuery      :: (SqlSelect a' r, SqlSelect a'' r', ToAlias a a', ToAliasReference a' a'')
+  SubQuery      :: (SqlSelect a' r, SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a' a'')
                 => SqlQuery a
                 -> From a''
-  SqlSetOperation   :: (SqlSelect a' r, ToAlias a a', ToAliasReference a' a'') 
+  SqlSetOperation :: (SqlSelect a' r, ToAlias a, a' ~ ToAliasT a, ToAliasReference a' a'') 
                 => SqlSetOperation a
                 -> From a''
   InnerJoinFrom :: From a 
@@ -65,139 +67,161 @@ data From a where
   CrossJoinFrom :: From a 
                 -> From b 
                 -> From (a :& b)
-  LeftJoinFrom  :: ToMaybe b mb
+  LeftJoinFrom  :: ToMaybe b
                 => From a 
-                -> (From b, (a :& mb) -> SqlExpr (Value Bool))
-                -> From (a :& mb)
-  RightJoinFrom :: ToMaybe a ma 
+                -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
+                -> From (a :& ToMaybeT b)
+  RightJoinFrom :: ToMaybe a 
                 => From a 
-                -> (From b, (ma :& b) -> SqlExpr (Value Bool)) 
-                -> From (ma :& b)
-  FullJoinFrom  :: (ToMaybe a ma, ToMaybe b mb)
+                -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool)) 
+                -> From (ToMaybeT a :& b)
+  FullJoinFrom  :: (ToMaybe a, ToMaybe b )
                 => From a 
-                -> (From b, (ma :& mb) -> SqlExpr (Value Bool))
-                -> From (ma :& mb)
+                -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
+                -> From (ToMaybeT a :& ToMaybeT b)
 
-on :: ToFrom a a' => a -> b -> (a, b)
+on :: ToFrom a => a -> b -> (a, b)
 on = (,)
 infix 9 `on`
 
-{-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
-class ToFrom a b | a -> b where
-  toFrom :: a -> From b
+type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 
-instance ToFrom (From a) a where
+type family ToFromT a where
+  ToFromT (From a) = a
+  ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
+  ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c 
+  ToFromT (FullOuterJoin a (b, c -> SqlExpr (Value Bool))) = c 
+  ToFromT (RightOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
+  ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c 
+  ToFromT (CrossJoin a b) = (ToFromT a :& ToFromT b)
+  ToFromT (InnerJoin a b) = TypeError (JoinErrorMsg "InnerJoin")
+  ToFromT (LeftOuterJoin a b) = TypeError (JoinErrorMsg "LeftOuterJoin")
+  ToFromT (RightOuterJoin a b) = TypeError (JoinErrorMsg "RightOuterJoin")
+  ToFromT (FullOuterJoin a b) = TypeError (JoinErrorMsg "FullOuterJoin")
+
+{-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
+class ToFrom a where
+  toFrom :: a -> From (ToFromT a)
+
+instance ToFrom (From a) where
   toFrom = id
 
-{-- Potentially allow the passing of queries directly 
-instance (SqlSelect a'' r', ToAlias a a', ToAliasReference a' a'') 
-       => ToFrom (SqlQuery a) a'' where
-  toFrom q = SubQuery q
---}
-instance (SqlSelect a' r, SqlSelect a'' r', ToAlias a a', ToAliasReference a' a'') 
-       => ToFrom (SqlSetOperation a) a'' where
+instance {-# OVERLAPPABLE #-} ToFrom (InnerJoin a b) where
+  toFrom = undefined
+instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
+  toFrom = undefined
+instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
+  toFrom = undefined
+instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
+  toFrom = undefined
+
+instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a' a'')  => ToFrom (SqlSetOperation a) where
   -- If someone uses just a plain SelectQuery it should behave like a normal subquery
   toFrom (SelectQuery q) = SubQuery q 
   -- Otherwise use the SqlSetOperation
   toFrom q = SqlSetOperation q
 
-instance (ToFrom a a', ToFrom b b', ToMaybe b' mb) =>
-          ToFrom (LeftOuterJoin 
-                        a
-                        (b, (a' :& mb) -> SqlExpr (Value Bool))
-                      ) (a' :& mb) where
+instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b', ToMaybe b', mb ~ ToMaybeT b') 
+       => ToFrom (LeftOuterJoin a (b, (a' :& mb) -> SqlExpr (Value Bool))) where
   toFrom (LeftOuterJoin lhs (rhs, on')) = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance (ToFrom a a', ToFrom b b', ToMaybe a' ma, ToMaybe b' mb) =>
-          ToFrom (FullOuterJoin 
-                        a
-                        (b, (ma :& mb) -> SqlExpr (Value Bool))
-                      ) (ma :& mb) where
+instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b', ToMaybe a', ma ~ ToMaybeT a', ToMaybe b', mb ~ ToMaybeT b') 
+       => ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
   toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance (ToFrom a a', ToFrom b b', ToMaybe a' ma) =>
-          ToFrom (RightOuterJoin 
-                        a
-                        (b, (ma :& b') -> SqlExpr (Value Bool))
-                      ) (ma :& b') where
+instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b', ToMaybe a', ma ~ ToMaybeT a') 
+       => ToFrom (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) where
   toFrom (RightOuterJoin lhs (rhs, on')) = RightJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance (ToFrom a a', ToFrom b b') 
-       => ToFrom (InnerJoin a (b, (a' :& b') -> SqlExpr (Value Bool))) (a' :& b') where
+instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b') => ToFrom (InnerJoin a (b, (a' :& b') -> SqlExpr (Value Bool))) where
   toFrom (InnerJoin lhs (rhs, on')) = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance (ToFrom a a', ToFrom b b') 
-       => ToFrom (CrossJoin a b) (a' :& b') where
+instance (ToFrom a, ToFrom b) => ToFrom (CrossJoin a b) where
   toFrom (CrossJoin lhs rhs) = CrossJoinFrom (toFrom lhs) (toFrom rhs)
 
-class ToMaybe a b where
-  toMaybe :: a -> b 
+type family ToMaybeT a where
+  ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
+  ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
+  ToMaybeT (SqlExpr (Value a)) = SqlExpr (Maybe (Value a))
+  ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
+  ToMaybeT (a, b) = (ToMaybeT a, ToMaybeT b)
+  ToMaybeT (a, b, c) = (ToMaybeT a, ToMaybeT b, ToMaybeT c)
+  ToMaybeT (a, b, c, d) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d)
+  ToMaybeT (a, b, c, d, e) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e)
+  ToMaybeT (a, b, c, d, e, f) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f)
+  ToMaybeT (a, b, c, d, e, f, g) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g)
+  ToMaybeT (a, b, c, d, e, f, g, h) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g, ToMaybeT h)
 
-instance ToMaybe (SqlExpr (Maybe a)) (SqlExpr (Maybe a)) where
+class ToMaybe a where
+  toMaybe :: a -> ToMaybeT a
+
+instance ToMaybe (SqlExpr (Maybe a)) where
   toMaybe = id
 
-instance ToMaybe (SqlExpr (Entity a)) (SqlExpr (Maybe (Entity a))) where
+instance ToMaybe (SqlExpr (Entity a)) where
   toMaybe = EMaybe
 
-instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a :& b) (a' :& b') where
+instance ToMaybe (SqlExpr (Value a)) where
+  toMaybe = EMaybe
+
+instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
   toMaybe (a :& b) = (toMaybe a :& toMaybe b)
 
-instance (ToMaybe a a', ToMaybe b b') => ToMaybe (a,b) (a',b') where
+instance (ToMaybe a, ToMaybe b) => ToMaybe (a,b) where
   toMaybe (a, b) = (toMaybe a, toMaybe b)
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         ) => ToMaybe (a,b,c) (a',b',c') where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         ) => ToMaybe (a,b,c) where
   toMaybe = to3 . toMaybe . from3
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         , ToMaybe d d'
-         ) => ToMaybe (a,b,c,d) (a',b',c',d') where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         ) => ToMaybe (a,b,c,d) where
   toMaybe = to4 . toMaybe . from4
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         , ToMaybe d d'
-         , ToMaybe e e'
-         ) => ToMaybe (a,b,c,d,e) (a',b',c',d',e') where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         ) => ToMaybe (a,b,c,d,e) where
   toMaybe = to5 . toMaybe . from5
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         , ToMaybe d d'
-         , ToMaybe e e'
-         , ToMaybe f f'
-         ) => ToMaybe (a,b,c,d,e,f) (a',b',c',d',e',f') where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         , ToMaybe f
+         ) => ToMaybe (a,b,c,d,e,f) where
   toMaybe = to6 . toMaybe . from6
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         , ToMaybe d d'
-         , ToMaybe e e'
-         , ToMaybe f f'
-         , ToMaybe g g'
-         ) => ToMaybe (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+instance ( ToMaybe a 
+         , ToMaybe b 
+         , ToMaybe c 
+         , ToMaybe d 
+         , ToMaybe e 
+         , ToMaybe f 
+         , ToMaybe g 
+         ) => ToMaybe (a,b,c,d,e,f,g) where
   toMaybe = to7 . toMaybe . from7
 
-instance ( ToMaybe a a'
-         , ToMaybe b b'
-         , ToMaybe c c'
-         , ToMaybe d d'
-         , ToMaybe e e'
-         , ToMaybe f f'
-         , ToMaybe g g'
-         , ToMaybe h h'
-         ) => ToMaybe (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         , ToMaybe f
+         , ToMaybe g
+         , ToMaybe h
+         ) => ToMaybe (a,b,c,d,e,f,g,h) where
   toMaybe = to8 . toMaybe . from8
 
-
-from :: ToFrom a a' => a -> SqlQuery a'
+from :: ToFrom a  => a -> SqlQuery (ToFromT a)
 from parts = do 
   (a, clause) <- runFrom $ toFrom parts
   Q $ W.tell mempty{sdFromClause=[clause]}
@@ -299,107 +323,124 @@ from parts = do
         let ret = (toMaybe leftVal) :& (toMaybe rightVal)
         pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
 
--- Tedious tuple magic
-class ToAlias a b | a -> b where
-  toAlias     :: a -> SqlQuery b
+type family ToAliasT a where
+  ToAliasT (SqlExpr (Value a)) = SqlExpr (Value a)
+  ToAliasT (SqlExpr (Entity a)) = SqlExpr (Entity a)
+  ToAliasT (a, b) = (ToAliasT a, ToAliasT b)
+  ToAliasT (a, b, c) = (ToAliasT a, ToAliasT b, ToAliasT c)
+  ToAliasT (a, b, c, d) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d)
+  ToAliasT (a, b, c, d, e) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e)
+  ToAliasT (a, b, c, d, e, f) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f)
+  ToAliasT (a, b, c, d, e, f, g) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g)
+  ToAliasT (a, b, c, d, e, f, g, h) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g, ToAliasT h)
 
-instance ToAlias (SqlExpr (Value a)) (SqlExpr (Value a)) where
+-- Tedious tuple magic
+class ToAlias a where
+  toAlias :: a -> SqlQuery (ToAliasT a)
+
+instance ToAlias (SqlExpr (Value a)) where
   toAlias v@(EAliasedValue _ _) = pure v
   toAlias v = do 
     ident <- newIdentFor (DBName "v")
     pure $ EAliasedValue ident v
 
-instance ToAlias (SqlExpr (Entity a)) (SqlExpr (Entity a)) where
+instance ToAlias (SqlExpr (Entity a)) where
   toAlias v@(EAliasedEntityReference _ _) = pure v
   toAlias v@(EAliasedEntity _ _) = pure v
   toAlias (EEntity tableIdent) = do 
     ident <- newIdentFor (DBName "v")
     pure $ EAliasedEntity ident tableIdent
 
-instance ( ToAlias a a', ToAlias b b') => ToAlias (a,b) (a',b') where
+instance (ToAlias a, ToAlias b) => ToAlias (a,b) where
   toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         ) => ToAlias (a,b,c) (a',b',c') where
+instance ( ToAlias a 
+         , ToAlias b 
+         , ToAlias c 
+         ) => ToAlias (a,b,c) where
   toAlias x = to3 <$> (toAlias $ from3 x)
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         , ToAlias d d'
-         ) => ToAlias (a,b,c,d) (a',b',c',d') where
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         ) => ToAlias (a,b,c,d) where
   toAlias x = to4 <$> (toAlias $ from4 x)
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         , ToAlias d d'
-         , ToAlias e e'
-         ) => ToAlias (a,b,c,d,e) (a',b',c',d',e') where
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         ) => ToAlias (a,b,c,d,e) where
   toAlias x = to5 <$> (toAlias $ from5 x)
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         , ToAlias d d'
-         , ToAlias e e'
-         , ToAlias f f'
-         ) => ToAlias (a,b,c,d,e,f) (a',b',c',d',e',f') where
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         ) => ToAlias (a,b,c,d,e,f) where
   toAlias x = to6 <$> (toAlias $ from6 x)
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         , ToAlias d d'
-         , ToAlias e e'
-         , ToAlias f f'
-         , ToAlias g g'
-         ) => ToAlias (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         ) => ToAlias (a,b,c,d,e,f,g) where
   toAlias x = to7 <$> (toAlias $ from7 x)
 
-instance ( ToAlias a a'
-         , ToAlias b b'
-         , ToAlias c c'
-         , ToAlias d d'
-         , ToAlias e e'
-         , ToAlias f f'
-         , ToAlias g g'
-         , ToAlias h h'
-         ) => ToAlias (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         ) => ToAlias (a,b,c,d,e,f,g,h) where
   toAlias x = to8 <$> (toAlias $ from8 x)
 
-
 -- more tedious tuple magic 
-class ToAliasReference a b | a -> b where
+class (ToAliasReferenceT a ~ b) => ToAliasReference a b where
+  type ToAliasReferenceT a 
   toAliasReference :: Ident -> a -> SqlQuery b
 
 instance ToAliasReference (SqlExpr (Value a)) (SqlExpr (Value a)) where
+  type ToAliasReferenceT (SqlExpr (Value a)) = SqlExpr (Value a)
   toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
   toAliasReference _           v@(ERaw _ _)                 = toAlias v
   toAliasReference _           v@(ECompositeKey _)          = toAlias v
   toAliasReference _           v@(EValueReference _ _)      = pure v 
 
 instance ToAliasReference (SqlExpr (Entity a)) (SqlExpr (Entity a)) where
+  type ToAliasReferenceT (SqlExpr (Entity a)) = SqlExpr (Entity a)
   toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
   toAliasReference _ e@(EEntity _) = toAlias e 
   toAliasReference _ e@(EAliasedEntityReference _ _) = pure e
 
 instance ( ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) ( a', b' ) where
+  type ToAliasReferenceT (a,b) = (ToAliasReferenceT a, ToAliasReferenceT b)
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
 
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          ) => ToAliasReference (a,b,c) ( a', b', c') where
+  type ToAliasReferenceT (a,b,c) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c)
   toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
+
 
 instance ( ToAliasReference a a'
          , ToAliasReference b b'
          , ToAliasReference c c'
          , ToAliasReference d d'
          ) => ToAliasReference (a,b,c,d) (a',b',c',d') where
+  type ToAliasReferenceT (a, b, c, d) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d)
   toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
 
 instance ( ToAliasReference a a'
@@ -408,6 +449,7 @@ instance ( ToAliasReference a a'
          , ToAliasReference d d'
          , ToAliasReference e e'
          ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
+  type ToAliasReferenceT (a, b, c, d, e) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e)
   toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
 instance ( ToAliasReference a a'
@@ -417,6 +459,7 @@ instance ( ToAliasReference a a'
          , ToAliasReference e e'
          , ToAliasReference f f'
          ) => ToAliasReference (a,b,c,d,e,f) (a',b',c',d',e',f') where
+  type ToAliasReferenceT (a, b, c, d, e, f) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f)
   toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
 
 instance ( ToAliasReference a a'
@@ -427,6 +470,7 @@ instance ( ToAliasReference a a'
          , ToAliasReference f f'
          , ToAliasReference g g'
          ) => ToAliasReference (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
+  type ToAliasReferenceT (a, b, c, d, e, f, g) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g)
   toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
 
 instance ( ToAliasReference a a'
@@ -438,4 +482,5 @@ instance ( ToAliasReference a a'
          , ToAliasReference g g'
          , ToAliasReference h h'
          ) => ToAliasReference (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
+  type ToAliasReferenceT (a, b, c, d, e, f, g, h) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g, ToAliasReferenceT h)
   toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)

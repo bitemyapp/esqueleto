@@ -22,7 +22,7 @@ missingOnConditionShouldFail :: MonadIO m => SqlPersistT m [(Entity Person, Enti
 missingOnConditionShouldFail = select $ do
     (people :& blogPosts) <-
       from $ Table @Person
-      `InnerJoin` Table @BlogPost
+      `LeftOuterJoin` Table @BlogPost
     pure (people, blogPosts)
 
 -- Mismatched union when one part is returning a different shape than the other 
