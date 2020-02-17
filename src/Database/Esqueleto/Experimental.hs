@@ -11,7 +11,34 @@
            , OverloadedStrings
  #-}
 
-module Database.Esqueleto.Experimental where
+module Database.Esqueleto.Experimental
+    ( -- * Setup
+      -- $setup
+
+      -- * Introduction
+      -- $introduction
+
+      -- * A New Syntax
+      -- $new-syntax
+
+      -- * Documentation
+
+      SqlSetOperation(..)
+    , From(..)
+    , on
+    , from
+    , (:&)(..)
+      -- * Internals
+    , ToFrom(..)
+    , ToFromT
+    , ToMaybe(..)
+    , ToMaybeT
+    , ToAlias(..)
+    , ToAliasT
+    , ToAliasReference(..)
+    , ToAliasReferenceT
+    )
+    where
 
 import qualified Control.Monad.Trans.Writer as W
 import qualified Control.Monad.Trans.State as S
@@ -42,6 +69,171 @@ import Database.Esqueleto.Internal.Internal
           , from3, from4, from5, from6, from7, from8
           )
 import GHC.TypeLits
+
+-- $setup
+--
+-- If you're already using "Database.Esqueleto", then you can get
+-- started using this module just by changing your imports slightly,
+-- as well as enabling the [TypeApplications](https://downloads.haskell.org/~ghc/latest/docs/html/users_guide/glasgow_exts.html#extension-TypeApplications) extension.
+--
+-- @
+-- {-\# LANGUAGE TypeApplications \#-}
+--
+-- ...
+--
+-- import Database.Esqueleto hiding (on, from)
+-- import Database.Esqueleto.Experimental
+-- @
+
+----------------------------------------------------------------------
+
+-- $introduction
+--
+-- This module is fully backwards-compatible extension to the @esqueleto@
+-- EDSL that expands subquery functionality and enables
+-- [SQL set operations](https://en.wikipedia.org/wiki/Set_operations_(SQL\))
+-- to be written directly in Haskell. Specifically, this enables:
+--
+--   * Subqueries in 'JOIN' statements
+--   * 'UNION'
+--   * 'UNION' 'ALL'
+--   * 'INTERSECT'
+--   * 'EXCEPT'
+--
+-- As a consequence of this, several classes of runtime errors are now
+-- caught at compile time. This includes missing 'on' clauses and improper
+-- handling of @Maybe@ values in outer joins.
+--
+-- This module can be used in conjunction with the main "Database.Esqueleto"
+-- module, but doing so requires qualified imports to avoid ambiguous
+-- definitions of 'on' and 'from', which are defined in both modules.
+--
+-- Below we will give an overview of how to use this module and the
+-- features it enables.
+
+----------------------------------------------------------------------
+
+-- $new-syntax
+--
+-- This module introduces a new syntax that serves to enable the aforementioned
+-- features. This new syntax also changes how joins written in the @esqueleto@
+-- EDSL to more closely resemble the underlying SQL.
+--
+-- For our examples, we'll use a schema similar to the one in the Getting Started
+-- section of "Database.Esqueleto":
+--
+-- @
+-- share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persist|
+--   Person
+--     name String
+--     age Int Maybe
+--     deriving Eq Show
+--   BlogPost
+--     title String
+--     authorId PersonId
+--     deriving Eq Show
+--   Follow
+--     follower PersonId
+--     followed PersonId
+--     deriving Eq Show
+-- |]
+-- @
+--
+-- === Example 1: Simple select
+--
+-- Let's select all people who are named \"John\".
+--
+-- Using "Database.Esqueleto":
+--
+-- @
+-- select $
+-- from $ \people -> do
+-- where_ (people ^. PersonName ==. val \"John\")
+-- pure people
+-- @
+--
+-- Using "Database.Esqueleto.Experimental":
+--
+-- @
+-- select $ do
+-- people <- from $ Table @Person
+-- where_ (people ^. PersonName ==. val \"John\")
+-- pure people
+-- @
+--
+--
+-- === Example 2: Select with join
+--
+-- Let's select all people and their blog posts who are over
+-- the age of 18.
+--
+-- Using "Database.Esqueleto":
+--
+-- @
+-- select $
+-- from $ \(people \`LeftOuterJoin\` blogPosts) -> do
+-- on (people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. val 18)
+-- pure (people, blogPosts)
+-- @
+--
+-- Using "Database.Esqueleto.Experimental":
+--
+-- Here we use the ':&' operator to pattern match against the joined tables.
+--
+-- @
+-- select $ do
+-- (people :& blogPosts) <-
+--     from $ Table @Person
+--     \`LeftOuterJoin\` Table @BlogPost
+--     \`on\` (\(people :& blogPosts) ->
+--             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. val 18)
+-- pure (people, blogPosts)
+-- @
+--
+-- === Example 3: Select with multi-table join
+--
+-- Let's select all people who follow a person named \"John\", including
+-- the name of each follower.
+--
+-- Using "Database.Esqueleto":
+--
+-- @
+-- select $
+-- from $ \(
+--  people1
+--  \`InnerJoin\` followers
+--  \`InnerJoin\` people2
+-- ) -> do
+-- on (people1 ^. PersonId ==. followers ^. FollowFollowed)
+-- on (followers ^. FollowFollower ==. people2 ^. PersonId)
+-- where_ (people1 ^. PersonName ==. val \"John\")
+-- pure (followers, people2)
+-- @
+--
+-- Using "Database.Esqueleto.Experimental":
+--
+-- In this version, with each successive 'on' clause, only the tables
+-- we have already joined into are in scope, so we must pattern match
+-- accordingly. In this case, in the second 'InnerJoin', we do not use
+-- the first `Person` reference, so we use @_@ as a placeholder to
+-- ignore it. This prevents a possible runtime error where a table
+-- is referenced before it appears in the sequence of 'JOIN's.
+--
+-- @
+-- select $ do
+-- (people1 :& followers :& people2) <-
+--     from $ Table @Person
+--     \`InnerJoin` Table @Follow
+--     \`on\` (\(people1 :& followers) ->
+--             people1 ^. PersonId ==. followers ^. FollowFollowed)
+--     \`InnerJoin` Table @Person
+--     \`on\` (\(_ :& followers :& people2) ->
+--             followers ^. FollowFollower ==. people2 ^. PersonId)
+-- where_ (people1 ^. PersonName ==. val \"John\")
+-- pure (followers, people2)
+-- @
 
 data (:&) a b = a :& b
 infixl 2 :&
