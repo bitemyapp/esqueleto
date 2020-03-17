@@ -143,16 +143,16 @@ import GHC.TypeLits
 --
 -- Let's select all people who are named \"John\".
 --
--- Using "Database.Esqueleto":
+-- ==== "Database.Esqueleto":
 --
 -- @
 -- select $
--- from $ \people -> do
+-- from $ \\people -> do
 -- where_ (people ^. PersonName ==. val \"John\")
 -- pure people
 -- @
 --
--- Using "Database.Esqueleto.Experimental":
+-- ==== "Database.Esqueleto.Experimental":
 --
 -- @
 -- select $ do
@@ -167,17 +167,17 @@ import GHC.TypeLits
 -- Let's select all people and their blog posts who are over
 -- the age of 18.
 --
--- Using "Database.Esqueleto":
+-- ==== "Database.Esqueleto":
 --
 -- @
 -- select $
--- from $ \(people \`LeftOuterJoin\` blogPosts) -> do
+-- from $ \\(people \`LeftOuterJoin\` blogPosts) -> do
 -- on (people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
 -- where_ (people ^. PersonAge >. val 18)
 -- pure (people, blogPosts)
 -- @
 --
--- Using "Database.Esqueleto.Experimental":
+-- ==== "Database.Esqueleto.Experimental":
 --
 -- Here we use the ':&' operator to pattern match against the joined tables.
 --
@@ -186,7 +186,7 @@ import GHC.TypeLits
 -- (people :& blogPosts) <-
 --     from $ Table @Person
 --     \`LeftOuterJoin\` Table @BlogPost
---     \`on\` (\(people :& blogPosts) ->
+--     \`on\` (\\(people :& blogPosts) ->
 --             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
 -- where_ (people ^. PersonAge >. val 18)
 -- pure (people, blogPosts)
@@ -197,11 +197,11 @@ import GHC.TypeLits
 -- Let's select all people who follow a person named \"John\", including
 -- the name of each follower.
 --
--- Using "Database.Esqueleto":
+-- ==== "Database.Esqueleto":
 --
 -- @
 -- select $
--- from $ \(
+-- from $ \\(
 --  people1
 --  \`InnerJoin\` followers
 --  \`InnerJoin\` people2
@@ -212,7 +212,7 @@ import GHC.TypeLits
 -- pure (followers, people2)
 -- @
 --
--- Using "Database.Esqueleto.Experimental":
+-- ==== "Database.Esqueleto.Experimental":
 --
 -- In this version, with each successive 'on' clause, only the tables
 -- we have already joined into are in scope, so we must pattern match
@@ -226,18 +226,153 @@ import GHC.TypeLits
 -- (people1 :& followers :& people2) <-
 --     from $ Table @Person
 --     \`InnerJoin` Table @Follow
---     \`on\` (\(people1 :& followers) ->
+--     \`on\` (\\(people1 :& followers) ->
 --             people1 ^. PersonId ==. followers ^. FollowFollowed)
 --     \`InnerJoin` Table @Person
---     \`on\` (\(_ :& followers :& people2) ->
+--     \`on\` (\\(_ :& followers :& people2) ->
 --             followers ^. FollowFollower ==. people2 ^. PersonId)
 -- where_ (people1 ^. PersonName ==. val \"John\")
 -- pure (followers, people2)
 -- @
+--
+-- === Example 4: Counting results of a subquery
+--
+-- Let's count the number of people who have posted at least 10 posts
+--
+-- ==== "Database.Esqueleto":
+--
+-- @
+-- select $ pure $ subSelectCount $
+-- from $ \\(
+--   people
+--   \`InnerJoin\` blogPosts
+-- ) -> do
+-- on (people ^. PersonId ==. blogPosts ^. BlogPostAuthorId)
+-- groupBy (people ^. PersonId)
+-- having ((count $ blogPosts ^. BlogPostId) >. val 10)
+-- pure people
+-- @
+--
+-- ==== "Database.Esqueleto.Experimental":
+--
+-- @
+-- select $ do
+-- peopleWithPosts <-
+--   from $ SelectQuery $ do
+--     (people :& blogPosts) <-
+--       from $ Table @Person
+--       \`InnerJoin\` Table @BlogPost
+--       \`on\` (\\(p :& bP) ->
+--               p ^. PersonId ==. bP ^. BlogPostAuthorId)
+--     groupBy (people ^. PersonId)
+--     having ((count $ blogPosts ^. BlogPostId) >. val 10)
+--     pure people
+-- pure $ count (peopleWithPosts ^. PersonId)
+-- @
+--
+-- We now have the ability to refactor this
+--
+-- === Example 5: Sorting the results of a UNION with limits
+--
+-- Out of all of the posts created by a person and the people they follow,
+-- generate a list of the first 25 posts, sorted alphabetically.
+--
+-- ==== "Database.Esqueleto":
+--
+-- Since 'UNION' is not supported, this requires using `Database.Esqueleto.rawSql`. (Not shown)
+--
+-- ==== "Database.Esqueleto.Experimental":
+--
+-- Since this module supports all set operations (see `SqlSetOperation`), we can use
+-- `Union` to write this query.
+--
+-- @
+-- select $ do
+-- (authors, blogPosts) <- from $
+--   (SelectQuery $ do
+--     (author :& blogPost) <-
+--       from $ Table @Person
+--       \`InnerJoin\` Table @BlogPost
+--       \`on\` (\\(a :& bP) ->
+--               a ^. PersonId ==. bP ^. BlogPostAuthorId)
+--     where_ (author ^. PersonId ==. val currentPersonId)
+--     pure (author, blogPost)
+--   )
+--   \`Union\`
+--   (SelectQuery $ do
+--     (follow :& blogPost :& author) <-
+--       from $ Table @Follow
+--       \`InnerJoin\` Table @BlogPost
+--       \`on\` (\\(f :& bP) ->
+--               f ^. FollowFollowed ==. bP ^. BlogPostAuthorId)
+--       \`InnerJoin\` Table @Person
+--       \`on\` (\\(_ :& bP :& a) ->
+--               bP ^. BlogPostAuthorId ==. a ^. PersonId)
+--     where_ (follow ^. FollowFollower ==. val currentPersonId)
+--     pure (author, blogPost)
+--   )
+-- orderBy [ asc (blogPosts ^. BlogPostTitle) ]
+-- limit 25
+-- pure (authors, blogPosts)
+-- @
 
+-- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
+-- that have been joined together.
+--
+-- The precedence behavior can be demonstrated by:
+--
+-- @
+-- a :& b :& c == ((a :& b) :& c)
+-- @
+--
+-- See the examples at the beginning of this module to see how this
+-- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
 infixl 2 :&
 
+-- | Data type that represents SQL set operations. This includes
+-- 'UNION', 'UNION' 'ALL', 'EXCEPT', and 'INTERSECT'. This data
+-- type is defined as a binary tree, with @SelectQuery@ on the leaves.
+--
+-- Each constructor corresponding to the aforementioned set operations
+-- can be used as an infix function in a @from@ to help with readability
+-- and lead to code that closely resembles the underlying SQL. For example,
+--
+-- @
+-- select $ from $
+--   (SelectQuery ...)
+--   \`Union\`
+--   (SelectQuery ...)
+-- @
+--
+-- is translated into
+--
+-- @
+-- SELECT * FROM (
+--   (SELECT * FROM ...)
+--   UNION
+--   (SELECT * FROM ...)
+-- )
+-- @
+--
+-- @SelectQuery@ can be used without any of the set operations to construct
+-- a subquery. This can be used in 'JOIN' trees. For example,
+--
+-- @
+-- select $ from $
+--   Table @SomeTable
+--   \`InnerJoin\` (SelectQuery ...)
+--   \`on\` ...
+-- @
+--
+-- is translated into
+--
+-- @
+-- SELECT *
+-- FROM SomeTable
+-- INNER JOIN (SELECT * FROM ...)
+-- ON ...
+-- @
 data SqlSetOperation a =
     Union (SqlSetOperation a) (SqlSetOperation a)
   | UnionAll (SqlSetOperation a) (SqlSetOperation a)
@@ -245,6 +380,12 @@ data SqlSetOperation a =
   | Intersect (SqlSetOperation a) (SqlSetOperation a)
   | SelectQuery (SqlQuery a)
 
+-- | Data type that represents the syntax of a 'JOIN' tree. In practice,
+-- only the @Table@ constructor is used directly when writing queries. For example,
+--
+-- @
+-- select $ from $ Table @People
+-- @
 data From a where
   Table         :: PersistEntity ent => From (SqlExpr (Entity ent))
   SubQuery      :: (SqlSelect a' r, SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')
@@ -272,6 +413,17 @@ data From a where
                 -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
                 -> From (ToMaybeT a :& ToMaybeT b)
 
+-- | An @ON@ clause that describes how two tables are related. This should be
+-- used as an infix operator after a 'JOIN'. For example,
+--
+-- @
+-- select $
+-- from $ Table @Person
+-- \`InnerJoin\` Table @BlogPost
+-- \`on\` (\\(p :& bP) ->
+--         p ^. PersonId ==. bP ^. BlogPostAuthorId)
+-- @
+--
 on :: ToFrom a => a -> b -> (a, b)
 on = (,)
 infix 9 `on`
@@ -413,6 +565,15 @@ instance ( ToMaybe a
          ) => ToMaybe (a,b,c,d,e,f,g,h) where
   toMaybe = to8 . toMaybe . from8
 
+-- | 'FROM' clause, used to bring entities into scope.
+--
+-- Internally, this function uses the `From` datatype and the
+-- `ToFrom` typeclass. Unlike the old `Database.Esqueleto.from`,
+-- this does not take a function as a parameter, but rather
+-- a value that represents a 'JOIN' tree constructed out of
+-- instances of `ToFrom`. This implementation eliminates certain
+-- types of runtime errors by preventing the construction of
+-- invalid SQL (e.g. illegal nested-@from@).
 from :: ToFrom a  => a -> SqlQuery (ToFromT a)
 from parts = do
   (a, clause) <- runFrom $ toFrom parts
