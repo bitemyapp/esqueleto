@@ -165,6 +165,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     frontcoverNumber Int
     Foreign Frontcover fkfrontcover frontcoverNumber
     deriving Eq Show
+  ArticleMetadata
+    articleId ArticleId
+    Primary articleId
+    deriving Show
   Tag
     name String maxlen=100
     Primary name
@@ -753,7 +757,16 @@ testSelectJoin run = do
         liftIO $ do
           retFc `shouldBe` fc
           fcPk `shouldBe` thePk
-
+    it "allows using a primary key that is itself a key of another table" $
+      run $ do
+        let number = 101
+        insert_ $ Frontcover number ""
+        articleId <- insert $ Article "title" number
+        insertKey (ArticleMetadataKey articleId) (ArticleMetadata articleId)
+        xs <- select . from $ \articleMetadata -> do
+          where_ $ (articleMetadata ^. ArticleMetadataId) ==. (val ((ArticleMetadataKey articleId)))
+          pure articleMetadata
+        pure ()
     it "works with a ForeignKey to a non-id primary key returning both entities" $
       run $ do
         let fc = Frontcover number ""
