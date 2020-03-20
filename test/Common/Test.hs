@@ -168,7 +168,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   ArticleMetadata
     articleId ArticleId
     Primary articleId
-    deriving Show
+    deriving Eq Show
   Tag
     name String maxlen=100
     Primary name
@@ -762,11 +762,11 @@ testSelectJoin run = do
         let number = 101
         insert_ $ Frontcover number ""
         articleId <- insert $ Article "title" number
-        insertKey (ArticleMetadataKey articleId) (ArticleMetadata articleId)
-        xs <- select . from $ \articleMetadata -> do
+        articleMetaE <- insert' (ArticleMetadata articleId)
+        result <- select . from $ \articleMetadata -> do
           where_ $ (articleMetadata ^. ArticleMetadataId) ==. (val ((ArticleMetadataKey articleId)))
           pure articleMetadata
-        pure ()
+        liftIO $ [articleMetaE] `shouldBe` result
     it "works with a ForeignKey to a non-id primary key returning both entities" $
       run $ do
         let fc = Frontcover number ""
