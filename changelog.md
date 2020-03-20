@@ -1,3 +1,9 @@
+3.3.2
+========
+
+- @belevy
+  - [#177](https://github.com/bitemyapp/esqueleto/pull/177) Fix natural key handling in (^.)
+
 3.3.1.1
 ========
 

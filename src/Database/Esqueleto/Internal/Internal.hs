@@ -521,33 +521,44 @@ subSelectUnsafe = sub SELECT
   => SqlExpr (Entity val)
   -> EntityField val typ
   -> SqlExpr (Value typ)
-e ^. field
-  | isComposite   = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
-  | isReference e = makeValueReference (persistFieldDef field) e
-  | otherwise     = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
+(EAliasedEntityReference source base) ^. field =
+  EValueReference source (aliasedEntityColumnIdent base fieldDef)
+    where
+      fieldDef = 
+        if isIdField field then 
+          -- TODO what about composite natural keys in a join this will ignore them
+          head $ entityKeyFields ed 
+        else
+          persistFieldDef field
+
+      ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
+  
+e ^. field 
+  | isIdField field = idFieldValue
+  | otherwise = ERaw Never $ \info -> (dot info $ persistFieldDef field, [])
   where
-    isComposite = isIdField field && hasCompositeKey ed
+    idFieldValue =
+      case entityKeyFields ed of
+        idField:[] ->
+          ERaw Never    $ \info -> (dot info idField, [])
 
-    isReference (EAliasedEntityReference _ _) = True
-    isReference _ = False
+        idFields ->
+          ECompositeKey $ \info ->  dot info <$> idFields
 
-    makeValueReference :: FieldDef -> SqlExpr (Entity val) -> SqlExpr (Value typ)
-    makeValueReference x (EAliasedEntityReference sourceIdent baseIdent) =
-      EValueReference sourceIdent (aliasedEntityColumnIdent baseIdent x)  
-    makeValueReference _ _ = undefined -- Protected by isReference guard
 
-    dot info x  = 
-      case e of
-        EEntity ident ->
-          useIdent info ident <> "." <> fromDBName info (fieldDB x)
-        EAliasedEntity ident _ ->
-          useIdent info $ aliasedEntityColumnIdent ident x info
-        EAliasedEntityReference _ _ ->
-          undefined -- defined above
+    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
-    ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
-    Just pdef   = entityPrimary ed
-
+    dot info fieldDef = 
+      useIdent info sourceIdent <> "." <> fieldIdent
+        where
+          sourceIdent =
+            case e of 
+              EEntity ident -> ident
+              EAliasedEntity baseI _ -> baseI
+          fieldIdent = 
+            case e of 
+              EEntity _ -> fromDBName info (fieldDB fieldDef) 
+              EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef info
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull :: PersistField typ
