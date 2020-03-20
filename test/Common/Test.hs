@@ -2345,6 +2345,7 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity CcList))  -> return ()
 
   delete $ from $ \(_ :: SqlExpr (Entity ArticleTag)) -> return ()
+  delete $ from $ \(_ :: SqlExpr (Entity ArticleMetadata)) -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Article))    -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Article2))   -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Tag))        -> return ()
