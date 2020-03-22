@@ -944,7 +944,7 @@ testSelectWhere run = do
         _ <- insert' p4
         ret <- select $
                from $ \p->
-               return $ joinV $ avg_ (p ^. PersonAge)
+               return $ avg_ (p ^. PersonAge)
         let testV :: Double
             testV = roundTo (4 :: Integer) $ (36 + 17 + 17) / (3 :: Double)
 
@@ -960,7 +960,7 @@ testSelectWhere run = do
         _ <- insert' p4
         ret <- select $
                from $ \p->
-               return $ joinV $ min_ (p ^. PersonAge)
+               return $ min_ (p ^. PersonAge)
         liftIO $ ret `shouldBe` [ Value $ Just (17 :: Int) ]
 
     it "works with max_" $
@@ -971,7 +971,7 @@ testSelectWhere run = do
         _ <- insert' p4
         ret <- select $
                from $ \p->
-               return $ joinV $ max_ (p ^. PersonAge)
+               return $ max_ (p ^. PersonAge)
         liftIO $ ret `shouldBe` [ Value $ Just (36 :: Int) ]
 
     it "works with lower_" $

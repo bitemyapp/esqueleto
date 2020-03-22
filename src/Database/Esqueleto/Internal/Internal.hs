@@ -428,7 +428,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 subSelectMaybe
   :: PersistField a
   => SqlQuery (SqlExpr (Value (Maybe a)))
-  -> SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value (SqlMaybe a))
 subSelectMaybe = joinV . subSelect
 
 -- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
@@ -541,8 +541,8 @@ withNonNull field f = do
 
 -- | Project a field of an entity that may be null.
 (?.) :: (PersistEntity val, PersistField typ) =>
-        SqlExpr (Maybe (Entity val)) -> EntityField val typ -> SqlExpr (Value (Maybe typ))
-EMaybe r ?. field = just (r ^. field)
+        SqlExpr (Maybe (Entity val)) -> EntityField val typ -> SqlExpr (Value (SqlMaybe typ))
+EMaybe r ?. field = veryUnsafeCoerceSqlExprValue (r ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -557,8 +557,7 @@ isNothing (ECompositeKey f) = ERaw Parens $ flip (,) [] . (intersperseB " AND " 
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
 just :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
-just (ERaw p f)        = ERaw p f
-just (ECompositeKey f) = ECompositeKey f
+just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
@@ -566,9 +565,8 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
-joinV (ERaw p f)        = ERaw p f
-joinV (ECompositeKey f) = ECompositeKey f
+joinV :: SqlExpr (Value (Maybe typ)) -> SqlExpr (Value (SqlMaybe typ))
+joinV = veryUnsafeCoerceSqlExprValue
 
 -- | @COUNT(*)@ value.
 countRows :: Num a => SqlExpr (Value a)
@@ -589,8 +587,15 @@ not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                         in ("NOT " <> parensM p b, vals)
 not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 
+type family SqlMaybe v where
+  SqlMaybe (Maybe v) = SqlMaybe v
+  SqlMaybe v = Maybe v
 
-(==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+type family SqlBaseType t where
+  SqlBaseType (Maybe t) = SqlBaseType t
+  SqlBaseType t = t
+
+(==.) :: (PersistField typ) => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
 (>=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
@@ -607,10 +612,10 @@ not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 (!=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+(&&.) :: Bool ~ SqlBaseType b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+(||.) :: Bool ~ SqlBaseType b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
 (||.) = unsafeSqlBinOp " OR "
 
 (+.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
@@ -643,11 +648,11 @@ ceiling_ = unsafeSqlFunction "CEILING"
 floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
-sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+sum_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+min_     :: (PersistField a)  => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
 max_     = unsafeSqlFunction "MAX"
 avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
