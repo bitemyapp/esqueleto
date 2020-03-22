@@ -648,7 +648,7 @@ ceiling_ = unsafeSqlFunction "CEILING"
 floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
-sum_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
+sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
 min_     :: (PersistField a)  => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
 min_     = unsafeSqlFunction "MIN"
