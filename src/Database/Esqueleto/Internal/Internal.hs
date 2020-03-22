@@ -522,10 +522,17 @@ subSelectUnsafe = sub SELECT
   -> EntityField val typ
   -> SqlExpr (Value typ)
 EEntity ident ^. field
-  | isComposite = ECompositeKey $ \info ->  dot info <$> compositeFields pdef
-  | otherwise   = ERaw Never    $ \info -> (dot info  $  persistFieldDef field, [])
+  | isIdField field = idFieldValue
+  | otherwise   = ERaw Never    $ \info -> (dot info  $ persistFieldDef field, [])
   where
-    isComposite = isIdField field && hasCompositeKey ed
+    idFieldValue =
+      case entityKeyFields ed of
+        idField:[] ->
+          ERaw Never    $ \info -> (dot info idField, [])
+
+        idFields ->
+          ECompositeKey $ \info ->  dot info <$> idFields
+
     dot info x  = useIdent info ident <> "." <> fromDBName info (fieldDB x)
     ed          = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
     Just pdef   = entityPrimary ed
