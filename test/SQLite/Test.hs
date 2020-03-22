@@ -44,7 +44,7 @@ testSqliteSum = do
       _ <- insert' p4
       ret <- select $
              from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
+             return $ sum_ (p ^. PersonAge)
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
 
 
