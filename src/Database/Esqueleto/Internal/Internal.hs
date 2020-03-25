@@ -568,7 +568,7 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe typ)) -> SqlExpr (Value typ)
+joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
 -- | @COUNT(*)@ value.
