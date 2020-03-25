@@ -27,6 +27,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.Internal.Internal (IsSqlBool)
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
@@ -1062,8 +1063,8 @@ sqlFailWith errState f = do
         errStateT = TE.decodeUtf8 errState
 
 selectJSONwhere
-  :: MonadIO m
-  => (JSONBExpr A.Value -> SqlExpr (Value Bool))
+  :: (MonadIO m, IsSqlBool bool)
+  => (JSONBExpr A.Value -> SqlExpr (Value bool))
   -> SqlPersistT m [Entity Json]
 selectJSONwhere f = selectJSON $ where_ . f
 
