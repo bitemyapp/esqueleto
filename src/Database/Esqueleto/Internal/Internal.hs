@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable
+           , DataKinds
            , EmptyDataDecls
            , FlexibleContexts
            , FlexibleInstances
@@ -7,6 +8,7 @@
            , TypeFamilies
            , UndecidableInstances
            , GADTs
+           , AllowAmbiguousTypes
  #-}
 {-# LANGUAGE ConstraintKinds
            , EmptyDataDecls
@@ -62,6 +64,7 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 
 import Data.Typeable (Typeable)
+import Data.Type.Bool
 import Text.Blaze.Html (Html)
 
 
@@ -130,8 +133,8 @@ fromFinish (EPreprocessedFrom ret f') = Q $ do
   return ret
 
 -- | @WHERE@ clause: restrict the query's result.
-where_ :: SqlExpr (Value Bool) -> SqlQuery ()
-where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
+where_ :: IsSqlBool bool => SqlExpr (Value bool) -> SqlQuery ()
+where_ expr = Q $ W.tell mempty { sdWhereClause = Where (veryUnsafeCoerceSqlExprValue expr) }
 
 -- | An @ON@ clause, useful to describe how two tables are related. Cross joins
 -- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
@@ -184,8 +187,8 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 --   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
 --   ...
 -- @
-on :: SqlExpr (Value Bool) -> SqlQuery ()
-on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
+on :: IsSqlBool bool => SqlExpr (Value bool) -> SqlQuery ()
+on expr = Q $ W.tell mempty { sdFromClause = [OnClause (veryUnsafeCoerceSqlExprValue expr)] }
 
 -- | @GROUP BY@ clause. You can enclose multiple columns
 -- in a tuple.
@@ -428,7 +431,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 subSelectMaybe
   :: PersistField a
   => SqlQuery (SqlExpr (Value (Maybe a)))
-  -> SqlExpr (Value (SqlMaybe a))
+  -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
 -- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
@@ -540,8 +543,8 @@ withNonNull field f = do
   f $ veryUnsafeCoerceSqlExprValue field
 
 -- | Project a field of an entity that may be null.
-(?.) :: (PersistEntity val, PersistField typ) =>
-        SqlExpr (Maybe (Entity val)) -> EntityField val typ -> SqlExpr (Value (SqlMaybe typ))
+(?.) :: (PersistEntity val, PersistField typ, result ~ DependentNull (Not (IsMaybe typ)) typ) =>
+        SqlExpr (Maybe (Entity val)) -> EntityField val typ -> SqlExpr (Value result)
 EMaybe r ?. field = veryUnsafeCoerceSqlExprValue (r ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
@@ -565,7 +568,7 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe typ)) -> SqlExpr (Value (SqlMaybe typ))
+joinV :: SqlExpr (Value (Maybe typ)) -> SqlExpr (Value typ)
 joinV = veryUnsafeCoerceSqlExprValue
 
 -- | @COUNT(*)@ value.
@@ -582,40 +585,106 @@ count         = countHelper ""           ""
 countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
-not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+not_ :: IsSqlBool bool => SqlExpr (Value bool) -> SqlExpr (Value bool)
 not_ (ERaw p f) = ERaw Never $ \info -> let (b, vals) = f info
                                         in ("NOT " <> parensM p b, vals)
 not_ (ECompositeKey _) = throw (CompositeKeyErr NotError)
 
-type family SqlMaybe v where
-  SqlMaybe (Maybe v) = SqlMaybe v
-  SqlMaybe v = Maybe v
+type family Nullable t where
+  Nullable (Maybe t) = t
+  Nullable t = t
 
-type family SqlBaseType t where
-  SqlBaseType (Maybe t) = SqlBaseType t
-  SqlBaseType t = t
+type family IsMaybe a where
+  IsMaybe (Maybe t) = 'True
+  IsMaybe t = 'False
 
-(==.) :: (PersistField typ) => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+type family DependentNull (isNull :: Bool) r where
+  DependentNull 'True r  = Maybe r
+  DependentNull 'False r = r
+
+class PersistFieldSql t => SqlTypeable t where
+  type SqlType' t :: SqlType
+instance {-# OVERLAPPABLE #-} SqlTypeable t => SqlTypeable [t] where
+  type SqlType' [t] = 'SqlString
+instance SqlTypeable [Char] where
+  type SqlType' [Char] = 'SqlString
+instance SqlTypeable T.Text where
+  type SqlType' T.Text = 'SqlString
+instance SqlTypeable TL.Text where
+  type SqlType' TL.Text = 'SqlString
+instance SqlTypeable B.ByteString where
+  type SqlType' B.ByteString = 'SqlString
+instance SqlTypeable Html where
+  type SqlType' Html = 'SqlString
+instance SqlTypeable Bool where
+  type SqlType' Bool = 'SqlBool
+instance SqlTypeable Int where
+  type SqlType' Int = 'SqlInt64
+instance SqlTypeable Double where
+  type SqlType' Double = 'SqlReal
+
+class SqlCoercible (a :: SqlType) (b :: SqlType) where
+instance SqlCoercible a a where
+instance SqlCoercible 'SqlInt32 'SqlInt64 where
+instance SqlCoercible 'SqlInt32 'SqlReal where
+instance SqlCoercible 'SqlInt64 'SqlReal where
+
+coerce_ :: forall b a t t'. ( t  ~ SqlType' (Nullable a)
+                            , t' ~ SqlType' (Nullable b)
+                            , IsMaybe a ~ IsMaybe b
+                            , SqlCoercible t t'
+                            )
+        => SqlExpr (Value a) -> SqlExpr (Value b)
+coerce_ = veryUnsafeCoerceSqlExprValue
+
+{--
+TODO: Implement using CAST function
+class SqlCastable (from :: SqlType) (to :: SqlType) where
+instance SqlCastable 'SqlInt64 'SqlInt32 where
+instance SqlCastable 'SqlReal 'SqlInt32  where
+instance SqlCastable 'SqlReal 'SqlInt64 where
+cast_ :: forall b a t t'. ( SqlTypeable (Nullable a)
+                          , SqlTypeable (Nullable b)
+                          , t  ~ SqlType' (Nullable a)
+                          , t' ~ SqlType' (Nullable b)
+                          , IsMaybe a ~ IsMaybe b
+                          , SqlCastable t t'
+                          )
+      => SqlExpr (Value a) -> SqlExpr (Value b)
+cast_ = veryUnsafeCoerceSqlExprValue
+--}
+
+type IsSqlBool bool = 'SqlBool ~ SqlType' (Nullable bool)
+type SqlComparable typ result = (PersistField typ, IsSqlBool result, result ~ DependentNull (IsMaybe typ) Bool)
+
+(==.) :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
-(>=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(>=.) :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (>=.) = unsafeSqlBinOp " >= "
 
-(>.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(>.)  :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (>.)  = unsafeSqlBinOp " > "
 
-(<=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(<=.) :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (<=.) = unsafeSqlBinOp " <= "
 
-(<.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(<.)  :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (<.)  = unsafeSqlBinOp " < "
-(!=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+
+(!=.) :: SqlComparable typ result
+      => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value result)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: Bool ~ SqlBaseType b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
+(&&.) :: IsSqlBool b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: Bool ~ SqlBaseType b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
+(||.) :: IsSqlBool b => SqlExpr (Value b) -> SqlExpr (Value b) -> SqlExpr (Value b)
 (||.) = unsafeSqlBinOp " OR "
 
 (+.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
@@ -633,7 +702,7 @@ type family SqlBaseType t where
 -- | @BETWEEN@.
 --
 -- @since: 3.1.0
-between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
+between :: SqlComparable a result => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value result)
 a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
@@ -650,9 +719,11 @@ floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a)  => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
+min_     :: (PersistField a, result ~ DependentNull (Not (IsMaybe a)) a)
+         => SqlExpr (Value a) -> SqlExpr (Value result)
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (SqlMaybe a))
+max_     :: (PersistField a, result ~ DependentNull (Not (IsMaybe a)) a)
+         => SqlExpr (Value a) -> SqlExpr (Value result)
 max_     = unsafeSqlFunction "MAX"
 avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"

@@ -53,7 +53,7 @@ module Database.Esqueleto
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId
+             , case_, toBaseId, coerce_
   , subSelect
   , subSelectMaybe
   , subSelectCount
