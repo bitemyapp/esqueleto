@@ -67,6 +67,7 @@ import Database.Esqueleto.Internal.Internal
           , Ident(..)
           , to3, to4, to5, to6, to7, to8
           , from3, from4, from5, from6, from7, from8
+          , veryUnsafeCoerceSqlExprValue
           )
 import GHC.TypeLits
 
@@ -433,10 +434,10 @@ type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 type family ToFromT a where
   ToFromT (From a) = a
   ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
-  ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-  ToFromT (FullOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-  ToFromT (RightOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-  ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
+  ToFromT (LeftOuterJoin a (b, c -> bool)) = c
+  ToFromT (FullOuterJoin a (b, c -> bool)) = c
+  ToFromT (RightOuterJoin a (b, c -> bool)) = c
+  ToFromT (InnerJoin a (b, c -> bool)) = c
   ToFromT (CrossJoin a b) = (ToFromT a :& ToFromT b)
   ToFromT (InnerJoin a b) = TypeError (JoinErrorMsg "InnerJoin")
   ToFromT (LeftOuterJoin a b) = TypeError (JoinErrorMsg "LeftOuterJoin")
@@ -483,10 +484,14 @@ instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b') => ToFrom (InnerJo
 instance (ToFrom a, ToFrom b) => ToFrom (CrossJoin a b) where
   toFrom (CrossJoin lhs rhs) = CrossJoinFrom (toFrom lhs) (toFrom rhs)
 
+type family Nullable a where
+  Nullable (Maybe a) = a
+  Nullable a =  a
+
 type family ToMaybeT a where
   ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
   ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
-  ToMaybeT (SqlExpr (Value a)) = SqlExpr (Maybe (Value a))
+  ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))
   ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
   ToMaybeT (a, b) = (ToMaybeT a, ToMaybeT b)
   ToMaybeT (a, b, c) = (ToMaybeT a, ToMaybeT b, ToMaybeT c)
@@ -506,7 +511,7 @@ instance ToMaybe (SqlExpr (Entity a)) where
   toMaybe = EMaybe
 
 instance ToMaybe (SqlExpr (Value a)) where
-  toMaybe = EMaybe
+  toMaybe = veryUnsafeCoerceSqlExprValue
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
   toMaybe (a :& b) = (toMaybe a :& toMaybe b)

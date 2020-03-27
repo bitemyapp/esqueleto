@@ -943,6 +943,24 @@ testSelectSubQuery run = do
         (ret :: [(Value (Key Lord), Value Int)]) <- select q
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
+
+    it "flattens maybe values" $ do
+      run $ do
+        l1k <- insert l1
+        l3k <- insert l3
+        let q = do
+                (lord :& (_, dogCounts)) <- Experimental.from $ Table @Lord
+                        `LeftOuterJoin` (SelectQuery $ do
+                                      lord <- Experimental.from $ Table @Lord
+                                      pure (lord ^. LordId, lord ^. LordDogs)
+                                   )
+                        `Experimental.on` (\(lord :& (lordId, _)) ->
+                                             just (lord ^. LordId) ==. lordId)
+                groupBy (lord ^. LordId)
+                return (lord ^. LordId, dogCounts)
+        (ret :: [(Value (Key Lord), Value (Maybe Int))]) <- select q
+        liftIO $ ret `shouldMatchList` [ (Value l3k, Value (lordDogs l3))
+                                       , (Value l1k, Value (lordDogs l1)) ]
     it "unions" $ do
         run $ do
           _ <- insert p1
