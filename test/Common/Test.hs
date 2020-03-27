@@ -956,7 +956,7 @@ testSelectSubQuery run = do
                                    )
                         `Experimental.on` (\(lord :& (lordId, _)) ->
                                              just (lord ^. LordId) ==. lordId)
-                groupBy (lord ^. LordId)
+                groupBy (lord ^. LordId, dogCounts)
                 return (lord ^. LordId, dogCounts)
         (ret :: [(Value (Key Lord), Value (Maybe Int))]) <- select q
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value (lordDogs l3))
