@@ -8,7 +8,6 @@
            , TypeFamilies
            , UndecidableInstances
            , GADTs
-           , AllowAmbiguousTypes
  #-}
 {-# LANGUAGE ConstraintKinds
            , EmptyDataDecls
