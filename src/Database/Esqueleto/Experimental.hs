@@ -434,10 +434,10 @@ type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 type family ToFromT a where
   ToFromT (From a) = a
   ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
-  ToFromT (LeftOuterJoin a (b, c -> bool)) = c
-  ToFromT (FullOuterJoin a (b, c -> bool)) = c
-  ToFromT (RightOuterJoin a (b, c -> bool)) = c
-  ToFromT (InnerJoin a (b, c -> bool)) = c
+  ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
+  ToFromT (FullOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
+  ToFromT (RightOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
+  ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (CrossJoin a b) = (ToFromT a :& ToFromT b)
   ToFromT (InnerJoin a b) = TypeError (JoinErrorMsg "InnerJoin")
   ToFromT (LeftOuterJoin a b) = TypeError (JoinErrorMsg "LeftOuterJoin")
