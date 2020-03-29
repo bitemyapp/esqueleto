@@ -1,3 +1,10 @@
+3.3.3.0
+========
+- @belevy
+  - [#177](https://github.com/bitemyapp/esqueleto/pull/172) - Introduce new
+    experimental module for joins, set operations (eg UNION), and safer queries
+    from outer joins.
+
 3.3.2
 ========
 
