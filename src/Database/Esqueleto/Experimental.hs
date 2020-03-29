@@ -425,7 +425,7 @@ data From a where
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
 --
-on :: ToFrom a => a -> b -> (a, b)
+on :: ToFrom a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
 infix 9 `on`
 
