@@ -157,7 +157,7 @@ import GHC.TypeLits
 --
 -- @
 -- select $ do
--- people <- from $ Table @Person
+-- people <- from $ Table \@Person
 -- where_ (people ^. PersonName ==. val \"John\")
 -- pure people
 -- @
@@ -185,8 +185,8 @@ import GHC.TypeLits
 -- @
 -- select $ do
 -- (people :& blogPosts) <-
---     from $ Table @Person
---     \`LeftOuterJoin\` Table @BlogPost
+--     from $ Table \@Person
+--     \`LeftOuterJoin\` Table \@BlogPost
 --     \`on\` (\\(people :& blogPosts) ->
 --             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
 -- where_ (people ^. PersonAge >. val 18)
@@ -225,11 +225,11 @@ import GHC.TypeLits
 -- @
 -- select $ do
 -- (people1 :& followers :& people2) <-
---     from $ Table @Person
---     \`InnerJoin` Table @Follow
+--     from $ Table \@Person
+--     \`InnerJoin` Table \@Follow
 --     \`on\` (\\(people1 :& followers) ->
 --             people1 ^. PersonId ==. followers ^. FollowFollowed)
---     \`InnerJoin` Table @Person
+--     \`InnerJoin` Table \@Person
 --     \`on\` (\\(_ :& followers :& people2) ->
 --             followers ^. FollowFollower ==. people2 ^. PersonId)
 -- where_ (people1 ^. PersonName ==. val \"John\")
@@ -261,8 +261,8 @@ import GHC.TypeLits
 -- peopleWithPosts <-
 --   from $ SelectQuery $ do
 --     (people :& blogPosts) <-
---       from $ Table @Person
---       \`InnerJoin\` Table @BlogPost
+--       from $ Table \@Person
+--       \`InnerJoin\` Table \@BlogPost
 --       \`on\` (\\(p :& bP) ->
 --               p ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     groupBy (people ^. PersonId)
@@ -292,8 +292,8 @@ import GHC.TypeLits
 -- (authors, blogPosts) <- from $
 --   (SelectQuery $ do
 --     (author :& blogPost) <-
---       from $ Table @Person
---       \`InnerJoin\` Table @BlogPost
+--       from $ Table \@Person
+--       \`InnerJoin\` Table \@BlogPost
 --       \`on\` (\\(a :& bP) ->
 --               a ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     where_ (author ^. PersonId ==. val currentPersonId)
@@ -302,11 +302,11 @@ import GHC.TypeLits
 --   \`Union\`
 --   (SelectQuery $ do
 --     (follow :& blogPost :& author) <-
---       from $ Table @Follow
---       \`InnerJoin\` Table @BlogPost
+--       from $ Table \@Follow
+--       \`InnerJoin\` Table \@BlogPost
 --       \`on\` (\\(f :& bP) ->
 --               f ^. FollowFollowed ==. bP ^. BlogPostAuthorId)
---       \`InnerJoin\` Table @Person
+--       \`InnerJoin\` Table \@Person
 --       \`on\` (\\(_ :& bP :& a) ->
 --               bP ^. BlogPostAuthorId ==. a ^. PersonId)
 --     where_ (follow ^. FollowFollower ==. val currentPersonId)
@@ -361,7 +361,7 @@ infixl 2 :&
 --
 -- @
 -- select $ from $
---   Table @SomeTable
+--   Table \@SomeTable
 --   \`InnerJoin\` (SelectQuery ...)
 --   \`on\` ...
 -- @
@@ -385,7 +385,7 @@ data SqlSetOperation a =
 -- only the @Table@ constructor is used directly when writing queries. For example,
 --
 -- @
--- select $ from $ Table @People
+-- select $ from $ Table \@People
 -- @
 data From a where
   Table         :: PersistEntity ent => From (SqlExpr (Entity ent))
@@ -419,8 +419,8 @@ data From a where
 --
 -- @
 -- select $
--- from $ Table @Person
--- \`InnerJoin\` Table @BlogPost
+-- from $ Table \@Person
+-- \`InnerJoin\` Table \@BlogPost
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
