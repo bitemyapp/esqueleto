@@ -29,6 +29,7 @@ source-repository head
 library
   exposed-modules:
       Database.Esqueleto
+      Database.Esqueleto.Experimental
       Database.Esqueleto.Internal.Language
       Database.Esqueleto.Internal.Sql
       Database.Esqueleto.Internal.Internal
