@@ -528,7 +528,12 @@ testPostgresModule = do
             expectationFailure "index not found"
           Just (original, expected) -> do
             utcTime `shouldBe` original
-            utcTime `shouldBe` expected
+            if utctDay utcTime == utctDay expected
+              then
+                utctDay utcTime `shouldBe` utctDay expected
+              else
+                -- use this if/else to get a beter error message
+                utcTime `shouldBe` expected
 
   describe "PostgreSQL module" $ do
     describe "Aggregate functions" testAggregateFunctions
