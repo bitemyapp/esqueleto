@@ -489,7 +489,11 @@ testAggregateFunctions = do
 
 testPostgresModule :: Spec
 testPostgresModule = do
+<<<<<<< HEAD
+  describe "date_trunc" $ modifyMaxSuccess (`div` 10) $ do
+=======
   describe "date_trunc" $ do
+>>>>>>> master
     prop "works" $ \listOfDateParts -> run $ do
       let
         utcTimes =
@@ -511,6 +515,9 @@ testPostgresModule = do
       for_ vals $ \(idx, utcTime) -> do
         insertKey idx (DateTruncTest utcTime)
 
+      -- Necessary to get the test to pass; see the discussion in
+      -- https://github.com/bitemyapp/esqueleto/pull/180
+      rawExecute "SET TIME ZONE 'UTC'" []
       ret <-
         fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
         select $
@@ -526,14 +533,14 @@ testPostgresModule = do
         case Map.lookup idx ret of
           Nothing ->
             expectationFailure "index not found"
-          Just (original, expected) -> do
+          Just (original, truncated) -> do
             utcTime `shouldBe` original
-            if utctDay utcTime == utctDay expected
+            if utctDay utcTime == utctDay truncated
               then
-                utctDay utcTime `shouldBe` utctDay expected
+                utctDay utcTime `shouldBe` utctDay truncated
               else
-                -- use this if/else to get a beter error message
-                utcTime `shouldBe` expected
+                -- use this if/else to get a better error message
+                utcTime `shouldBe` truncated
 
   describe "PostgreSQL module" $ do
     describe "Aggregate functions" testAggregateFunctions
