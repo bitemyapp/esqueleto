@@ -489,7 +489,11 @@ testAggregateFunctions = do
 
 testPostgresModule :: Spec
 testPostgresModule = do
+<<<<<<< HEAD
   describe "date_trunc" $ modifyMaxSuccess (`div` 10) $ do
+=======
+  describe "date_trunc" $ do
+>>>>>>> master
     prop "works" $ \listOfDateParts -> run $ do
       let
         utcTimes =
