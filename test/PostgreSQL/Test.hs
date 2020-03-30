@@ -495,7 +495,9 @@ testPostgresModule = do
         utcTimes =
           map
             (\(y, m, d, s) ->
-              fromInteger s `addUTCTime` UTCTime (fromGregorian y m d) 0
+              fromInteger s
+                `addUTCTime`
+                  UTCTime (fromGregorian (2000 + y) m d) 0
             )
           listOfDateParts
         truncateDate
@@ -510,20 +512,23 @@ testPostgresModule = do
         insertKey idx (DateTruncTest utcTime)
 
       ret <-
-        fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId UTCTime) $
+        fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
         select $
         from $ \dt -> do
         pure
           ( dt ^. DateTruncTestId
-          , truncateDate (val "day") (dt ^. DateTruncTestCreated)
+          , ( dt ^. DateTruncTestCreated
+            , truncateDate (val "day") (dt ^. DateTruncTestCreated)
+            )
           )
 
       liftIO $ for_ vals $ \(idx, utcTime) -> do
         case Map.lookup idx ret of
           Nothing ->
             expectationFailure "index not found"
-          Just expected ->
-            utctDay utcTime `shouldBe` utctDay expected
+          Just (original, expected) -> do
+            utcTime `shouldBe` original
+            utcTime `shouldBe` expected
 
   describe "PostgreSQL module" $ do
     describe "Aggregate functions" testAggregateFunctions

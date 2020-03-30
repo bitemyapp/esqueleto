@@ -2592,6 +2592,8 @@ cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity JoinOne))    -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity JoinOther))    -> return ()
 
+  delete $ from $ \(_ :: SqlExpr (Entity DateTruncTest)) -> pure ()
+
 
 cleanUniques
   :: (forall m. RunDbMonad m
