@@ -7,9 +7,15 @@
            , ScopedTypeVariables
            , TypeApplications
            , TypeFamilies
+           , PartialTypeSignatures
  #-}
 module Main (main) where
 
+import Data.Coerce
+import Data.Foldable
+import qualified Data.Map.Strict as Map
+import Data.Map (Map)
+import Data.Time
 import Control.Arrow ((&&&))
 import Control.Monad (void, when)
 import Control.Monad.Catch (MonadCatch, catch)
@@ -36,6 +42,7 @@ import Database.Persist.Postgresql (withPostgresqlConn)
 import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
 import System.Environment
 import Test.Hspec
+import Test.Hspec.QuickCheck
 
 import Common.Test
 import PostgreSQL.MigrateJSON
@@ -51,10 +58,6 @@ testPostgresqlCoalesce = do
         from $ \p -> do
         return (coalesce [p ^. PersonAge])
       return ()
-
-
-
-
 
 nameContains :: (BaseBackend backend ~ SqlBackend,
                  BackendCompatible SqlBackend backend,
@@ -486,6 +489,42 @@ testAggregateFunctions = do
 
 testPostgresModule :: Spec
 testPostgresModule = do
+  describe "date_trunc" $ do
+    prop "works" $ \listOfDateParts -> run $ do
+      let
+        utcTimes =
+          map
+            (\(y, m, d, s) ->
+              fromInteger s `addUTCTime` UTCTime (fromGregorian y m d) 0
+            )
+          listOfDateParts
+        truncateDate
+          :: SqlExpr (Value String)  -- ^ .e.g (val "day")
+          -> SqlExpr (Value UTCTime) -- ^ input field
+          -> SqlExpr (Value UTCTime) -- ^ truncated date
+        truncateDate datePart expr =
+          ES.unsafeSqlFunction "date_trunc" (datePart, expr)
+        vals =
+          zip (map (DateTruncTestKey . fromInteger) [1..]) utcTimes
+      for_ vals $ \(idx, utcTime) -> do
+        insertKey idx (DateTruncTest utcTime)
+
+      ret <-
+        fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId UTCTime) $
+        select $
+        from $ \dt -> do
+        pure
+          ( dt ^. DateTruncTestId
+          , truncateDate (val "day") (dt ^. DateTruncTestCreated)
+          )
+
+      liftIO $ for_ vals $ \(idx, utcTime) -> do
+        case Map.lookup idx ret of
+          Nothing ->
+            expectationFailure "index not found"
+          Just expected ->
+            utctDay utcTime `shouldBe` utctDay expected
+
   describe "PostgreSQL module" $ do
     describe "Aggregate functions" testAggregateFunctions
     it "chr looks sane" $
