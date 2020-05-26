@@ -195,8 +195,6 @@ INNER JOIN Follow ON P1.id = Follow.follower
 INNER JOIN Person AS P2 ON P2.id = Follow.followed
 ```
 
-Note carefully that the order of the ON clauses is reversed! You're required to write your `on`s in reverse order because that helps composability (see the documentation of `on` for more details).
-
 ## Update and Delete
 
 ```haskell
