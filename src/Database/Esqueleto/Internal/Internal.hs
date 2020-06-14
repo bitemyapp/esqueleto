@@ -1576,6 +1576,7 @@ data UnexpectedValueError =
   | FoldHelpError
   | SqlCaseError
   | SqlCastAsError
+  | SqlFunctionError
   | MakeOnClauseError
   | MakeExcError
   | MakeSetError
@@ -2192,8 +2193,15 @@ unsafeSqlFunction :: UnsafeSqlFunctionArgument a =>
                      TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunction name arg =
   ERaw Never $ \info ->
-    let (argsTLB, argsVals) =
-          uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
+    let
+      valueToFunctionArg v =
+        case v of
+          ERaw _ f             -> f info
+          EAliasedValue i _    -> aliasedValueIdentToRawSql i info
+          EValueReference i i' -> valueReferenceToRawSql i i' info
+          ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
+      (argsTLB, argsVals) =
+          uncommas' $ map valueToFunctionArg $ toArgList arg
     in (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An unsafe SQL function to extract a subfield from a compound

@@ -2499,6 +2499,18 @@ testExperimentalFrom run = do
         --error . show =<< renderQuerySelect q
         pure ()
 
+    it "can call functions on aliased values" $ do
+      run $ do
+        insert_ p1
+        insert_ p3
+        -- Pretend this isnt all posts
+        upperNames <- select $ do
+          author <- Experimental.from $ SelectQuery $ Experimental.from $ Table @Person
+          pure $ upper_ $ author ^. PersonName
+
+        liftIO $ upperNames `shouldMatchList` [ Value "JOHN"
+                                              , Value "MIKE"
+                                              ]
 
 listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
