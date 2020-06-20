@@ -996,7 +996,7 @@ case_ = unsafeSqlCase
 -- | Convert an entity's key into another entity's.
 --
 -- This function is to be used when you change an entity's @Id@ to be
--- that of another entity.  For example:
+-- that of another entity. For example:
 --
 -- @
 -- Bar
@@ -1007,12 +1007,13 @@ case_ = unsafeSqlCase
 --   Primary bar
 -- @
 --
--- For this example, declare:
+-- In this example, Bar is said to be the BaseEnt(ity), and Foo the child.
+-- To model this in Esqueleto, declare:
 --
 -- @
 -- instance ToBaseId Foo where
 --   type BaseEnt Foo = Bar
---   toBaseIdWitness = FooKey
+--   toBaseIdWitness barId = FooKey barId
 -- @
 --
 -- Now you're able to write queries such as:
@@ -1371,7 +1372,10 @@ instance SqlString a => SqlString (Maybe a) where
 -- | Class that enables one to use 'toBaseId' to convert an entity's
 -- key on a query into another (cf. 'toBaseId').
 class ToBaseId ent where
+  -- | e.g. @type BaseEnt MyBase = MyChild@
   type BaseEnt ent :: *
+  -- | Convert from the key of the BaseEnt(ity) to the key of the child entity.
+  -- This function is not actually called, but that it typechecks proves this operation is safe.
   toBaseIdWitness :: Key (BaseEnt ent) -> Key ent
 
 

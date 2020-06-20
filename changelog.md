@@ -1,3 +1,8 @@
+Unreleased
+========
+- @maxgabriel
+  - [#190](https://github.com/bitemyapp/esqueleto/pull/190) Further document and test `ToBaseId`
+
 3.3.3.1
 ========
 - @belevy
