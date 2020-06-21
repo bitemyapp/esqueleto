@@ -1,7 +1,13 @@
+3.3.3.1
+========
+- @belevy
+  - [#189](https://github.com/bitemyapp/esqueleto/pull/189) - Fix bug in function calls with
+    aliased values introduced by SubQuery joins.
+
 3.3.3.0
 ========
 - @belevy
-  - [#177](https://github.com/bitemyapp/esqueleto/pull/172) - Introduce new
+  - [#172](https://github.com/bitemyapp/esqueleto/pull/172) - Introduce new
     experimental module for joins, set operations (eg UNION), and safer queries
     from outer joins.
 
