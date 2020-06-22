@@ -248,6 +248,11 @@ share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
     deriving Eq Show
 |]
 
+
+instance ToBaseId ArticleMetadata where
+  type BaseEnt ArticleMetadata = Article
+  toBaseIdWitness articleId = ArticleMetadataKey articleId
+
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
 sameElementsAs :: Eq a => [a] -> [a] -> Bool
@@ -777,6 +782,19 @@ testSelectJoin run = do
           where_ $ (articleMetadata ^. ArticleMetadataId) ==. (val ((ArticleMetadataKey articleId)))
           pure articleMetadata
         liftIO $ [articleMetaE] `shouldBe` result
+    it "allows joining between a primary key that is itself a key of another table, using ToBaseId" $ do
+      run $ do
+        let number = 101
+        insert_ $ Frontcover number ""
+        articleE@(Entity articleId _) <- insert' $ Article "title" number
+        articleMetaE <- insert' (ArticleMetadata articleId)
+
+        articlesAndMetadata <- select $
+          from $ \(article `InnerJoin` articleMetadata) -> do
+          on (toBaseId (articleMetadata ^. ArticleMetadataId) ==. article ^. ArticleId)
+          return (article, articleMetadata)
+        liftIO $ [(articleE, articleMetaE)] `shouldBe` articlesAndMetadata
+
     it "works with a ForeignKey to a non-id primary key returning both entities" $
       run $ do
         let fc = Frontcover number ""
