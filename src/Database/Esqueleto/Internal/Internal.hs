@@ -2024,6 +2024,7 @@ data SqlExpr a where
 data InsertFinal
 
 data NeedParens = Parens | Never
+    deriving Eq
 
 parensM :: NeedParens -> TLB.Builder -> TLB.Builder
 parensM Never  = id
@@ -2119,7 +2120,7 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 , vals1 <> vals2 )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
     where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
-          construct (ERaw p f)        = ERaw Parens $ \info ->
+          construct (ERaw p f)        = ERaw (if p == Never then Parens else Never) $ \info ->
             let (b1, vals) = f info
                 build ("?", [PersistList vals']) =
                   (uncommas $ replicate (length vals') "?", vals')
@@ -2888,11 +2889,15 @@ valueReferenceToRawSql sourceIdent columnIdentF info =
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> IdentInfo -> Ident
 aliasedEntityColumnIdent (I baseIdent) field info =
-  I (baseIdent <> "_" <> (builderToText $ fromDBName info $ fieldDB field))
+  I (baseIdent <> "_" <> (removeTicksFromColumnName $ builderToText $ fromDBName info $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder 
 aliasedColumnName (I baseIdent) info columnName = 
-  useIdent info (I (baseIdent <> "_" <> columnName))
+  useIdent info (I (baseIdent <> "_" <> (removeTicksFromColumnName columnName)))
+
+removeTicksFromColumnName :: T.Text -> T.Text
+removeTicksFromColumnName columnName = 
+    Maybe.fromMaybe columnName $ T.stripPrefix "`" =<< T.stripSuffix "`" columnName
 
 ----------------------------------------------------------------------
 
