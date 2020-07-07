@@ -783,12 +783,12 @@ instance ToAliasReference (SqlExpr (Value a)) where
   toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
   toAliasReference _           v@(ERaw _ _)                 = toAlias v
   toAliasReference _           v@(ECompositeKey _)          = toAlias v
-  toAliasReference _           v@(EValueReference _ _)      = pure v
+  toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
 
 instance ToAliasReference (SqlExpr (Entity a)) where
   toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
   toAliasReference _ e@(EEntity _) = toAlias e
-  toAliasReference _ e@(EAliasedEntityReference _ _) = pure e
+  toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
 
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
