@@ -684,6 +684,7 @@ from parts = do
 type family ToAliasT a where
   ToAliasT (SqlExpr (Value a)) = SqlExpr (Value a)
   ToAliasT (SqlExpr (Entity a)) = SqlExpr (Entity a)
+  ToAliasT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
   ToAliasT (a, b) = (ToAliasT a, ToAliasT b)
   ToAliasT (a, b, c) = (ToAliasT a, ToAliasT b, ToAliasT c)
   ToAliasT (a, b, c, d) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d)
@@ -708,6 +709,9 @@ instance ToAlias (SqlExpr (Entity a)) where
   toAlias (EEntity tableIdent) = do
     ident <- newIdentFor (DBName "v")
     pure $ EAliasedEntity ident tableIdent
+
+instance ToAlias (SqlExpr (Maybe (Entity a))) where
+  toAlias (EMaybe e) = EMaybe <$> toAlias e
 
 instance (ToAlias a, ToAlias b) => ToAlias (a,b) where
   toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
@@ -767,6 +771,7 @@ instance ( ToAlias a
 type family ToAliasReferenceT a where
   ToAliasReferenceT (SqlExpr (Value a)) = SqlExpr (Value a)
   ToAliasReferenceT (SqlExpr (Entity a)) = SqlExpr (Entity a)
+  ToAliasReferenceT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
   ToAliasReferenceT (a,b) = (ToAliasReferenceT a, ToAliasReferenceT b)
   ToAliasReferenceT (a,b,c) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c)
   ToAliasReferenceT (a, b, c, d) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d)
@@ -790,6 +795,8 @@ instance ToAliasReference (SqlExpr (Entity a)) where
   toAliasReference _ e@(EEntity _) = toAlias e
   toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
 
+instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
+  toAliasReference s (EMaybe e) = EMaybe <$> toAliasReference s e
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
 

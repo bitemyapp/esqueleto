@@ -894,6 +894,21 @@ testSelectSubQuery run = do
         ret <- select $ Experimental.from $ SelectQuery q
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
+    it "supports sub-selecting Maybe entities" $ do
+      run $ do
+        l1 <- insert' l1
+        l3 <- insert' l3
+        l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1)) (map show [1..3 :: Int])
+        let l1WithDeeds = do d <- l1Deeds
+                             pure (l1, Just d)
+        ret <- select $ Experimental.from $ SelectQuery $ do
+          (lords :& deeds) <-
+              Experimental.from $ Table @Lord
+              `LeftOuterJoin` Table @Deed
+              `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+          pure (lords, deeds)
+        liftIO $ ret `shouldMatchList` ((l3, Nothing) : l1WithDeeds)
+
     it "lets you order by alias" $ do
       run $ do
         _ <- insert' p1
