@@ -1,7 +1,10 @@
 3.3.3.3
 ========
 - @belevy
-  - [#191](https://github.com/bitemyapp/esqueleto/pull/191) - Fix issue with extra characters in generated SQL
+  - [#191](https://github.com/bitemyapp/esqueleto/pull/191) - Bugfix rollup: 
+    Fix issue with extra characters in generated SQL; 
+    Fix ToAliasReference for already referenced values; 
+    Fix Alias/Reference for Maybe Entity 
 
 3.3.3.2
 ========
