@@ -68,6 +68,7 @@ import Database.Esqueleto.Internal.Internal
           , to3, to4, to5, to6, to7, to8
           , from3, from4, from5, from6, from7, from8
           , veryUnsafeCoerceSqlExprValue
+          , parens
           )
 import GHC.TypeLits
 
@@ -379,7 +380,8 @@ data SqlSetOperation a =
   | UnionAll (SqlSetOperation a) (SqlSetOperation a)
   | Except (SqlSetOperation a) (SqlSetOperation a)
   | Intersect (SqlSetOperation a) (SqlSetOperation a)
-  | SelectQuery (SqlQuery a)
+  | SelectQuery  (SqlQuery a)
+  | SelectQueryP (SqlQuery a)
 
 -- | Data type that represents the syntax of a 'JOIN' tree. In practice,
 -- only the @Table@ constructor is used directly when writing queries. For example,
@@ -463,6 +465,7 @@ instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
 instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')  => ToFrom (SqlSetOperation a) where
   -- If someone uses just a plain SelectQuery it should behave like a normal subquery
   toFrom (SelectQuery q) = SubQuery q
+  toFrom (SelectQueryP q) = SubQuery q
   -- Otherwise use the SqlSetOperation
   toFrom q = SqlSetOperation q
 
@@ -622,7 +625,18 @@ from parts = do
                   prevState <- Q $ lift S.get
                   aliasedRet <- toAlias ret
                   Q $ lift $ S.put prevState
-                  pure (SelectQuery $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
+                  let selectConstructor = if    (sdLimitClause sideData) /= mempty 
+                                             || length (sdOrderByClause sideData) > 0 then
+                                            SelectQueryP
+                                          else 
+                                            SelectQuery
+                  pure (selectConstructor $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
+                SelectQueryP q -> do
+                  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ q
+                  prevState <- Q $ lift S.get
+                  aliasedRet <- toAlias ret
+                  Q $ lift $ S.put prevState
+                  pure (SelectQueryP $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
                 Union     o1 o2 -> do
                   (o1', ret) <- aliasQueries o1
                   (o2', _  ) <- aliasQueries o2
@@ -643,6 +657,9 @@ from parts = do
             operationToSql o info =
               case o of
                 SelectQuery q   -> toRawSql SELECT info q
+                SelectQueryP q  -> 
+                  let (builder, values) = toRawSql SELECT info q
+                  in (parens builder, values)
                 Union     o1 o2 -> doSetOperation "UNION"     info o1 o2
                 UnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
                 Except    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2

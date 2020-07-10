@@ -2,6 +2,7 @@
            , FlexibleContexts
            , RankNTypes
            , TypeFamilies
+           , TypeApplications
 #-}
 
 module Main (main) where
@@ -17,11 +18,12 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectPassword
                               , defaultConnectInfo)
 import Database.Esqueleto
+import Database.Esqueleto.Experimental hiding (from, on)
+import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Control.Monad.Trans.Resource as R
 import Test.Hspec
 
 import Common.Test
-
 
 
 -- testMysqlRandom :: Spec
@@ -162,6 +164,31 @@ testMysqlTextFunctions = do
          nameContains like "iv" [p4e]
 
 
+testMysqlUnionWithLimits :: Spec
+testMysqlUnionWithLimits = do
+  describe "MySQL Union" $ do
+    it "supports limit/orderBy by parenthesizing" $ do
+      run $ do
+        mapM_ (insert . Foo) [1..6]
+
+        let q1 = do
+              foo <- Experimental.from $ Table @Foo
+              where_ $ foo ^. FooName <=. val 3
+              orderBy [asc $ foo ^. FooName]
+              limit 2
+              pure $ foo ^. FooName
+
+        let q2 = do
+              foo <- Experimental.from $ Table @Foo
+              where_ $ foo ^. FooName >. val 3
+              orderBy [asc $ foo ^. FooName]
+              limit 2
+              pure $ foo ^. FooName
+
+
+        ret <- select $ Experimental.from $ SelectQuery q1 `Union` SelectQuery q2
+        liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
+
 
 main :: IO ()
 main = do
@@ -180,6 +207,7 @@ main = do
       testMysqlCoalesce
       testMysqlUpdate
       testMysqlTextFunctions
+      testMysqlUnionWithLimits
 
 
 

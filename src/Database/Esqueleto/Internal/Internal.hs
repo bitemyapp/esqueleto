@@ -1863,6 +1863,7 @@ type OrderByClause = SqlExpr OrderBy
 
 -- | A @LIMIT@ clause.
 data LimitClause = Limit (Maybe Int64) (Maybe Int64)
+  deriving Eq
 
 instance Semigroup LimitClause where
   Limit l1 o1 <> Limit l2 o2 =
@@ -2019,6 +2020,7 @@ data SqlExpr a where
 data InsertFinal
 
 data NeedParens = Parens | Never
+   deriving Eq
 
 parensM :: NeedParens -> TLB.Builder -> TLB.Builder
 parensM Never  = id
