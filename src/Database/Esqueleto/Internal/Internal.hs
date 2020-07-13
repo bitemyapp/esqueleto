@@ -2161,9 +2161,14 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
 unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOpComposite op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
-unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify b)
+unsafeSqlBinOpComposite op sep a b 
+    | isCompositeKey a || isCompositeKey b = ERaw Parens $ compose (listify a) (listify b)
+    | otherwise = unsafeSqlBinOp op a b
   where
+    isCompositeKey :: SqlExpr (Value x) -> Bool
+    isCompositeKey (ECompositeKey _) = True
+    isCompositeKey _ = False
+
     listify :: SqlExpr (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
     listify (ECompositeKey f)      = flip (,) [] . f
     listify (ERaw _ f)             = deconstruct . f
