@@ -23,6 +23,7 @@ module Database.Esqueleto.PostgreSQL
   , upsertBy
   , insertSelectWithConflict
   , insertSelectWithConflictCount
+  , filterWhere
   -- * Internal
   , unsafeSqlAggregateFunction
   ) where
@@ -38,7 +39,7 @@ import           Database.Esqueleto.Internal.Sql
 import           Database.Esqueleto.Internal.Internal         (EsqueletoError(..), CompositeKeyError(..),
                                                               UnexpectedCaseError(..), SetClause, Ident(..),
                                                               uncommas, FinalResult(..), toUniqueDef,
-                                                              KnowResult, renderUpdates)
+                                                              KnowResult, renderUpdates, UnexpectedValueError(..))
 import           Database.Persist.Class                       (OnlyOneUniqueKey)
 import           Data.List.NonEmpty                           ( NonEmpty( (:|) ) )
 import           Data.Int                                     (Int64)
@@ -298,3 +299,46 @@ insertSelectWithConflictCount unique query conflictQuery = do
       ]),values)
       where
         (updatesTLB,values) = renderedUpdates conn
+
+-- | Allow aggregate functions to take a filter clause.
+--
+-- Example of usage:
+--
+-- @
+-- share [mkPersist sqlSettings] [persistLowerCase|
+--   User
+--     name Text
+--     deriving Eq Show
+--   Task
+--     userId UserId
+--     completed Bool
+--     deriving Eq Show
+-- |]
+--
+-- select $ from $ \(users `InnerJoin` tasks) -> do
+--   on $ users ^. UserId ==. tasks ^. TaskUserId
+--   groupBy $ users ^. UserId
+--   return
+--    ( users ^. UserId
+--    , count (tasks ^. TaskId) `filterWhere` (tasks ^. TaskCompleted ==. val True)
+--    , count (tasks ^. TaskId) `filterWhere` (tasks ^. TaskCompleted ==. val False)
+--    )
+-- @
+--
+-- @since 3.3.3.3
+filterWhere
+  :: SqlExpr (Value a)
+  -- ^ Aggregate function
+  -> SqlExpr (Value Bool)
+  -- ^ Filter clause
+  -> SqlExpr (Value a)
+filterWhere aggExpr clauseExpr = ERaw Never $ \info ->
+  let (aggBuilder, aggValues) = case aggExpr of
+        ERaw _ aggF     -> aggF info
+        ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereAggError
+      (clauseBuilder, clauseValues) = case clauseExpr of
+        ERaw _ clauseF  -> clauseF info
+        ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereClauseError
+  in ( aggBuilder <> " FILTER (WHERE " <> clauseBuilder <> ")"
+     , aggValues <> clauseValues
+     )
