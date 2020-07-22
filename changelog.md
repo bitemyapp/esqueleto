@@ -1,3 +1,8 @@
+3.3.3.3
+========
+- @sestrella
+  - [#198](https://github.com/bitemyapp/esqueleto/pull/198) - Allow PostgreSQL aggregate functions to take a filter clause
+
 3.3.3.2
 ========
 - @maxgabriel

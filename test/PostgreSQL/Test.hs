@@ -1082,6 +1082,75 @@ testInsertSelectWithConflict =
         liftIO $ map entityVal uniques1 `shouldBe` test
         liftIO $ map entityVal uniques2 `shouldBe` test2
 
+testFilterWhere :: Spec
+testFilterWhere =
+  describe "filterWhere" $ do
+    it "adds a filter clause to count aggregation" $ run $ do
+      -- Person "John"   (Just 36) Nothing   1
+      _ <- insert p1
+      -- Person "Rachel" Nothing   (Just 37) 2
+      _ <- insert p2
+      --  Person "Mike"   (Just 17) Nothing   3
+      _ <- insert p3
+      -- Person "Livia"  (Just 17) (Just 18) 4
+      _ <- insert p4
+      -- Person "Mitch"  Nothing   Nothing   5
+      _ <- insert p5
+
+      usersByAge <- (fmap . fmap) (\(Value a, Value b, Value c) -> (a, b, c)) <$> select $ from $ \users -> do
+        groupBy $ users ^. PersonAge
+        return
+          ( users ^. PersonAge
+          -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = 2
+          -- Just 36: [John { favNum = 1 } (excluded)] = 0
+          -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = 2
+          , count (users ^. PersonId) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
+          -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = 0
+          -- Just 36: [John { favNum = 1 }] = 1
+          -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = 0
+          , count (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
+          )
+
+      liftIO $ usersByAge `shouldMatchList`
+        ( [ (Nothing, 2, 0)
+          , (Just 36, 0, 1)
+          , (Just 17, 2, 0)
+          ] :: [(Maybe Int, Int, Int)]
+        )
+
+    it "adds a filter clause to sum aggregation" $ run $ do
+      -- Person "John"   (Just 36) Nothing   1
+      _ <- insert p1
+      -- Person "Rachel" Nothing   (Just 37) 2
+      _ <- insert p2
+      --  Person "Mike"   (Just 17) Nothing   3
+      _ <- insert p3
+      -- Person "Livia"  (Just 17) (Just 18) 4
+      _ <- insert p4
+      -- Person "Mitch"  Nothing   Nothing   5
+      _ <- insert p5
+
+      usersByAge <- (fmap . fmap) (\(Value a, Value b, Value c) -> (a, b, c)) <$> select $ from $ \users -> do
+        groupBy $ users ^. PersonAge
+        return
+          ( users ^. PersonAge
+          -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = Just 7
+          -- Just 36: [John { favNum = 1 } (excluded)] = Nothing
+          -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = Just 7
+          , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
+          -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = Nothing
+          -- Just 36: [John { favNum = 1 }] = Just 1
+          -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = Nothing
+          , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
+          )
+
+      liftIO $ usersByAge `shouldMatchList`
+        ( [ (Nothing, Just 7, Nothing)
+          , (Just 36, Nothing, Just 1)
+          , (Just 17, Just 7, Nothing)
+          ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
+        )
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1156,6 +1225,7 @@ main = do
       testInsertUniqueViolation
       testUpsert
       testInsertSelectWithConflict
+      testFilterWhere
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests

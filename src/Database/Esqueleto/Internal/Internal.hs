@@ -1586,6 +1586,8 @@ data UnexpectedValueError =
   | MakeSetError
   | MakeWhereError
   | MakeHavingError
+  | FilterWhereAggError
+  | FilterWhereClauseError
   deriving (Show)
 
 type CompositeKeyError = UnexpectedValueError
