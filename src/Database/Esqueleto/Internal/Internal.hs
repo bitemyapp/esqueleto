@@ -2626,11 +2626,6 @@ renderQueryToText mode query = do
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
 --
--- You must ensure that the 'Mode' you pass to this function corresponds with
--- the actual 'SqlQuery'. If you pass a query that uses incompatible features
--- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
--- result.
---
 -- @since 3.1.1
 renderQuerySelect
   :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
@@ -2641,11 +2636,6 @@ renderQuerySelect = renderQueryToText SELECT
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
---
--- You must ensure that the 'Mode' you pass to this function corresponds with
--- the actual 'SqlQuery'. If you pass a query that uses incompatible features
--- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
--- result.
 --
 -- @since 3.1.1
 renderQueryDelete
@@ -2658,11 +2648,6 @@ renderQueryDelete = renderQueryToText DELETE
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
 --
--- You must ensure that the 'Mode' you pass to this function corresponds with
--- the actual 'SqlQuery'. If you pass a query that uses incompatible features
--- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
--- result.
---
 -- @since 3.1.1
 renderQueryUpdate
   :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
@@ -2673,11 +2658,6 @@ renderQueryUpdate = renderQueryToText UPDATE
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
---
--- You must ensure that the 'Mode' you pass to this function corresponds with
--- the actual 'SqlQuery'. If you pass a query that uses incompatible features
--- (like an @INSERT@ statement with a @SELECT@ mode) then you'll get a weird
--- result.
 --
 -- @since 3.1.1
 renderQueryInsertInto
