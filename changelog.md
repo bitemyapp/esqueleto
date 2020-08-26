@@ -1,5 +1,7 @@
 3.3.3.3
 ========
+- @maxgabriel
+  - [#203](https://github.com/bitemyapp/esqueleto/pull/203) Document `isNothing`
 - @sestrella
   - [#198](https://github.com/bitemyapp/esqueleto/pull/198) - Allow PostgreSQL aggregate functions to take a filter clause
 
