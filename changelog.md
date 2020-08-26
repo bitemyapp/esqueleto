@@ -1,3 +1,8 @@
+3.3.3.3
+========
+- @maxgabriel
+  - [#203](https://github.com/bitemyapp/esqueleto/pull/203) Document `isNothing`
+
 3.3.3.2
 ========
 - @maxgabriel
