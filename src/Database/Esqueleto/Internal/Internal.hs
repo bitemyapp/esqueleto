@@ -584,13 +584,13 @@ val v = ERaw Never $ const ("?", [toPersistValue v])
 --
 -- Warning: Persistent and Esqueleto have different behavior for @!= Nothing@:
 --
--- +------------+----------------------------------+---------------+
--- | Library    | Haskell                          | SQL           |
--- +============+==================================+===============+
--- | Persistent | @'Database.Persist.!=.' Nothing@ | @IS NOT NULL@ |
--- +------------+----------------------------------+---------------+
--- | Esqueleto  | @'!=.' Nothing@                  | @!= NULL@     |
--- +------------+----------------------------------+---------------+
+-- +----------------+----------------------------------+---------------+
+-- |                | Haskell                          | SQL           |
+-- +================+==================================+===============+
+-- | __Persistent__ | @'Database.Persist.!=.' Nothing@ | @IS NOT NULL@ |
+-- +----------------+----------------------------------+---------------+
+-- | __Esqueleto__  | @'!=.' Nothing@                  | @!= NULL@     |
+-- +----------------+----------------------------------+---------------+
 --
 -- In SQL, @= NULL@ and @!= NULL@ return NULL instead of true or false. For this reason, you very likely do not want to use @'!=.' Nothing@ in Esqueleto.
 
