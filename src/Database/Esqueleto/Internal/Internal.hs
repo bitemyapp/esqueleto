@@ -579,6 +579,22 @@ val  :: PersistField typ => typ -> SqlExpr (Value typ)
 val v = ERaw Never $ const ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
+--
+-- For @IS NOT NULL@, you can negate this with 'not_', as in @not_ (isNothing (person ^. PersonAge))@
+--
+-- Warning: Persistent and Esqueleto have different behavior for @!= Nothing@:
+--
+-- +------------+----------------------------------+---------------+
+-- | Library    | Haskell                          | SQL           |
+-- +============+==================================+===============+
+-- | Persistent | @'Database.Persist.!=.' Nothing@ | @IS NOT NULL@ |
+-- +------------+----------------------------------+---------------+
+-- | Esqueleto  | @'!=.' Nothing@                  | @!= NULL@     |
+-- +------------+----------------------------------+---------------+
+--
+-- In SQL, @= NULL@ and @!= NULL@ return NULL instead of true or false. For this reason, you very likely do not want to use @'!=.' Nothing@ in Esqueleto.
+
+
 isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
 isNothing v = 
     case v of 
