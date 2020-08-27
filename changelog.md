@@ -1,10 +1,17 @@
-3.3.3.3
-========
+3.3.3.4
+=======
 - @belevy
   - [#191](https://github.com/bitemyapp/esqueleto/pull/191) - Bugfix rollup: 
-    Fix issue with extra characters in generated SQL; 
+    Fix issue with extra characters in generated SQL;
     Fix ToAliasReference for already referenced values; 
     Fix Alias/Reference for Maybe Entity 
+
+3.3.3.3
+=======
+- @maxgabriel
+  - [#203](https://github.com/bitemyapp/esqueleto/pull/203) Document `isNothing`
+- @sestrella
+  - [#198](https://github.com/bitemyapp/esqueleto/pull/198) - Allow PostgreSQL aggregate functions to take a filter clause
 
 3.3.3.2
 ========
