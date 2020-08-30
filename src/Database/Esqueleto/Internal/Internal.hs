@@ -522,7 +522,7 @@ subSelectUnsafe = sub SELECT
   -> EntityField val typ
   -> SqlExpr (Value typ)
 (EAliasedEntityReference source base) ^. field =
-  EValueReference source (aliasedEntityColumnIdent base fieldDef)
+  EValueReference source (\_ -> aliasedEntityColumnIdent base fieldDef)
     where
       fieldDef =
         if isIdField field then
@@ -558,7 +558,7 @@ e ^. field
           fieldIdent =
             case e of
               EEntity _ -> fromDBName info (fieldDB fieldDef)
-              EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef info
+              EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull :: PersistField typ
@@ -2139,7 +2139,7 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
                 , vals1 <> vals2 )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
     where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
-          construct (ERaw p f)        = ERaw Parens $ \info ->
+          construct (ERaw p f)        = ERaw (if p == Never then Parens else Never) $ \info ->
             let (b1, vals) = f info
                 build ("?", [PersistList vals']) =
                   (uncommas $ replicate (length vals') "?", vals')
@@ -2180,9 +2180,14 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
 unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOpComposite op _ a@(ERaw _ _) b@(ERaw _ _) = unsafeSqlBinOp op a b
-unsafeSqlBinOpComposite op sep a b = ERaw Parens $ compose (listify a) (listify b)
+unsafeSqlBinOpComposite op sep a b 
+    | isCompositeKey a || isCompositeKey b = ERaw Parens $ compose (listify a) (listify b)
+    | otherwise = unsafeSqlBinOp op a b
   where
+    isCompositeKey :: SqlExpr (Value x) -> Bool
+    isCompositeKey (ECompositeKey _) = True
+    isCompositeKey _ = False
+
     listify :: SqlExpr (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
     listify (ECompositeKey f)      = flip (,) [] . f
     listify (ERaw _ f)             = deconstruct . f
@@ -2210,6 +2215,13 @@ unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
 unsafeSqlValue v = ERaw Never $ const (v, mempty)
 {-# INLINE unsafeSqlValue #-}
 
+valueToFunctionArg :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
+valueToFunctionArg info v =
+    case v of
+      ERaw _ f             -> f info
+      EAliasedValue i _    -> aliasedValueIdentToRawSql i info
+      EValueReference i i' -> valueReferenceToRawSql i i' info
+      ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
 
 -- | (Internal) A raw SQL function.  Once again, the same warning
 -- from 'unsafeSqlBinOp' applies to this function as well.
@@ -2217,15 +2229,8 @@ unsafeSqlFunction :: UnsafeSqlFunctionArgument a =>
                      TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunction name arg =
   ERaw Never $ \info ->
-    let
-      valueToFunctionArg v =
-        case v of
-          ERaw _ f             -> f info
-          EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-          EValueReference i i' -> valueReferenceToRawSql i i' info
-          ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
-      (argsTLB, argsVals) =
-          uncommas' $ map valueToFunctionArg $ toArgList arg
+    let (argsTLB, argsVals) =
+          uncommas' $ map (valueToFunctionArg info) $ toArgList arg
     in (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An unsafe SQL function to extract a subfield from a compound
@@ -2237,7 +2242,7 @@ unsafeSqlExtractSubField :: UnsafeSqlFunctionArgument a =>
 unsafeSqlExtractSubField subField arg =
   ERaw Never $ \info ->
     let (argsTLB, argsVals) =
-          uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList arg
+          uncommas' $ map (valueToFunctionArg info) $ toArgList arg
     in ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
 
 -- | (Internal) A raw SQL function. Preserves parentheses around arguments.
@@ -2246,8 +2251,15 @@ unsafeSqlFunctionParens :: UnsafeSqlFunctionArgument a =>
                            TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunctionParens name arg =
   ERaw Never $ \info ->
-    let (argsTLB, argsVals) =
-          uncommas' $ map (\(ERaw p f) -> first (parensM p) (f info)) $ toArgList arg
+    let
+      valueToFunctionArgParens v =
+        case v of
+          ERaw p f             -> first (parensM p) (f info)
+          EAliasedValue i _    -> aliasedValueIdentToRawSql i info
+          EValueReference i i' -> valueReferenceToRawSql i i' info
+          ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
+      (argsTLB, argsVals) =
+          uncommas' $ map valueToFunctionArgParens $ toArgList arg
     in (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
@@ -2886,12 +2898,12 @@ valueReferenceToRawSql ::  Ident -> (IdentInfo -> Ident) -> IdentInfo -> (TLB.Bu
 valueReferenceToRawSql sourceIdent columnIdentF info =
   (useIdent info sourceIdent <> "." <> useIdent info (columnIdentF info), mempty)
 
-aliasedEntityColumnIdent :: Ident -> FieldDef -> IdentInfo -> Ident
-aliasedEntityColumnIdent (I baseIdent) field info =
-  I (baseIdent <> "_" <> (builderToText $ fromDBName info $ fieldDB field))
+aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
+aliasedEntityColumnIdent (I baseIdent) field =
+  I (baseIdent <> "_" <> (unDBName $ fieldDB field))
 
-aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
-aliasedColumnName (I baseIdent) info columnName =
+aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder 
+aliasedColumnName (I baseIdent) info columnName = 
   useIdent info (I (baseIdent <> "_" <> columnName))
 
 ----------------------------------------------------------------------
@@ -2941,6 +2953,11 @@ instance SqlSelect () () where
   sqlSelectColCount _ = 1
   sqlSelectProcessRow _ = Right ()
 
+unescapedColumnNames :: EntityDef -> [DBName]
+unescapedColumnNames ent =
+     (if hasCompositeKey ent
+      then [] else [fieldDB (entityId ent)])
+   <> map fieldDB (entityFields ent)
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
@@ -2962,16 +2979,16 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
       where
         process ed = uncommas $
                      map ((name <>) . aliasName) $
-                     entityColumnNames ed (fst info)
-        aliasName columnName = (TLB.fromText columnName) <> " AS " <> aliasedColumnName aliasIdent info columnName
+                     unescapedColumnNames ed 
+        aliasName columnName = (fromDBName info columnName) <> " AS " <> aliasedColumnName aliasIdent info (unDBName columnName)
         name = useIdent info tableIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
   sqlSelectCols info expr@(EAliasedEntityReference sourceIdent baseIdent) = ret
       where
         process ed = uncommas $
-                     map ((name <>) . aliasedColumnName baseIdent info) $
-                     entityColumnNames ed (fst info)
+                     map ((name <>) . aliasedColumnName baseIdent info . unDBName) $
+                     unescapedColumnNames ed 
         name = useIdent info sourceIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
