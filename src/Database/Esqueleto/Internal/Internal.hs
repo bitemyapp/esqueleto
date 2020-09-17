@@ -137,6 +137,12 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 -- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
 -- outer joins do.
 --
+-- Note that this function will be replaced by the one in
+-- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
+-- @Experimental@ module has a dramatically improved means for introducing
+-- tables and entities that provides more power and less potential for runtime
+-- errors.
+--
 -- If you don't include an 'on' clause (or include too many!) then a runtime
 -- exception will be thrown.
 --
@@ -1397,6 +1403,12 @@ class ToBaseId ent where
 
 -- | @FROM@ clause: bring entities into scope.
 --
+-- Note that this function will be replaced by the one in
+-- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
+-- @Experimental@ module has a dramatically improved means for introducing
+-- tables and entities that provides more power and less potential for runtime
+-- errors.
+--
 -- This function internally uses two type classes in order to
 -- provide some flexibility of how you may call it.  Internally
 -- we refer to these type classes as the two different magics.
@@ -2180,7 +2192,7 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
 unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOpComposite op sep a b 
+unsafeSqlBinOpComposite op sep a b
     | isCompositeKey a || isCompositeKey b = ERaw Parens $ compose (listify a) (listify b)
     | otherwise = unsafeSqlBinOp op a b
   where
@@ -2902,8 +2914,8 @@ aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
 aliasedEntityColumnIdent (I baseIdent) field =
   I (baseIdent <> "_" <> (unDBName $ fieldDB field))
 
-aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder 
-aliasedColumnName (I baseIdent) info columnName = 
+aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
+aliasedColumnName (I baseIdent) info columnName =
   useIdent info (I (baseIdent <> "_" <> columnName))
 
 ----------------------------------------------------------------------
@@ -2979,7 +2991,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
       where
         process ed = uncommas $
                      map ((name <>) . aliasName) $
-                     unescapedColumnNames ed 
+                     unescapedColumnNames ed
         aliasName columnName = (fromDBName info columnName) <> " AS " <> aliasedColumnName aliasIdent info (unDBName columnName)
         name = useIdent info tableIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
@@ -2988,7 +3000,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
       where
         process ed = uncommas $
                      map ((name <>) . aliasedColumnName baseIdent info . unDBName) $
-                     unescapedColumnNames ed 
+                     unescapedColumnNames ed
         name = useIdent info sourceIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
