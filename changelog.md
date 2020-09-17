@@ -1,7 +1,7 @@
 3.3.4.0
 =======
 - @parsonsmatt
-  - [#TODO](https://github.com/bitemyapp/esqueleto/pull/TODO)
+  - [#205](https://github.com/bitemyapp/esqueleto/pull/205)
     - More documentation on the `Experimental` module
     - `Database.Esqueleto.Experimental` now reexports `Database.Esqueleto`, so
       the new "approved" import syntax is less verbose. Before, you'd write:
