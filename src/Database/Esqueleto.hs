@@ -27,6 +27,11 @@
 --
 -- Other than identifier name clashes, @esqueleto@ does not
 -- conflict with @persistent@ in any way.
+--
+-- Note that the faciliites for @JOIN@ have been significantly improved in the
+-- "Database.Esqueleto.Experimental" module. The definition of 'from' and 'on'
+-- in this module will be replaced with those at the 4.0.0.0 version, so you are
+-- encouraged to migrate to the new method.
 module Database.Esqueleto
   ( -- * Setup
     -- $setup

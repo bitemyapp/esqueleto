@@ -1,10 +1,32 @@
+3.3.4.0
+=======
+- @parsonsmatt
+  - [#205](https://github.com/bitemyapp/esqueleto/pull/205)
+    - More documentation on the `Experimental` module
+    - `Database.Esqueleto.Experimental` now reexports `Database.Esqueleto`, so
+      the new "approved" import syntax is less verbose. Before, you'd write:
+
+      ```haskell
+      import Database.Esqueleto hiding (from, on)
+      import Database.Esqueleto.Experimental
+      ```
+
+      Now you can merely write:
+
+      ```haskell
+      import Database.Esqueleto.Experimental
+      ```
+
+      Users will get 'redundant import' warnings if they followed the original
+      syntax, the solution is evident from the error message provided.
+
 3.3.3.3
 =======
 - @belevy
-  - [#191](https://github.com/bitemyapp/esqueleto/pull/191) - Bugfix rollup: 
+  - [#191](https://github.com/bitemyapp/esqueleto/pull/191) - Bugfix rollup:
     Fix issue with extra characters in generated SQL;
-    Fix ToAliasReference for already referenced values; 
-    Fix Alias/Reference for Maybe Entity 
+    Fix ToAliasReference for already referenced values;
+    Fix Alias/Reference for Maybe Entity
 - @maxgabriel
   - [#203](https://github.com/bitemyapp/esqueleto/pull/203) Document `isNothing`
 - @sestrella
