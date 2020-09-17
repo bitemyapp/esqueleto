@@ -12,6 +12,12 @@
            , PatternSynonyms
  #-}
 
+-- | This module contains a new way (introduced in 3.3.3.0) of using @FROM@ in
+-- Haskell. The old method was a bit finicky and could permit runtime errors,
+-- and this new way is both significantly safer and much more powerful.
+--
+-- Esqueleto users are encouraged to migrate to this module, as it will become
+-- the default in a new major version @4.0.0.0@.
 module Database.Esqueleto.Experimental
     ( -- * Setup
       -- $setup
@@ -39,9 +45,12 @@ module Database.Esqueleto.Experimental
     , ToAliasT
     , ToAliasReference(..)
     , ToAliasReferenceT
+    -- * The Normal Stuff
+    , module Database.Esqueleto
     )
     where
 
+import Database.Esqueleto hiding (from, on, From(..))
 import qualified Control.Monad.Trans.Writer as W
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)

@@ -129,7 +129,50 @@ WHERE Person.age >= 18
 
 Since `age` is an optional `Person` field, we use `just` to lift`val 18 :: SqlExpr (Value Int)` into `just (val 18) ::SqlExpr (Value (Maybe Int))`.
 
-## Joins
+## Experimental/New Joins
+
+There's a new way to write `JOIN`s in esqueleto! It has less potential for
+runtime errors and is much more powerful than the old syntax. To opt in to the
+new syntax, import:
+
+```haskell
+import Database.Esqueleto.Experimental
+```
+
+This will conflict with the definition of `from` and `on` in the
+`Database.Esqueleto` module, so you'll want to remove that import.
+
+This style will become the new "default" in esqueleto-4.0.0.0, so it's a good
+idea to port your code to using it soon.
+
+The module documentation in `Database.Esqueleto.Experimental` has many examples,
+and they won't be repeated here. Here's a quick sample:
+
+```haskell
+select $ do
+  (a :& b) <-
+    from $
+      Table @BlogPost
+      `InnerJoin`
+      Table @Person
+        `on` do \(bp :& a) ->
+          bp ^. BlogPostAuthorId ==. a ^. PersonId
+  pure (a, b)
+```
+
+Advantages:
+
+- `ON` clause is attached directly to the relevant join, so you never need to
+  worry about how they're ordered, nor will you ever run into bugs where the
+  `on` clause is on the wrong `JOIN`
+- The `ON` clause lambda will all the available tables in it. This forbids
+  runtime errors where an `ON` clause refers to a table that isn't in scope yet.
+- You can join on a table twice, and the aliases work out fine with the `ON`
+  clause.
+- You can use `UNION`, `EXCEPT`, `INTERSECTION` etc  with this new syntax!
+- You can reuse subqueries more easily.
+
+## Legacy Joins
 
 Implicit joins are represented by tuples.
 
@@ -253,13 +296,13 @@ for that end we use `unsafeSqlFunction`. For example, if we wish to consult the 
 
 ```haskell
 postgresTime :: (MonadIO m, MonadLogger m) => SqlWriteT m UTCTime
-postgresTime = 
+postgresTime =
   result <- select (pure now)
   case result of
     [x] -> pure x
     _ -> error "now() is guaranteed to return a single result"
   where
-    now :: SqlExpr (Value UTCTime) 
+    now :: SqlExpr (Value UTCTime)
     now = unsafeSqlFunction "now" ()
 ```
 
@@ -274,20 +317,20 @@ Do notice that `now` does not use any arguments, so we use `()` that is an insta
 `UnsafeSqlFunctionArgument` to represent no arguments, an empty list cast to a correct value
 will yield the same result as `()`.
 
-We can also use `unsafeSqlFunction` for more complex functions with customs values using 
+We can also use `unsafeSqlFunction` for more complex functions with customs values using
 `unsafeSqlValue` which turns any string into a sql value of whatever type we want, disclaimer:
 if you use it badly you will cause a runtime error. For example, say we want to try postgres'
 `date_part` function and get the day of a timestamp, we could use:
 
 ```haskell
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
-postgresTimestampDay = 
+postgresTimestampDay =
   result <- select (return $ dayPart date)
   case result of
     [x] -> pure x
     _ -> error "dayPart is guaranteed to return a single result"
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     date :: SqlExpr (Value UTCTime)
     date = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\'"
@@ -314,7 +357,7 @@ postgresTimestampDay = do
     [x] -> pure x
     _ -> error "dayPart is guaranteed to return a single result"
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     toTIMESTAMP :: SqlExpr (Value UTCTime) -> SqlExpr (Value UTCTime)
     toTIMESTAMP = unsafeSqlCastAs "TIMESTAMP"
@@ -333,7 +376,7 @@ on all queries, for example, if we have:
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return $ val ("hi\'; DROP TABLE foo; select \'bye\'" :: String)) >>= liftIO . print
 ```
 
@@ -349,10 +392,10 @@ Let's see an example of defining a new evil `now` function:
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return nowWithInjection) >>= liftIO . print
   where
-    nowWithInjection :: SqlExpr (Value UTCTime) 
+    nowWithInjection :: SqlExpr (Value UTCTime)
     nowWithInjection = unsafeSqlFunction "0; DROP TABLE bar; select now" ([] :: [SqlExpr (Value Int)])
 ```
 
@@ -368,10 +411,10 @@ will be erased with no indication whatsoever. Another example of this behavior i
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return $ dayPart dateWithInjection) >>= liftIO . print
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     dateWithInjection :: SqlExpr (Value UTCTime)
     dateWithInjection = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\');DROP TABLE bar; select (16"
@@ -387,10 +430,12 @@ This will print 16 and also erase the `bar` table. The main take away of this ex
 never use any user or third party input inside an unsafe function without first parsing it or
 heavily sanitizing the input.
 
-### Tests and Postgres
+### Tests
 
 To run the tests, do `stack test`. This tests all the backends, so you'll need
 to have MySQL and Postgresql installed.
+
+#### Postgres
 
 Using apt-get, you should be able to do:
 
@@ -417,23 +462,30 @@ withConn =
 
 You can change these if you like but to just get them working set up as follows on linux:
 
-```$ sudo -u postgres createuser esqutest```
-
-```$ sudo -u postgres createdb esqutest```
-
 ```
+$ sudo -u postgres createuser esqutest
+$ sudo -u postgres createdb esqutest
 $ sudo -u postgres psql
 postgres=# \password esqutest
 ```
 
-
 And on osx
 
-```$ createuser esqutest```
-
-```$ createdb esqutest```
-
 ```
+$ createuser esqutest
+$ createdb esqutest
 $ psql postgres
 postgres=# \password esqutest
+```
+
+#### MySQL
+
+To test MySQL, you'll need to have a MySQL server installation.
+Then, you'll need to create a database `esqutest` and a `'travis'@'localhost'`
+user which can access it:
+
+```
+mysql> CREATE DATABASE esqutest;
+mysql> CREATE USER 'travis'@'localhost';
+mysql> GRANT ALL ON esqutest.* TO 'travis';
 ```
