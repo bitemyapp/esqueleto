@@ -33,6 +33,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.Experimental hiding (random_, from, on)
+import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
@@ -1151,6 +1153,23 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
+-- Since lateral queries arent supported in Sqlite or older versions of mysql 
+-- the test is in the Postgres module
+testLateralQuery :: Spec
+testLateralQuery =
+  describe "Lateral queries" $ do
+    it "supports LATERAL" $ do
+      run $ do
+        let q = do 
+                l :& c <- 
+                  Experimental.from $ Table @Lord
+                  `CrossJoin` (LateralQuery $ \lord -> do
+                                    deed <- Experimental.from $ Table @Deed
+                                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                    pure $ countRows @Int)
+                pure (l, c)
+        select q
+        pure ()
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1234,6 +1253,7 @@ main = do
           cleanJSON
         testJSONInsertions
         testJSONOperators
+      testLateralQuery
 
 
 run, runSilent, runVerbose :: Run
