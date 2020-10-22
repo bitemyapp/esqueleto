@@ -1156,20 +1156,79 @@ testFilterWhere =
 -- Since lateral queries arent supported in Sqlite or older versions of mysql 
 -- the test is in the Postgres module
 testLateralQuery :: Spec
-testLateralQuery =
+testLateralQuery = do
   describe "Lateral queries" $ do
-    it "supports LATERAL" $ do
+    it "supports CROSS JOIN LATERAL" $ do
       run $ do
-        let q = do 
-                l :& c <- 
-                  Experimental.from $ Table @Lord
-                  `CrossJoin` (LateralQuery $ \lord -> do
-                                    deed <- Experimental.from $ Table @Deed
-                                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                                    pure $ countRows @Int)
-                pure (l, c)
-        select q
+        let subquery lord = do
+                            deed <- Experimental.from $ Table @Deed
+                            where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                            pure $ countRows @Int
+        select $ do 
+            l :& c <- 
+              Experimental.from $ Table @Lord
+              `CrossJoin` LateralQuery subquery
+            pure (l, c)
         pure ()
+
+    it "supports INNER JOIN LATERAL" $ do
+      run $ do
+        let subquery lord = do
+                            deed <- Experimental.from $ Table @Deed
+                            where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                            pure $ countRows @Int
+        res <- select $ do 
+          l :& c <- Experimental.from $ Table @Lord 
+                          `InnerJoin` LateralQuery subquery
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value Int)]
+        pure ()
+
+    it "supports LEFT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do 
+          l :& c <- Experimental.from $ Table @Lord 
+                          `LeftOuterJoin` (LateralQuery $ \lord -> do 
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value (Maybe Int))]
+        pure ()
+
+  {--
+    it "compile error on RIGHT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do 
+          l :& c <- Experimental.from $ Table @Lord 
+                          `RightOuterJoin` (LateralQuery $ \lord -> do 
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value Int)]
+        pure ()
+    it "compile error on FULL OUTER JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do 
+          l :& c <- Experimental.from $ Table @Lord 
+                          `FullOuterJoin` (LateralQuery $ \lord -> do 
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value (Maybe Int))]
+        pure ()
+    --}
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()

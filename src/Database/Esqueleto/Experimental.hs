@@ -471,33 +471,10 @@ data From a where
                         => From a
                         -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
                         -> From (ToMaybeT a :& b)
-  RightJoinFromLateral  :: ( SqlSelect b' r
-                           , SqlSelect b'' r'
-                           , ToAlias b
-                           , b' ~ ToAliasT b 
-                           , ToAliasReference b'
-                           , ToAliasReferenceT b' ~ b''
-                           , ToMaybe a
-                           )
-                        => From a
-                        -> ((ToMaybeT a -> SqlQuery b), (ToMaybeT a :& b'') -> SqlExpr (Value Bool))
-                        -> From (ToMaybeT a :& b'')
   FullJoinFrom          :: (ToMaybe a, ToMaybe b )
                         => From a
                         -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
                         -> From (ToMaybeT a :& ToMaybeT b)
-  FullJoinFromLateral   :: ( SqlSelect b' r
-                           , SqlSelect b'' r'
-                           , ToAlias b
-                           , b' ~ ToAliasT b 
-                           , ToAliasReference b'
-                           , ToAliasReferenceT b' ~ b''
-                           , ToMaybe a
-                           , ToMaybe b''
-                           )
-                        => From a
-                        -> ((ToMaybeT a -> SqlQuery b), (ToMaybeT a :& ToMaybeT b'') -> SqlExpr (Value Bool))
-                        -> From (ToMaybeT a :& ToMaybeT b'')
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -509,8 +486,17 @@ data From a where
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
---
-on :: ToFrom a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
+class ValidOnClauseValue a where
+instance ValidOnClauseValue (From a) where
+instance ValidOnClauseValue (InnerJoin a b) where
+instance ValidOnClauseValue (LeftOuterJoin a b) where
+instance ValidOnClauseValue (RightOuterJoin a b) where
+instance ValidOnClauseValue (FullOuterJoin a b) where
+instance ValidOnClauseValue (SqlSetOperation a) where
+instance ValidOnClauseValue (LateralQuery a) where
+
+
+on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
 infix 9 `on`
 
@@ -519,7 +505,6 @@ type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 type family ToFromT a where
   ToFromT (From a) = a
   ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
-  ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (RightOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
@@ -531,13 +516,20 @@ type family ToFromT a where
   ToFromT (RightOuterJoin a b) = TypeError (JoinErrorMsg "RightOuterJoin")
   ToFromT (FullOuterJoin a b) = TypeError (JoinErrorMsg "FullOuterJoin")
 
+data Lateral
+data NotLateral 
+
+type family IsLateral a where
+  IsLateral (LateralQuery a) = Lateral
+  IsLateral a = NotLateral
+
+class ErrorOnLateral a where
+instance (TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")) => ErrorOnLateral (LateralQuery a) where
+instance {-# OVERLAPPABLE #-} ErrorOnLateral a where
 
 {-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
 class ToFrom a where
   toFrom :: a -> From (ToFromT a)
-
-instance ToFrom (From a) where
-  toFrom = id
 
 instance {-# OVERLAPPABLE #-} ToFrom (InnerJoin a b) where
   toFrom = undefined
@@ -545,8 +537,11 @@ instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
   toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
   toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
+instance {-# OVERLAPPABLE #-} ToFrom (a b) where
   toFrom = undefined
+
+instance ToFrom (From a) where
+  toFrom = id
 
 instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')  => ToFrom (SqlSetOperation a) where
   -- If someone uses just a plain SelectQuery it should behave like a normal subquery
@@ -554,73 +549,33 @@ instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasRe
   -- Otherwise use the SqlSetOperation
   toFrom q = SqlSetOperation q
 
-instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b', ToMaybe b', mb ~ ToMaybeT b')
-       => ToFrom (LeftOuterJoin a (b, (a' :& mb) -> SqlExpr (Value Bool))) where
-  toFrom (LeftOuterJoin lhs (rhs, on')) = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
+class ToInnerJoin lateral lhs rhs res where 
+  toInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res 
 
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , SqlSelect bAlias r
+instance ( SqlSelect bAlias r
          , SqlSelect bAliasRef r'
          , ToAlias b
          , bAlias ~ ToAliasT b
          , ToAliasReference bAlias
          , bAliasRef ~ ToAliasReferenceT bAlias
-         , ToMaybe bAliasRef
-         , mb ~ ToMaybeT bAliasRef)
-       => ToFrom (LeftOuterJoin a (LateralQuery (a' -> SqlQuery b), (a' :& mb) -> SqlExpr (Value Bool))) where
-  toFrom (LeftOuterJoin lhs (LateralQuery q, on')) = LeftJoinFromLateral (toFrom lhs) (q,  on')
+         , ToFrom a
+         , ToFromT a ~ a'
+         ) => ToInnerJoin Lateral a (LateralQuery (a' -> SqlQuery b)) (a' :& bAliasRef) where
+  toInnerJoin _ lhs (LateralQuery q) on' = InnerJoinFromLateral (toFrom lhs) (q, on')
 
-instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b', ToMaybe a', ma ~ ToMaybeT a', ToMaybe b', mb ~ ToMaybeT b')
-       => ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
-  toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
+instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b')
+        => ToInnerJoin NotLateral a b (a' :& b') where
+  toInnerJoin _ lhs rhs on' = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
 
 instance ( ToFrom a
          , ToFromT a ~ a'
-         , ToMaybe a'
-         , ma ~ ToMaybeT a'
-
-         , SqlSelect bAlias r
-         , SqlSelect bAliasRef r'
-         , ToAlias b
-         , bAlias ~ ToAliasT b
-         , ToAliasReference bAlias
-         , bAliasRef ~ ToAliasReferenceT bAlias
-         , ToMaybe bAliasRef
-         , mb ~ ToMaybeT bAliasRef
-         )
-       => ToFrom (FullOuterJoin a (LateralQuery (ma -> SqlQuery b), (ma :& mb) -> SqlExpr (Value Bool))) where
-  toFrom (FullOuterJoin lhs (LateralQuery q, on')) = FullJoinFromLateral (toFrom lhs) (q,  on')
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , ToMaybe a'
-         , ma ~ ToMaybeT a'
-
-         , SqlSelect bAlias r
-         , SqlSelect bAliasRef r'
-         , ToAlias b
-         , bAlias ~ ToAliasT b
-         , ToAliasReference bAlias
-         , bAliasRef ~ ToAliasReferenceT bAlias
-         )
-       => ToFrom (RightOuterJoin a (LateralQuery (ma -> SqlQuery b), (ma :& bAliasRef) -> SqlExpr (Value Bool))) where
-  toFrom (RightOuterJoin lhs (LateralQuery q, on')) = RightJoinFromLateral (toFrom lhs) (q,  on')
-
-instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b') => ToFrom (InnerJoin a (b, (a' :& b') -> SqlExpr (Value Bool))) where
-  toFrom (InnerJoin lhs (rhs, on')) = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , SqlSelect bAlias r
-         , SqlSelect bAliasRef r'
-         , ToAlias b
-         , bAlias ~ ToAliasT b
-         , ToAliasReference bAlias
-         , bAliasRef ~ ToAliasReferenceT bAlias
-         )
-       => ToFrom (InnerJoin a (LateralQuery (a' -> SqlQuery b), (a' :& bAliasRef) -> SqlExpr (Value Bool))) where
-  toFrom (InnerJoin lhs (LateralQuery q, on')) = InnerJoinFromLateral (toFrom lhs) (q,  on')
+         , ToInnerJoin (IsLateral b) a b b'
+         ) => ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
+         toFrom (InnerJoin lhs (rhs, on')) = 
+           let
+            toProxy :: b -> Proxy (IsLateral b)
+            toProxy _ = Proxy
+           in toInnerJoin (toProxy rhs) lhs rhs on' 
 
 instance ( ToFrom a
          , ToFrom b
@@ -640,6 +595,61 @@ instance {-# OVERLAPPING #-}
          )
        => ToFrom (CrossJoin a (LateralQuery (a' -> SqlQuery b))) where
   toFrom (CrossJoin lhs (LateralQuery q)) = CrossJoinFromLateral (toFrom lhs) q
+
+class ToLeftJoin lateral lhs rhs res where 
+  toLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res 
+
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , SqlSelect bAlias r
+         , SqlSelect bAliasRef r'
+         , ToAlias b
+         , bAlias ~ ToAliasT b
+         , ToAliasReference bAlias
+         , bAliasRef ~ ToAliasReferenceT bAlias
+         , ToMaybe bAliasRef
+         , mb ~ ToMaybeT bAliasRef
+         ) => ToLeftJoin Lateral a (LateralQuery (a' -> SqlQuery b)) (a' :& mb) where
+  toLeftJoin _ lhs (LateralQuery q) on' = LeftJoinFromLateral (toFrom lhs) (q, on')
+
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , ToFrom b
+         , ToFromT b ~ b'
+         , ToMaybe b'
+         , mb ~ ToMaybeT b'
+         ) => ToLeftJoin NotLateral a b (a' :& mb) where
+  toLeftJoin _ lhs rhs on' = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
+
+instance ( ToLeftJoin (IsLateral b) a b b'
+         ) => ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
+         toFrom (LeftOuterJoin lhs (rhs, on')) = 
+           let
+            toProxy :: b -> Proxy (IsLateral b)
+            toProxy _ = Proxy
+           in toLeftJoin (toProxy rhs) lhs rhs on' 
+
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , ToFrom b
+         , ToFromT b ~ b'
+         , ToMaybe a'
+         , ma ~ ToMaybeT a'
+         , ToMaybe b'
+         , mb ~ ToMaybeT b'
+         , ErrorOnLateral b
+         ) => ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
+  toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
+
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , ToMaybe a'
+         , ma ~ ToMaybeT a'
+         , ToFrom b
+         , ToFromT b ~ b'
+         , ErrorOnLateral b
+         ) => ToFrom (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) where
+  toFrom (RightOuterJoin lhs (rhs, on')) = RightJoinFrom (toFrom lhs) (toFrom rhs,  on')
 
 type family Nullable a where
   Nullable (Maybe a) = a
@@ -847,22 +857,10 @@ from parts = do
         (rightVal, rightFrom) <- runFrom rightPart
         let ret = (toMaybe leftVal) :& rightVal
         pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
-      runFrom (RightJoinFromLateral leftPart (q, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        let mLeftVal = toMaybe leftVal
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q mLeftVal)
-        let ret = mLeftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
       runFrom (FullJoinFrom leftPart (rightPart, on')) = do
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
         let ret = (toMaybe leftVal) :& (toMaybe rightVal)
-        pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
-      runFrom (FullJoinFromLateral leftPart (q, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        let mLeftVal = toMaybe leftVal
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q mLeftVal)
-        let ret = mLeftVal :& toMaybe rightVal
         pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
 
 fromSubQuery :: ( SqlSelect a' r
