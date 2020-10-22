@@ -537,7 +537,7 @@ instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
   toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
   toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (a b) where
+instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
   toFrom = undefined
 
 instance ToFrom (From a) where
