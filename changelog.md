@@ -1,3 +1,9 @@
+3.3.4.1
+
+- @maxgabriel
+  - [#]()
+    - Add suggested hlint rules for proper `isNothing` usage
+
 3.3.4.0
 =======
 - @parsonsmatt
