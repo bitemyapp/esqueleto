@@ -1152,25 +1152,37 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
+testCommonTableExpressions :: Spec
 testCommonTableExpressions = do
   describe "You can run them" $ do
     it "will run" $ do
       run $ do
-        let cte = do
-                  lords <- Experimental.from $ Experimental.Table @Lord
-                  limit 10
-                  pure lords
 
-        let q = do
-                limitedLordsCte <- Experimental.with cte
-                lords <- limitedLordsCte 
-                orderBy [asc $ lords ^. LordId]
-                pure lords
-      
-        liftIO . print =<< renderQuerySelect q
-        void $ select q
+        void $ select $ do
+          limitedLordsCte <-
+            Experimental.with $ do
+              lords <- Experimental.from $ Experimental.Table @Lord
+              limit 10
+              pure lords
+          lords <- limitedLordsCte
+          orderBy [asc $ lords ^. LordId]
+          pure lords
 
       True `shouldBe` True
+
+  it "can recursive" $ do
+    vals <- run $ do
+      select $ do
+          cte <- Experimental.withRecursive
+                    (pure $ val (1 :: Int))
+                    Experimental.unionAll_
+                    (\self -> do
+                        v <- self
+                        where_ $ v <. val 10
+                        pure $ v +. val 1
+                    )
+          cte
+    vals `shouldBe` (fmap Value [1..10])
 
 type JSONValue = Maybe (JSONB A.Value)
 

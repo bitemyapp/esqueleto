@@ -37,6 +37,9 @@ module Database.Esqueleto.Experimental
     , from
     , (:&)(..)
     , with
+    , withRecursive
+    , unionAll_
+    , union_
       -- * Internals
     , ToFrom(..)
     , ToFromT
@@ -884,7 +887,7 @@ instance ( ToAliasReference a
 
 with :: ( ToAlias a
         , ToAliasReference (ToAliasT a)
-        , SqlSelect (ToAliasT a) r 
+        , SqlSelect (ToAliasT a) r
         ) => SqlQuery a -> SqlQuery (SqlQuery (ToAliasReferenceT (ToAliasT a)))
 with query = do
   (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
@@ -897,3 +900,44 @@ with query = do
   pure $ do
     Q $ W.tell mempty{sdFromClause = [FromCte ident]}
     pure ref
+
+data RecursiveCteUnion
+  = CteUnionAll
+  | CteUnion
+
+unionAll_ :: RecursiveCteUnion
+unionAll_ = CteUnionAll
+union_ :: RecursiveCteUnion
+union_ = CteUnion
+
+withRecursive :: ( ToAlias a
+                 , ToAliasReference (ToAliasT a)
+                 , SqlSelect a r
+                 , SqlSelect (ToAliasT a) r
+                 , ref ~ ToAliasReferenceT (ToAliasT a)
+                 )
+              => SqlQuery a
+              -> RecursiveCteUnion
+              -> (SqlQuery ref -> SqlQuery a)
+              -> SqlQuery (SqlQuery ref)
+withRecursive baseCase unionKind recursiveCase = do
+  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
+  aliasedValue <- toAlias ret
+  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+  ident <- newIdentFor (DBName "cte")
+  ref <- toAliasReference ident aliasedValue
+  let refQuery = do
+             Q $ W.tell mempty{sdFromClause = [FromCte ident]}
+             pure ref
+  let recursiveQuery = recursiveCase refQuery
+  let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
+               (\info -> (toRawSql SELECT info aliasedQuery)
+                      <> (unionKeyword unionKind, mempty)
+                      <> (toRawSql SELECT info recursiveQuery)
+               )
+  Q $ W.tell mempty{sdCteClause = [clause]}
+  pure refQuery
+
+    where
+      unionKeyword CteUnionAll = "\nUNION ALL\n"
+      unionKeyword CteUnion    = "\nUNION\n"
