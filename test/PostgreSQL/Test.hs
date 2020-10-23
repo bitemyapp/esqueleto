@@ -1170,19 +1170,24 @@ testCommonTableExpressions = do
 
       True `shouldBe` True
 
-  it "can recursive" $ do
+  it "can do multiple recursive queries" $ do
     vals <- run $ do
+      let oneToTen = Experimental.withRecursive
+                     (pure $ val (1 :: Int))
+                     Experimental.unionAll_
+                     (\self -> do
+                         v <- self
+                         where_ $ v <. val 10
+                         pure $ v +. val 1
+                     )
+
       select $ do
-          cte <- Experimental.withRecursive
-                    (pure $ val (1 :: Int))
-                    Experimental.unionAll_
-                    (\self -> do
-                        v <- self
-                        where_ $ v <. val 10
-                        pure $ v +. val 1
-                    )
-          cte
-    vals `shouldBe` (fmap Value [1..10])
+        cte <- oneToTen
+        cte2 <- oneToTen
+        res1 <- cte
+        res2 <- cte2
+        pure (res1, res2)
+    vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
 
 type JSONValue = Maybe (JSONB A.Value)
 

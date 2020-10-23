@@ -1708,11 +1708,12 @@ data FromClause =
   | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
   | FromCte Ident
 
-data CommonTableExpressionKind 
+data CommonTableExpressionKind
   = RecursiveCommonTableExpression
   | NormalCommonTableExpression
+  deriving Eq
 
-data CommonTableExpressionClause = 
+data CommonTableExpressionClause =
   CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 collectIdents :: FromClause -> Set Ident
@@ -2638,7 +2639,7 @@ toRawSql mode (conn, firstIdentState) query =
                havingClause
                orderByClauses
                limitClause
-               lockingClause 
+               lockingClause
                cteClause = sd
       -- Pass the finalIdentState (containing all identifiers
       -- that were used) to the subsequent calls.  This ensures
@@ -2744,12 +2745,18 @@ uncommas' = (uncommas *** mconcat) . unzip
 makeCte :: IdentInfo -> [CommonTableExpressionClause] -> (TLB.Builder, [PersistValue])
 makeCte info cteClauses =
   let
-    recursiveText RecursiveCommonTableExpression = "RECURSIVE "
-    recursiveText _ = ""
+    withCteText
+      | hasRecursive = "WITH RECURSIVE "
+      | otherwise = "WITH "
 
-    cteClauseToText (CommonTableExpressionClause cteKind cteIdent cteFn) =
+      where
+        hasRecursive =
+          any (== RecursiveCommonTableExpression) $
+            fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind) cteClauses
+
+    cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
       first (\tlb ->
-          recursiveText cteKind <> useIdent info cteIdent <> " AS " <> parens tlb
+          useIdent info cteIdent <> " AS " <> parens tlb
       ) $ cteFn info
 
     cteBody =
@@ -2760,8 +2767,8 @@ makeCte info cteClauses =
   if length cteClauses == 0 then
     mempty
   else
-    first (\tlb -> "WITH " <> tlb <> "\n") cteBody
-    
+    first (\tlb -> withCteText <> tlb <> "\n") cteBody
+
 
 makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
 makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
