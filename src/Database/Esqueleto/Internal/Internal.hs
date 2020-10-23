@@ -1673,14 +1673,15 @@ data SideData = SideData { sdDistinctClause :: !DistinctClause
                          , sdOrderByClause  :: ![OrderByClause]
                          , sdLimitClause    :: !LimitClause
                          , sdLockingClause  :: !LockingClause
+                         , sdCteClause      :: ![CommonTableExpressionClause]
                          }
 
 instance Semigroup SideData where
-  SideData d f s w g h o l k <> SideData d' f' s' w' g' h' o' l' k' =
-    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k')
+  SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
+    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
   mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
@@ -1705,6 +1706,14 @@ data FromClause =
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
   | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+  | FromCte Ident
+
+data CommonTableExpressionKind 
+  = RecursiveCommonTableExpression
+  | NormalCommonTableExpression
+
+data CommonTableExpressionClause = 
+  CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 collectIdents :: FromClause -> Set Ident
 collectIdents fc = case fc of
@@ -1712,6 +1721,7 @@ collectIdents fc = case fc of
   FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
   OnClause _ -> mempty
   FromQuery _ _ -> mempty
+  FromCte _ -> mempty
 
 instance Show FromClause where
   show fc = case fc of
@@ -1735,7 +1745,8 @@ instance Show FromClause where
       "(OnClause " <> render' expr <> ")"
     FromQuery ident _->
       "(FromQuery " <> show ident <> ")"
-
+    FromCte ident ->
+      "(FromCte " <> show ident <> ")"
 
     where
       dummy = SqlBackend
@@ -1794,11 +1805,13 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
     findRightmostIdent (FromQuery _ _) = Nothing
+    findRightmostIdent (FromCte _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
     findLeftmostIdent (FromQuery _ _) = Nothing
+    findLeftmostIdent (FromCte _) = Nothing
 
     tryMatch
       :: Set Ident
@@ -2625,14 +2638,16 @@ toRawSql mode (conn, firstIdentState) query =
                havingClause
                orderByClauses
                limitClause
-               lockingClause = sd
+               lockingClause 
+               cteClause = sd
       -- Pass the finalIdentState (containing all identifiers
       -- that were used) to the subsequent calls.  This ensures
       -- that no name clashes will occur on subqueries that may
       -- appear on the expressions below.
       info = (projectBackend conn, finalIdentState)
   in mconcat
-      [ makeInsertInto info mode ret
+      [ makeCte        info cteClause
+      , makeInsertInto info mode ret
       , makeSelect     info mode distinctClause ret
       , makeFrom       info mode fromClauses
       , makeSet        info setClauses
@@ -2726,6 +2741,27 @@ intersperseB a = mconcat . intersperse a . filter (/= mempty)
 uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
 
+makeCte :: IdentInfo -> [CommonTableExpressionClause] -> (TLB.Builder, [PersistValue])
+makeCte info cteClauses =
+  let
+    recursiveText RecursiveCommonTableExpression = "RECURSIVE "
+    recursiveText _ = ""
+
+    cteClauseToText (CommonTableExpressionClause cteKind cteIdent cteFn) =
+      first (\tlb ->
+          recursiveText cteKind <> useIdent info cteIdent <> " AS " <> parens tlb
+      ) $ cteFn info
+
+    cteBody =
+      mconcat $
+        intersperse (",\n", mempty) $
+          fmap cteClauseToText cteClauses
+  in
+  if length cteClauses == 0 then
+    mempty
+  else
+    first (\tlb -> "WITH " <> tlb <> "\n") cteBody
+    
 
 makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
 makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
@@ -2779,6 +2815,8 @@ makeFrom info mode fs = ret
     mk _ (FromQuery ident f) =
       let (queryText, queryVals) = f info
       in ((parens queryText) <> " AS " <> useIdent info ident, queryVals)
+    mk _ (FromCte ident) =
+      (useIdent info ident, mempty)
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def

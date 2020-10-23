@@ -36,6 +36,7 @@ module Database.Esqueleto.Experimental
     , on
     , from
     , (:&)(..)
+    , with
       -- * Internals
     , ToFrom(..)
     , ToFromT
@@ -81,8 +82,11 @@ import Database.Esqueleto.Internal.Internal
           , veryUnsafeCoerceSqlExprValue
           , parensM
           , NeedParens(..)
+          , CommonTableExpressionKind(..)
+          , CommonTableExpressionClause(..)
           )
 import GHC.TypeLits
+
 
 -- $setup
 --
@@ -877,3 +881,19 @@ instance ( ToAliasReference a
          , ToAliasReference h
          ) => ToAliasReference (a,b,c,d,e,f,g,h) where
   toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
+
+with :: ( ToAlias a
+        , ToAliasReference (ToAliasT a)
+        , SqlSelect (ToAliasT a) r 
+        ) => SqlQuery a -> SqlQuery (SqlQuery (ToAliasReferenceT (ToAliasT a)))
+with query = do
+  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+  aliasedValue <- toAlias ret
+  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+  ident <- newIdentFor (DBName "cte")
+  let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
+  Q $ W.tell mempty{sdCteClause = [clause]}
+  ref <- toAliasReference ident aliasedValue
+  pure $ do
+    Q $ W.tell mempty{sdFromClause = [FromCte ident]}
+    pure ref

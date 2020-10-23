@@ -33,6 +33,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
+import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
@@ -1151,6 +1152,26 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
+testCommonTableExpressions = do
+  describe "You can run them" $ do
+    it "will run" $ do
+      run $ do
+        let cte = do
+                  lords <- Experimental.from $ Experimental.Table @Lord
+                  limit 10
+                  pure lords
+
+        let q = do
+                limitedLordsCte <- Experimental.with cte
+                lords <- limitedLordsCte 
+                orderBy [asc $ lords ^. LordId]
+                pure lords
+      
+        liftIO . print =<< renderQuerySelect q
+        void $ select q
+
+      True `shouldBe` True
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1226,6 +1247,7 @@ main = do
       testUpsert
       testInsertSelectWithConflict
       testFilterWhere
+      testCommonTableExpressions
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests
