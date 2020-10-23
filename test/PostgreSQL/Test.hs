@@ -1189,6 +1189,32 @@ testCommonTableExpressions = do
         pure (res1, res2)
     vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
 
+  it "passing previous query works" $
+    let
+      oneToTen =
+        Experimental.withRecursive
+           (pure $ val (1 :: Int))
+           Experimental.unionAll_
+           (\self -> do
+               v <- self
+               where_ $ v <. val 10
+               pure $ v +. val 1
+           )
+      oneMore :: SqlQuery (SqlExpr (Value Int)) -> SqlQuery (SqlQuery (SqlExpr (Value Int)))
+      oneMore q =
+        Experimental.with $ do
+          v <- q
+          pure $ v +. val 1
+    in do
+    vals <- run $ do
+
+      select $ do
+        cte <- oneToTen
+        cte2 <- oneMore cte
+        res <- cte2
+        pure res
+    vals `shouldBe` fmap Value [2..11]
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
