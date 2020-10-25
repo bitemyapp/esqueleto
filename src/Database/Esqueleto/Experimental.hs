@@ -54,7 +54,7 @@ module Database.Esqueleto.Experimental
     )
     where
 
-import Database.Esqueleto hiding (from, on, From(..))
+import Database.Esqueleto hiding (from, on, From)
 import qualified Control.Monad.Trans.Writer as W
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
@@ -62,7 +62,6 @@ import Control.Monad.Trans.Class (lift)
 import Data.Semigroup
 #endif
 import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Internal
           ( SqlExpr(..)
           , InnerJoin(..)
@@ -415,6 +414,7 @@ data From a where
   SubQuery      :: (SqlSelect a' r, SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')
                 => SqlQuery a
                 -> From a''
+  FromCte       :: Ident -> a -> From a
   SqlSetOperation :: (SqlSelect a' r, ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')
                   => SqlSetOperation a
                   -> From a''
@@ -456,6 +456,7 @@ type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 
 type family ToFromT a where
   ToFromT (From a) = a
+  ToFromT (SqlQuery a) = ToAliasReferenceT (ToAliasT a)
   ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
   ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (FullOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
@@ -474,6 +475,7 @@ class ToFrom a where
 instance ToFrom (From a) where
   toFrom = id
 
+
 instance {-# OVERLAPPABLE #-} ToFrom (InnerJoin a b) where
   toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
@@ -482,6 +484,15 @@ instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
   toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
   toFrom = undefined
+
+instance ( ToAlias a
+         , a' ~ ToAliasT a
+         , ToAliasReference a'
+         , a'' ~ ToAliasReferenceT a'
+         , SqlSelect a' r'
+         , SqlSelect a'' r'
+         ) => ToFrom (SqlQuery a) where
+  toFrom = SubQuery
 
 instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')  => ToFrom (SqlSetOperation a) where
   -- If someone uses just a plain SelectQuery it should behave like a normal subquery
@@ -630,6 +641,9 @@ from parts = do
           -- this is probably overkill as the aliases should already be unique but seems to be good practice.
           ref <- toAliasReference subqueryAlias aliasedValue
           pure (ref , FromQuery subqueryAlias (\info -> toRawSql SELECT info aliasedQuery))
+
+      runFrom (FromCte ident ref) =
+          pure (ref, FromIdent ident)
 
       runFrom (SqlSetOperation operation) = do
           (aliasedOperation, ret) <- aliasQueries operation
@@ -888,7 +902,7 @@ instance ( ToAliasReference a
 with :: ( ToAlias a
         , ToAliasReference (ToAliasT a)
         , SqlSelect (ToAliasT a) r
-        ) => SqlQuery a -> SqlQuery (SqlQuery (ToAliasReferenceT (ToAliasT a)))
+        ) => SqlQuery a -> SqlQuery (From (ToAliasReferenceT (ToAliasT a)))
 with query = do
   (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
   aliasedValue <- toAlias ret
@@ -897,9 +911,7 @@ with query = do
   let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
   Q $ W.tell mempty{sdCteClause = [clause]}
   ref <- toAliasReference ident aliasedValue
-  pure $ do
-    Q $ W.tell mempty{sdFromClause = [FromCte ident]}
-    pure ref
+  pure $ FromCte ident ref
 
 data RecursiveCteUnion
   = CteUnionAll
@@ -918,25 +930,23 @@ withRecursive :: ( ToAlias a
                  )
               => SqlQuery a
               -> RecursiveCteUnion
-              -> (SqlQuery ref -> SqlQuery a)
-              -> SqlQuery (SqlQuery ref)
+              -> (From ref -> SqlQuery a)
+              -> SqlQuery (From ref)
 withRecursive baseCase unionKind recursiveCase = do
   (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
   aliasedValue <- toAlias ret
   let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
   ident <- newIdentFor (DBName "cte")
   ref <- toAliasReference ident aliasedValue
-  let refQuery = do
-             Q $ W.tell mempty{sdFromClause = [FromCte ident]}
-             pure ref
-  let recursiveQuery = recursiveCase refQuery
+  let refFrom = FromCte ident ref
+  let recursiveQuery = recursiveCase refFrom
   let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
                (\info -> (toRawSql SELECT info aliasedQuery)
                       <> (unionKeyword unionKind, mempty)
                       <> (toRawSql SELECT info recursiveQuery)
                )
   Q $ W.tell mempty{sdCteClause = [clause]}
-  pure refQuery
+  pure refFrom
 
     where
       unionKeyword CteUnionAll = "\nUNION ALL\n"

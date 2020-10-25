@@ -1706,7 +1706,7 @@ data FromClause =
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
   | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
-  | FromCte Ident
+  | FromIdent Ident
 
 data CommonTableExpressionKind
   = RecursiveCommonTableExpression
@@ -1722,7 +1722,7 @@ collectIdents fc = case fc of
   FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
   OnClause _ -> mempty
   FromQuery _ _ -> mempty
-  FromCte _ -> mempty
+  FromIdent _ -> mempty
 
 instance Show FromClause where
   show fc = case fc of
@@ -1746,8 +1746,8 @@ instance Show FromClause where
       "(OnClause " <> render' expr <> ")"
     FromQuery ident _->
       "(FromQuery " <> show ident <> ")"
-    FromCte ident ->
-      "(FromCte " <> show ident <> ")"
+    FromIdent ident ->
+      "(FromIdent " <> show ident <> ")"
 
     where
       dummy = SqlBackend
@@ -1806,13 +1806,13 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
     findRightmostIdent (FromQuery _ _) = Nothing
-    findRightmostIdent (FromCte _) = Nothing
+    findRightmostIdent (FromIdent _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
     findLeftmostIdent (FromQuery _ _) = Nothing
-    findLeftmostIdent (FromCte _) = Nothing
+    findLeftmostIdent (FromIdent _) = Nothing
 
     tryMatch
       :: Set Ident
@@ -2822,7 +2822,7 @@ makeFrom info mode fs = ret
     mk _ (FromQuery ident f) =
       let (queryText, queryVals) = f info
       in ((parens queryText) <> " AS " <> useIdent info ident, queryVals)
-    mk _ (FromCte ident) =
+    mk _ (FromIdent ident) =
       (useIdent info ident, mempty)
 
     base ident@(I identText) def =

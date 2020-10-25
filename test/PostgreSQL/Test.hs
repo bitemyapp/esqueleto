@@ -1164,7 +1164,7 @@ testCommonTableExpressions = do
               lords <- Experimental.from $ Experimental.Table @Lord
               limit 10
               pure lords
-          lords <- limitedLordsCte
+          lords <- Experimental.from limitedLordsCte
           orderBy [asc $ lords ^. LordId]
           pure lords
 
@@ -1176,7 +1176,7 @@ testCommonTableExpressions = do
                      (pure $ val (1 :: Int))
                      Experimental.unionAll_
                      (\self -> do
-                         v <- self
+                         v <- Experimental.from self
                          where_ $ v <. val 10
                          pure $ v +. val 1
                      )
@@ -1184,8 +1184,8 @@ testCommonTableExpressions = do
       select $ do
         cte <- oneToTen
         cte2 <- oneToTen
-        res1 <- cte
-        res2 <- cte2
+        res1 <- Experimental.from cte
+        res2 <- Experimental.from cte2
         pure (res1, res2)
     vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
 
@@ -1196,14 +1196,14 @@ testCommonTableExpressions = do
            (pure $ val (1 :: Int))
            Experimental.unionAll_
            (\self -> do
-               v <- self
+               v <- Experimental.from self
                where_ $ v <. val 10
                pure $ v +. val 1
            )
-      oneMore :: SqlQuery (SqlExpr (Value Int)) -> SqlQuery (SqlQuery (SqlExpr (Value Int)))
+
       oneMore q =
         Experimental.with $ do
-          v <- q
+          v <- Experimental.from q
           pure $ v +. val 1
     in do
     vals <- run $ do
@@ -1211,7 +1211,7 @@ testCommonTableExpressions = do
       select $ do
         cte <- oneToTen
         cte2 <- oneMore cte
-        res <- cte2
+        res <- Experimental.from cte2
         pure res
     vals `shouldBe` fmap Value [2..11]
 
