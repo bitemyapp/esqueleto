@@ -1705,7 +1705,7 @@ data FromClause =
     FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
-  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue])) SubQueryType
   | FromIdent Ident
 
 data CommonTableExpressionKind
@@ -1716,12 +1716,17 @@ data CommonTableExpressionKind
 data CommonTableExpressionClause =
   CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
+data SubQueryType
+  = NormalSubQuery
+  | LateralSubQuery
+  deriving Show
+
 collectIdents :: FromClause -> Set Ident
 collectIdents fc = case fc of
   FromStart i _ -> Set.singleton i
   FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
   OnClause _ -> mempty
-  FromQuery _ _ -> mempty
+  FromQuery _ _ _ -> mempty
   FromIdent _ -> mempty
 
 instance Show FromClause where
@@ -1744,8 +1749,8 @@ instance Show FromClause where
       ]
     OnClause expr ->
       "(OnClause " <> render' expr <> ")"
-    FromQuery ident _->
-      "(FromQuery " <> show ident <> ")"
+    FromQuery ident _ subQueryType ->
+      "(FromQuery " <> show ident <> " " <> show subQueryType <> ")"
     FromIdent ident ->
       "(FromIdent " <> show ident <> ")"
 
@@ -1805,13 +1810,13 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromStart i _) = Just i
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
-    findRightmostIdent (FromQuery _ _) = Nothing
+    findRightmostIdent (FromQuery _ _ _) = Nothing
     findRightmostIdent (FromIdent _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
-    findLeftmostIdent (FromQuery _ _) = Nothing
+    findLeftmostIdent (FromQuery _ _ _) = Nothing
     findLeftmostIdent (FromIdent _) = Nothing
 
     tryMatch
@@ -2819,9 +2824,13 @@ makeFrom info mode fs = ret
               , maybe mempty makeOnClause monClause
               ]
     mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
-    mk _ (FromQuery ident f) =
+    mk _ (FromQuery ident f subqueryType) =
       let (queryText, queryVals) = f info
-      in ((parens queryText) <> " AS " <> useIdent info ident, queryVals)
+          lateralKeyword =
+            case subqueryType of
+              NormalSubQuery -> ""
+              LateralSubQuery -> "LATERAL "
+      in (lateralKeyword <> (parens queryText) <> " AS " <> useIdent info ident, queryVals)
     mk _ (FromIdent ident) =
       (useIdent info ident, mempty)
 

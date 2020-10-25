@@ -33,6 +33,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.Experimental hiding (random_, from, on)
 import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
@@ -1215,6 +1216,83 @@ testCommonTableExpressions = do
         pure res
     vals `shouldBe` fmap Value [2..11]
 
+-- Since lateral queries arent supported in Sqlite or older versions of mysql
+-- the test is in the Postgres module
+testLateralQuery :: Spec
+testLateralQuery = do
+  describe "Lateral queries" $ do
+    it "supports CROSS JOIN LATERAL" $ do
+      _ <- run $ do
+        select $ do
+            l :& c <-
+              Experimental.from $ Table @Lord
+              `CrossJoin` \lord -> do
+                    deed <- Experimental.from $ Table @Deed
+                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                    pure $ countRows @Int
+            pure (l, c)
+      True `shouldBe` True
+
+    it "supports INNER JOIN LATERAL" $ do
+      run $ do
+        let subquery lord = do
+                            deed <- Experimental.from $ Table @Deed
+                            where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                            pure $ countRows @Int
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `InnerJoin` subquery
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value Int)]
+        pure ()
+      True `shouldBe` True
+
+    it "supports LEFT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `LeftOuterJoin` (\lord -> do
+                                    deed <- Experimental.from $ Table @Deed
+                                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                    pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value (Maybe Int))]
+        pure ()
+      True `shouldBe` True
+
+  {--
+    it "compile error on RIGHT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `RightOuterJoin` (\lord -> do
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value Int)]
+        pure ()
+    it "compile error on FULL OUTER JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `FullOuterJoin` (\lord -> do
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value (Maybe Int))]
+        pure ()
+    --}
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1299,6 +1377,7 @@ main = do
           cleanJSON
         testJSONInsertions
         testJSONOperators
+      testLateralQuery
 
 
 run, runSilent, runVerbose :: Run
