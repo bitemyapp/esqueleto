@@ -30,7 +30,14 @@ module Database.Esqueleto.Experimental
 
       -- * Documentation
 
-      SqlSetOperation(Union, UnionAll, Except, Intersect)
+      Union(..)
+    , UnionAll(..)
+    , Except(..)
+    , Intersect(..)
+    , union_
+    , unionAll_
+    , except_
+    , intersect_
     , pattern SelectQuery
     , From(..)
     , on
@@ -38,8 +45,6 @@ module Database.Esqueleto.Experimental
     , (:&)(..)
     , with
     , withRecursive
-    , unionAll_
-    , union_
       -- * Internals
     , ToFrom(..)
     , ToFromT
@@ -62,6 +67,7 @@ import Control.Monad.Trans.Class (lift)
 import Data.Semigroup
 #endif
 import Data.Proxy (Proxy(..))
+import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.Internal
           ( SqlExpr(..)
           , InnerJoin(..)
@@ -395,11 +401,48 @@ infixl 2 :&
 -- ON ...
 -- @
 data SqlSetOperation a =
-    Union (SqlSetOperation a) (SqlSetOperation a)
-  | UnionAll (SqlSetOperation a) (SqlSetOperation a)
-  | Except (SqlSetOperation a) (SqlSetOperation a)
-  | Intersect (SqlSetOperation a) (SqlSetOperation a)
+    SqlSetUnion (SqlSetOperation a) (SqlSetOperation a)
+  | SqlSetUnionAll (SqlSetOperation a) (SqlSetOperation a)
+  | SqlSetExcept (SqlSetOperation a) (SqlSetOperation a)
+  | SqlSetIntersect (SqlSetOperation a) (SqlSetOperation a)
   | SelectQueryP NeedParens (SqlQuery a)
+
+data Union a b = a `Union` b
+union_ :: a -> b -> Union a b
+union_ = Union
+data UnionAll a b = a `UnionAll` b
+unionAll_ :: a -> b -> UnionAll a b
+unionAll_ = UnionAll
+data Except a b = a `Except` b
+except_ :: a -> b -> Except a b
+except_ = Except
+data Intersect a b = a `Intersect` b
+intersect_ :: a -> b -> Intersect a b
+intersect_ = Intersect
+
+class SetOperationT a ~ b => ToSetOperation a b | a -> b where
+  toSetOperation :: a -> SqlSetOperation b
+
+instance ToSetOperation (SqlSetOperation a) a where
+  toSetOperation = id
+instance ToSetOperation (SqlQuery a) a where
+  toSetOperation = SelectQueryP Never
+instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Union a b) c where
+  toSetOperation (Union a b) = SqlSetUnion (toSetOperation a) (toSetOperation b)
+instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (UnionAll a b) c where
+  toSetOperation (UnionAll a b) = SqlSetUnionAll (toSetOperation a) (toSetOperation b)
+instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Except a b) c where
+  toSetOperation (Except a b) = SqlSetExcept (toSetOperation a) (toSetOperation b)
+instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Intersect a b) c where
+  toSetOperation (Intersect a b) = SqlSetIntersect (toSetOperation a) (toSetOperation b)
+
+type family SetOperationT a where
+  SetOperationT (Union a b) = SetOperationT a
+  SetOperationT (UnionAll a b) = SetOperationT a
+  SetOperationT (Except a b) = SetOperationT a
+  SetOperationT (Intersect a b) = SetOperationT a
+  SetOperationT (SqlQuery a) = a
+  SetOperationT (SqlSetOperation a) = a
 
 pattern SelectQuery :: SqlQuery a -> SqlSetOperation a
 pattern SelectQuery q = SelectQueryP Never q
@@ -501,8 +544,11 @@ instance ValidOnClauseValue (LeftOuterJoin a b) where
 instance ValidOnClauseValue (RightOuterJoin a b) where
 instance ValidOnClauseValue (FullOuterJoin a b) where
 instance ValidOnClauseValue (SqlSetOperation a) where
+instance ValidOnClauseValue (Union a b) where
+instance ValidOnClauseValue (UnionAll a b) where
+instance ValidOnClauseValue (Except a b) where
+instance ValidOnClauseValue (Intersect a b) where
 instance ValidOnClauseValue (a -> SqlQuery b) where
-
 
 on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
@@ -513,6 +559,10 @@ type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
 type family ToFromT a where
   ToFromT (From a) = a
   ToFromT (SqlQuery a) = ToAliasReferenceT (ToAliasT a)
+  ToFromT (Union a b) = ToAliasReferenceT (ToAliasT (SetOperationT a))
+  ToFromT (UnionAll a b) = ToAliasReferenceT (ToAliasT (SetOperationT a))
+  ToFromT (Except a b) = ToAliasReferenceT (ToAliasT (SetOperationT a))
+  ToFromT (Intersect a b) = ToAliasReferenceT (ToAliasT (SetOperationT a))
   ToFromT (SqlSetOperation a) = ToAliasReferenceT (ToAliasT a)
   ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
   ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
@@ -560,6 +610,30 @@ instance ( ToAlias a
          , SqlSelect a'' r'
          ) => ToFrom (SqlQuery a) where
   toFrom = SubQuery
+
+instance ( SqlSelect c' r
+         , SqlSelect c'' r'
+         , ToAlias c
+         , c' ~ ToAliasT c
+         , ToAliasReference c'
+         , ToAliasReferenceT c' ~ c''
+         , ToSetOperation a c
+         , ToSetOperation b c
+         , c ~ SetOperationT a
+         )  => ToFrom (Union a b) where
+  toFrom u = SqlSetOperation $ toSetOperation u
+
+instance ( SqlSelect c' r
+         , SqlSelect c'' r'
+         , ToAlias c
+         , c' ~ ToAliasT c
+         , ToAliasReference c'
+         , ToAliasReferenceT c' ~ c''
+         , ToSetOperation a c
+         , ToSetOperation b c
+         , c ~ SetOperationT a
+         )  => ToFrom (UnionAll a b) where
+  toFrom u = SqlSetOperation $ toSetOperation u
 
 instance (SqlSelect a' r,SqlSelect a'' r', ToAlias a, a' ~ ToAliasT a, ToAliasReference a', ToAliasReferenceT a' ~ a'')  => ToFrom (SqlSetOperation a) where
   -- If someone uses just a plain SelectQuery it should behave like a normal subquery
@@ -809,32 +883,32 @@ from parts = do
                             else
                               Never
                   pure (SelectQueryP p' $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
-                Union     o1 o2 -> do
+                SqlSetUnion     o1 o2 -> do
                   (o1', ret) <- aliasQueries o1
                   (o2', _  ) <- aliasQueries o2
-                  pure (Union o1' o2', ret)
-                UnionAll  o1 o2 -> do
+                  pure (SqlSetUnion o1' o2', ret)
+                SqlSetUnionAll  o1 o2 -> do
                   (o1', ret) <- aliasQueries o1
                   (o2', _  ) <- aliasQueries o2
-                  pure (UnionAll o1' o2', ret)
-                Except    o1 o2 -> do
+                  pure (SqlSetUnionAll o1' o2', ret)
+                SqlSetExcept    o1 o2 -> do
                   (o1', ret) <- aliasQueries o1
                   (o2', _  ) <- aliasQueries o2
-                  pure (Except o1' o2', ret)
-                Intersect o1 o2 -> do
+                  pure (SqlSetExcept o1' o2', ret)
+                SqlSetIntersect o1 o2 -> do
                   (o1', ret) <- aliasQueries o1
                   (o2', _  ) <- aliasQueries o2
-                  pure (Intersect o1' o2', ret)
+                  pure (SqlSetIntersect o1' o2', ret)
 
             operationToSql o info =
               case o of
                 SelectQueryP p q  ->
                   let (builder, values) = toRawSql SELECT info q
                   in (parensM p builder, values)
-                Union     o1 o2 -> doSetOperation "UNION"     info o1 o2
-                UnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
-                Except    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
-                Intersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
+                SqlSetUnion     o1 o2 -> doSetOperation "UNION"     info o1 o2
+                SqlSetUnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
+                SqlSetExcept    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
+                SqlSetIntersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
 
             doSetOperation operationText info o1 o2 =
                   let
@@ -905,6 +979,47 @@ fromSubQuery subqueryType subquery = do
     -- this is probably overkill as the aliases should already be unique but seems to be good practice.
     ref <- toAliasReference subqueryAlias aliasedValue
     pure (ref , FromQuery subqueryAlias (\info -> toRawSql SELECT info aliasedQuery) subqueryType)
+
+with :: ( ToAlias a
+        , ToAliasReference (ToAliasT a)
+        , SqlSelect (ToAliasT a) r
+        ) => SqlQuery a -> SqlQuery (From (ToAliasReferenceT (ToAliasT a)))
+with query = do
+  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+  aliasedValue <- toAlias ret
+  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+  ident <- newIdentFor (DBName "cte")
+  let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
+  Q $ W.tell mempty{sdCteClause = [clause]}
+  ref <- toAliasReference ident aliasedValue
+  pure $ FromCte ident ref
+
+withRecursive :: ( ToAlias a
+                 , ToAliasReference (ToAliasT a)
+                 , SqlSelect a r
+                 , SqlSelect (ToAliasT a) r
+                 , ref ~ ToAliasReferenceT (ToAliasT a)
+                 , RecursiveCteUnion unionKind
+                 )
+              => SqlQuery a
+              -> unionKind
+              -> (From ref -> SqlQuery a)
+              -> SqlQuery (From ref)
+withRecursive baseCase unionKind recursiveCase = do
+  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
+  aliasedValue <- toAlias ret
+  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+  ident <- newIdentFor (DBName "cte")
+  ref <- toAliasReference ident aliasedValue
+  let refFrom = FromCte ident ref
+  let recursiveQuery = recursiveCase refFrom
+  let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
+               (\info -> (toRawSql SELECT info aliasedQuery)
+                      <> (unionKeyword unionKind, mempty)
+                      <> (toRawSql SELECT info recursiveQuery)
+               )
+  Q $ W.tell mempty{sdCteClause = [clause]}
+  pure refFrom
 
 type family ToAliasT a where
   ToAliasT (SqlExpr (Value a)) = SqlExpr (Value a)
@@ -1076,55 +1191,11 @@ instance ( ToAliasReference a
          ) => ToAliasReference (a,b,c,d,e,f,g,h) where
   toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
 
-with :: ( ToAlias a
-        , ToAliasReference (ToAliasT a)
-        , SqlSelect (ToAliasT a) r
-        ) => SqlQuery a -> SqlQuery (From (ToAliasReferenceT (ToAliasT a)))
-with query = do
-  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
-  aliasedValue <- toAlias ret
-  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
-  ident <- newIdentFor (DBName "cte")
-  let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
-  Q $ W.tell mempty{sdCteClause = [clause]}
-  ref <- toAliasReference ident aliasedValue
-  pure $ FromCte ident ref
 
-data RecursiveCteUnion
-  = CteUnionAll
-  | CteUnion
+class RecursiveCteUnion a where
+  unionKeyword :: a -> TLB.Builder
 
-unionAll_ :: RecursiveCteUnion
-unionAll_ = CteUnionAll
-union_ :: RecursiveCteUnion
-union_ = CteUnion
-
-withRecursive :: ( ToAlias a
-                 , ToAliasReference (ToAliasT a)
-                 , SqlSelect a r
-                 , SqlSelect (ToAliasT a) r
-                 , ref ~ ToAliasReferenceT (ToAliasT a)
-                 )
-              => SqlQuery a
-              -> RecursiveCteUnion
-              -> (From ref -> SqlQuery a)
-              -> SqlQuery (From ref)
-withRecursive baseCase unionKind recursiveCase = do
-  (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
-  aliasedValue <- toAlias ret
-  let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
-  ident <- newIdentFor (DBName "cte")
-  ref <- toAliasReference ident aliasedValue
-  let refFrom = FromCte ident ref
-  let recursiveQuery = recursiveCase refFrom
-  let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
-               (\info -> (toRawSql SELECT info aliasedQuery)
-                      <> (unionKeyword unionKind, mempty)
-                      <> (toRawSql SELECT info recursiveQuery)
-               )
-  Q $ W.tell mempty{sdCteClause = [clause]}
-  pure refFrom
-
-    where
-      unionKeyword CteUnionAll = "\nUNION ALL\n"
-      unionKeyword CteUnion    = "\nUNION\n"
+instance RecursiveCteUnion (a -> b -> Union a b) where
+  unionKeyword _ = "\nUNION\n"
+instance RecursiveCteUnion (a -> b -> UnionAll a b) where
+  unionKeyword _ = "\nUNION ALL\n"

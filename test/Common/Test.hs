@@ -1006,17 +1006,17 @@ testSelectSubQuery run = do
           _ <- insert p1
           _ <- insert p2
           let q = Experimental.from $
-                  (SelectQuery $ do
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ not_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
-                  `Union`
-                  (SelectQuery $ do
+                  `union_`
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
-                  `Union`
-                  (SelectQuery $ do
+                  `union_`
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
