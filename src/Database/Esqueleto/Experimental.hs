@@ -30,21 +30,27 @@ module Database.Esqueleto.Experimental
 
       -- * Documentation
 
-      Union(..)
-    , UnionAll(..)
-    , Except(..)
-    , Intersect(..)
-    , union_
-    , unionAll_
-    , except_
-    , intersect_
-    , pattern SelectQuery
-    , From(..)
+      From(..)
     , on
     , from
     , (:&)(..)
+
+      -- ** Set Operations
+      -- $sql-set-operations
+    , union_
+    , Union(..)
+    , unionAll_
+    , UnionAll(..)
+    , except_
+    , Except(..)
+    , intersect_
+    , Intersect(..)
+    , pattern SelectQuery
+
+      -- ** Common Table Expressions
     , with
     , withRecursive
+
       -- * Internals
     , ToFrom(..)
     , ToFromT
@@ -55,11 +61,82 @@ module Database.Esqueleto.Experimental
     , ToAliasReference(..)
     , ToAliasReferenceT
     -- * The Normal Stuff
-    , module Database.Esqueleto
-    )
+    , where_, groupBy, orderBy, rand, asc, desc, limit, offset
+             , distinct, distinctOn, don, distinctOnOrderBy, having, locking
+             , sub_select, (^.), (?.)
+             , val, isNothing, just, nothing, joinV, withNonNull
+             , countRows, count, countDistinct
+             , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
+             , between, (+.), (-.), (/.), (*.)
+             , random_, round_, ceiling_, floor_
+             , min_, max_, sum_, avg_, castNum, castNumM
+             , coalesce, coalesceDefault
+             , lower_, upper_, trim_, ltrim_, rtrim_, length_, left_, right_
+             , like, ilike, (%), concat_, (++.), castString
+             , subList_select, valList, justList
+             , in_, notIn, exists, notExists
+             , set, (=.), (+=.), (-=.), (*=.), (/=.)
+             , case_, toBaseId
+  , subSelect
+  , subSelectMaybe
+  , subSelectCount
+  , subSelectForeign
+  , subSelectList
+  , subSelectUnsafe
+  , ToBaseId(..)
+  , when_
+  , then_
+  , else_
+  , Value(..)
+  , ValueList(..)
+  , OrderBy
+  , DistinctOn
+  , LockingKind(..)
+  , SqlString
+    -- ** Joins
+  , InnerJoin(..)
+  , CrossJoin(..)
+  , LeftOuterJoin(..)
+  , RightOuterJoin(..)
+  , FullOuterJoin(..)
+  , JoinKind(..)
+  , OnClauseWithoutMatchingJoinException(..)
+    -- * SQL backend
+  , SqlQuery
+  , SqlExpr
+  , SqlEntity
+  , select
+  , selectSource
+  , delete
+  , deleteCount
+  , update
+  , updateCount
+  , insertSelect
+  , insertSelectCount
+  , (<#)
+  , (<&>)
+  -- ** Rendering Queries
+  , renderQueryToText
+  , renderQuerySelect
+  , renderQueryUpdate
+  , renderQueryDelete
+  , renderQueryInsertInto
+    -- * Internal.Language
+    -- * RDBMS-specific modules
+    -- $rdbmsSpecificModules
+
+    -- * Helpers
+  , valkey
+  , valJ
+  , associateJoin
+
+    -- * Re-exports
+    -- $reexports
+  , deleteKey
+  , module Database.Esqueleto.Internal.PersistentImport
+  )
     where
 
-import Database.Esqueleto hiding (from, on, From)
 import qualified Control.Monad.Trans.Writer as W
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
@@ -68,32 +145,8 @@ import Data.Semigroup
 #endif
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Lazy.Builder as TLB
-import Database.Esqueleto.Internal.Internal
-          ( SqlExpr(..)
-          , InnerJoin(..)
-          , CrossJoin(..)
-          , LeftOuterJoin(..)
-          , RightOuterJoin(..)
-          , FullOuterJoin(..)
-          , FromClause(..)
-          , SqlQuery(..)
-          , SideData(..)
-          , Value(..)
-          , JoinKind(..)
-          , newIdentFor
-          , SqlSelect(..)
-          , Mode(..)
-          , toRawSql
-          , Ident(..)
-          , to3, to4, to5, to6, to7, to8
-          , from3, from4, from5, from6, from7, from8
-          , veryUnsafeCoerceSqlExprValue
-          , parensM
-          , NeedParens(..)
-          , CommonTableExpressionKind(..)
-          , CommonTableExpressionClause(..)
-          , SubQueryType(..)
-          )
+import Database.Esqueleto.Internal.PersistentImport
+import Database.Esqueleto.Internal.Internal hiding (from, on, From)
 import GHC.TypeLits
 
 
@@ -108,9 +161,11 @@ import GHC.TypeLits
 --
 -- ...
 --
--- import Database.Esqueleto hiding (on, from)
 -- import Database.Esqueleto.Experimental
 -- @
+--
+-- Note: Prior to @esqueleto-3.3.4.0@, the @Database.Esqueleto.Experimental@
+-- module did not reexport @Data.Esqueleto@.
 
 ----------------------------------------------------------------------
 
@@ -285,7 +340,7 @@ import GHC.TypeLits
 -- @
 -- select $ do
 -- peopleWithPosts <-
---   from $ SelectQuery $ do
+--   from $ do
 --     (people :& blogPosts) <-
 --       from $ Table \@Person
 --       \`InnerJoin\` Table \@BlogPost
@@ -316,7 +371,7 @@ import GHC.TypeLits
 -- @
 -- select $ do
 -- (authors, blogPosts) <- from $
---   (SelectQuery $ do
+--   (do
 --     (author :& blogPost) <-
 --       from $ Table \@Person
 --       \`InnerJoin\` Table \@BlogPost
@@ -325,8 +380,8 @@ import GHC.TypeLits
 --     where_ (author ^. PersonId ==. val currentPersonId)
 --     pure (author, blogPost)
 --   )
---   \`Union\`
---   (SelectQuery $ do
+--   \`union_\`
+--   (do
 --     (follow :& blogPost :& author) <-
 --       from $ Table \@Follow
 --       \`InnerJoin\` Table \@BlogPost
@@ -341,6 +396,56 @@ import GHC.TypeLits
 -- orderBy [ asc (blogPosts ^. BlogPostTitle) ]
 -- limit 25
 -- pure (authors, blogPosts)
+-- @
+--
+-- === Example 6: LATERAL JOIN
+--
+-- As of version @3.4.0.0@, lateral subquery joins are supported.
+--
+--
+-- @
+-- select $ do
+-- (salesPerson :& maxSaleAmount :& maxSaleCustomerName) <-
+--   from $ Table \@SalesPerson
+--   \`CrossJoin\` (\\salesPerson -> do
+--         sales <- from $ Table \@Sale
+--         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
+--         pure $ max_ (sales ^. SaleAmount)
+--         )
+--   \`CrossJoin\` (\\(salesPerson :& maxSaleAmount) -> do
+--         sales <- from $ Table \@Sale
+--         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
+--              &&. sales ^. SaleAmount ==. maxSaleAmount
+--         pure $ sales ^. SaleCustomerName)
+--         )
+-- pure (salesPerson ^. SalesPersonName, maxSaleAmount, maxSaleCustomerName)
+-- @
+--
+-- This is the equivalent to the following SQL (example taken from the
+-- [MySQL Lateral Derived Table](https://dev.mysql.com/doc/refman/8.0/en/lateral-derived-tables.html)
+-- documentation):
+--
+-- @
+-- SELECT
+--   salesperson.name,
+--   max_sale.amount,
+--   max_sale_customer.customer_name
+-- FROM
+--   salesperson,
+--   -- calculate maximum size, cache it in transient derived table max_sale
+--   LATERAL
+--   (SELECT MAX(amount) AS amount
+--     FROM all_sales
+--     WHERE all_sales.salesperson_id = salesperson.id)
+--   AS max_sale,
+--   LATERAL
+--   (SELECT customer_name
+--     FROM all_sales
+--     WHERE all_sales.salesperson_id = salesperson.id
+--     AND all_sales.amount =
+--         -- the cached maximum size
+--         max_sale.amount)
+--   AS max_sale_customer;
 -- @
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
@@ -357,49 +462,6 @@ import GHC.TypeLits
 data (:&) a b = a :& b
 infixl 2 :&
 
--- | Data type that represents SQL set operations. This includes
--- 'UNION', 'UNION' 'ALL', 'EXCEPT', and 'INTERSECT'. This data
--- type is defined as a binary tree, with @SelectQuery@ on the leaves.
---
--- Each constructor corresponding to the aforementioned set operations
--- can be used as an infix function in a @from@ to help with readability
--- and lead to code that closely resembles the underlying SQL. For example,
---
--- @
--- select $ from $
---   (SelectQuery ...)
---   \`Union\`
---   (SelectQuery ...)
--- @
---
--- is translated into
---
--- @
--- SELECT * FROM (
---   (SELECT * FROM ...)
---   UNION
---   (SELECT * FROM ...)
--- )
--- @
---
--- @SelectQuery@ can be used without any of the set operations to construct
--- a subquery. This can be used in 'JOIN' trees. For example,
---
--- @
--- select $ from $
---   Table \@SomeTable
---   \`InnerJoin\` (SelectQuery ...)
---   \`on\` ...
--- @
---
--- is translated into
---
--- @
--- SELECT *
--- FROM SomeTable
--- INNER JOIN (SELECT * FROM ...)
--- ON ...
--- @
 data SqlSetOperation a =
     SqlSetUnion (SqlSetOperation a) (SqlSetOperation a)
   | SqlSetUnionAll (SqlSetOperation a) (SqlSetOperation a)
@@ -407,16 +469,70 @@ data SqlSetOperation a =
   | SqlSetIntersect (SqlSetOperation a) (SqlSetOperation a)
   | SelectQueryP NeedParens (SqlQuery a)
 
+
+-- $sql-set-operations
+--
+-- Data type that represents SQL set operations. This includes
+-- 'UNION', 'UNION' 'ALL', 'EXCEPT', and 'INTERSECT'. These types form
+-- a binary tree, with @SqlQuery@ values on the leaves.
+--
+-- Each function corresponding to the aforementioned set operations
+-- can be used as an infix in a @from@ to help with readability
+-- and lead to code that closely resembles the underlying SQL. For example,
+--
+-- @
+-- select $ from $
+--   (do
+--      a <- from Table @A
+--      pure $ a ^. ASomeCol
+--   )
+--   \`union_\`
+--   (do
+--      b <- from Table @B
+--      pure $ b ^. BSomeCol
+--   )
+-- @
+--
+-- is translated into
+--
+-- @
+-- SELECT * FROM (
+--   (SELECT a.some_col FROM a)
+--   UNION
+--   (SELECT b.some_col FROM b)
+-- )
+-- @
+--
+
+{-# DEPRECATED Union "/Since: 3.4.0.0/ - \
+    Use the 'union_' function instead of the 'Union' data constructor" #-}
 data Union a b = a `Union` b
+
+-- | @UNION@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 union_ :: a -> b -> Union a b
 union_ = Union
+
+{-# DEPRECATED UnionAll "/Since: 3.4.0.0/ - \
+    Use the 'unionAll_' function instead of the 'UnionAll' data constructor" #-}
 data UnionAll a b = a `UnionAll` b
+
+-- | @UNION@ @ALL@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 unionAll_ :: a -> b -> UnionAll a b
 unionAll_ = UnionAll
+
+{-# DEPRECATED Except "/Since: 3.4.0.0/ - \
+    Use the 'except_' function instead of the 'Except' data constructor" #-}
 data Except a b = a `Except` b
+
+-- | @EXCEPT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 except_ :: a -> b -> Except a b
 except_ = Except
+
+{-# DEPRECATED Intersect "/Since: 3.4.0.0/ - \
+    Use the 'intersect_' function instead of the 'Intersect' data constructor" #-}
 data Intersect a b = a `Intersect` b
+
+-- | @INTERSECT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 intersect_ :: a -> b -> Intersect a b
 intersect_ = Intersect
 
@@ -444,6 +560,8 @@ type family SetOperationT a where
   SetOperationT (SqlQuery a) = a
   SetOperationT (SqlSetOperation a) = a
 
+{-# DEPRECATED SelectQuery "/Since: 3.4.0.0/ - \
+    It is no longer necessary to tag 'SqlQuery' values with @SelectQuery@" #-}
 pattern SelectQuery :: SqlQuery a -> SqlSetOperation a
 pattern SelectQuery q = SelectQueryP Never q
 
@@ -980,6 +1098,29 @@ fromSubQuery subqueryType subquery = do
     ref <- toAliasReference subqueryAlias aliasedValue
     pure (ref , FromQuery subqueryAlias (\info -> toRawSql SELECT info aliasedQuery) subqueryType)
 
+
+
+-- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
+-- CTEs are supported in most modern SQL engines and can be useful
+-- in performance tuning. In Esqueleto, CTEs should be used as a
+-- subquery memoization tactic. While when writing plain SQL, CTEs
+-- are sometimes used to organize the SQL code, in Esqueleto, this
+-- is better achieved through function that return 'SqlQuery' values.
+--
+-- @
+-- select $ do
+-- cte <- with subQuery
+-- cteResult <- from cte
+-- where_ $ cteResult ...
+-- pure cteResult
+-- @
+--
+-- __WARNING__: In some SQL engines using a CTE can diminish performance.
+-- In these engines the CTE is treated as an optimization fence. You should
+-- always verify that using a CTE will in fact improve your performance
+-- over a regular subquery.
+--
+-- /Since: 3.4.0.0/
 with :: ( ToAlias a
         , ToAliasReference (ToAliasT a)
         , SqlSelect (ToAliasT a) r
@@ -994,6 +1135,38 @@ with query = do
   ref <- toAliasReference ident aliasedValue
   pure $ FromCte ident ref
 
+-- | @WITH@ @RECURSIVE@ allows one to make a recursive subquery, which can
+-- reference itself. Like @WITH@, this is supported in most modern SQL engines.
+-- Useful for hierarchical, self-referential data, like a tree of data.
+--
+-- @
+-- select $ do
+-- cte <- withRecursive
+--          (do $
+--              person <- from $ Table \@Person
+--              where_ $ person ^. PersonId ==. val personId
+--              pure person
+--          )
+--          unionAll_
+--          (\\self -> do $
+--              (p :& f :& p2 :& pSelf) <- from self
+--                       \`InnerJoin\` $ Table \@Follow
+--                       \`on\` (\\(p :& f) ->
+--                               p ^. PersonId ==. f ^. FollowFollower)
+--                       \`InnerJoin\` $ Table \@Person
+--                       \`on\` (\\(p :& f :& p2) ->
+--                               f ^. FollowFollowed ==. p2 ^. PersonId)
+--                       \`LeftOuterJoin\` self
+--                       \`on\` (\\(_ :& _ :& p2 :& pSelf) ->
+--                               just (p2 ^. PersonId) ==. pSelf ?. PersonId)
+--              where_ $ isNothing (pSelf ?. PersonId)
+--              groupBy (p2 ^. PersonId)
+--              pure p2
+--          )
+-- from cte
+-- @
+--
+-- /Since: 3.4.0.0/
 withRecursive :: ( ToAlias a
                  , ToAliasReference (ToAliasT a)
                  , SqlSelect a r

@@ -73,6 +73,10 @@ module Database.Esqueleto.Internal.Sql
   , toArgList
   , builderToText
   , Ident(..)
+  , valkey
+  , valJ
+  , deleteKey
+  , associateJoin
   ) where
 
 import Database.Esqueleto.Internal.Internal

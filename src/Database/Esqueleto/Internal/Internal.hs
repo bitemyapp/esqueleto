@@ -47,6 +47,7 @@ import Data.Semigroup
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
+import qualified Database.Persist
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -57,6 +58,7 @@ import qualified Data.ByteString as B
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
@@ -136,12 +138,6 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 -- | An @ON@ clause, useful to describe how two tables are related. Cross joins
 -- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
 -- outer joins do.
---
--- Note that this function will be replaced by the one in
--- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
--- @Experimental@ module has a dramatically improved means for introducing
--- tables and entities that provides more power and less potential for runtime
--- errors.
 --
 -- If you don't include an 'on' clause (or include too many!) then a runtime
 -- exception will be thrown.
@@ -1402,12 +1398,6 @@ class ToBaseId ent where
 
 
 -- | @FROM@ clause: bring entities into scope.
---
--- Note that this function will be replaced by the one in
--- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
--- @Experimental@ module has a dramatically improved means for introducing
--- tables and entities that provides more power and less potential for runtime
--- errors.
 --
 -- This function internally uses two type classes in order to
 -- provide some flexibility of how you may call it.  Internally
@@ -3655,3 +3645,66 @@ data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
 --
 -- @since 3.2.0
 instance Exception RenderExprException
+
+
+----------------------------------------------------------------------
+
+
+-- | @valkey i = 'val' . 'toSqlKey'@
+-- (<https://github.com/prowdsponsor/esqueleto/issues/9>).
+valkey :: (ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
+          Int64 -> SqlExpr (Value (Key entity))
+valkey = val . toSqlKey
+
+
+-- | @valJ@ is like @val@ but for something that is already a @Value@. The use
+-- case it was written for was, given a @Value@ lift the @Key@ for that @Value@
+-- into the query expression in a type safe way. However, the implementation is
+-- more generic than that so we call it @valJ@.
+--
+-- Its important to note that the input entity and the output entity are
+-- constrained to be the same by the type signature on the function
+-- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
+--
+-- /Since: 1.4.2/
+valJ :: (PersistField (Key entity)) =>
+        Value (Key entity) -> SqlExpr (Value (Key entity))
+valJ = val . unValue
+
+
+----------------------------------------------------------------------
+
+
+-- | Synonym for 'Database.Persist.Store.delete' that does not
+-- clash with @esqueleto@'s 'delete'.
+deleteKey :: ( PersistStore backend
+             , BaseBackend backend ~ PersistEntityBackend val
+             , MonadIO m
+             , PersistEntity val )
+          => Key val -> R.ReaderT backend m ()
+deleteKey = Database.Persist.delete
+
+-- | Avoid N+1 queries and join entities into a map structure
+-- @
+-- getFoosAndNestedBarsFromParent :: ParentId -> (Map (Key Foo) (Foo, [Maybe (Entity Bar)]))
+-- getFoosAndNestedBarsFromParent parentId = 'fmap' associateJoin $ 'select' $
+-- 'from' $ \\(foo `'LeftOuterJoin`` bar) -> do
+--   'on' (bar '?.' BarFooId '==.' foo '^.' FooId)
+--   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
+--   'pure' (foo, bar)
+-- @
+--
+-- @since 3.1.2
+associateJoin
+  :: forall e1 e0
+   . Ord (Key e0)
+  => [(Entity e0, e1)]
+  -> Map.Map (Key e0) (e0, [e1])
+associateJoin = foldr f start
+  where
+    start = Map.empty
+    f (one, many) =
+      Map.insertWith
+        (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
+        (entityKey one)
+        (entityVal one, [many])
