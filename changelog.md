@@ -1,3 +1,9 @@
+3.3.4.1
+
+- @maxgabriel
+  - [#214](https://github.com/bitemyapp/esqueleto/pull/214)
+    - Add suggested hlint rules for proper `isNothing` usage
+
 3.3.4.0
 =======
 - @parsonsmatt
