@@ -573,76 +573,99 @@ pattern SelectQuery q = SelectQueryP Never q
 -- select $ from $ Table \@People
 -- @
 data From a where
-  Table                 :: PersistEntity ent => From (SqlExpr (Entity ent))
-  SubQuery              :: ( SqlSelect a' r
-                           , SqlSelect a'' r'
-                           , ToAlias a
-                           , a' ~ ToAliasT a
-                           , ToAliasReference a'
-                           , ToAliasReferenceT a' ~ a''
-                           )
-                        => SqlQuery a
-                        -> From a''
-  FromCte               :: Ident
-                        -> a
-                        -> From a
-  SqlSetOperation       :: ( SqlSelect a' r
-                           , ToAlias a
-                           , a' ~ ToAliasT a
-                           , ToAliasReference a'
-                           , ToAliasReferenceT a' ~ a''
-                           )
-                        => SqlSetOperation a
-                        -> From a''
-  InnerJoinFrom         :: From a
-                        -> (From b, (a :& b) -> SqlExpr (Value Bool))
-                        -> From (a :& b)
-  InnerJoinFromLateral  :: ( SqlSelect b' r
-                           , SqlSelect b'' r'
-                           , ToAlias b
-                           , b' ~ ToAliasT b
-                           , ToAliasReference b'
-                           , ToAliasReferenceT b' ~ b''
-                           )
-                        => From a
-                        -> ((a -> SqlQuery b), (a :& b'') -> SqlExpr (Value Bool))
-                        -> From (a :& b'')
-  CrossJoinFrom         :: From a
-                        -> From b
-                        -> From (a :& b)
-  CrossJoinFromLateral  :: ( SqlSelect b' r
-                           , SqlSelect b'' r'
-                           , ToAlias b
-                           , b' ~ ToAliasT b
-                           , ToAliasReference b'
-                           , ToAliasReferenceT b' ~ b''
-                           )
-                        => From a
-                        -> (a -> SqlQuery b)
-                        -> From (a :& b'')
-  LeftJoinFrom          :: ToMaybe b
-                        => From a
-                        -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
-                        -> From (a :& ToMaybeT b)
-  LeftJoinFromLateral   :: ( SqlSelect b' r
-                           , SqlSelect b'' r'
-                           , ToAlias b
-                           , b' ~ ToAliasT b
-                           , ToAliasReference b'
-                           , ToAliasReferenceT b' ~ b''
-                           , ToMaybe b''
-                           )
-                        => From a
-                        -> ((a -> SqlQuery b), (a :& ToMaybeT b'') -> SqlExpr (Value Bool))
-                        -> From (a :& ToMaybeT b'')
-  RightJoinFrom         :: ToMaybe a
-                        => From a
-                        -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
-                        -> From (ToMaybeT a :& b)
-  FullJoinFrom          :: (ToMaybe a, ToMaybe b )
-                        => From a
-                        -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
-                        -> From (ToMaybeT a :& ToMaybeT b)
+  Table
+    :: PersistEntity ent
+    => From (SqlExpr (Entity ent))
+  SubQuery
+    :: ( SqlSelect a' r
+       , SqlSelect a'' r'
+       , ToAlias a
+       , a' ~ ToAliasT a
+       , ToAliasReference a'
+       , ToAliasReferenceT a' ~ a''
+       )
+    => SqlQuery a
+    -> From a''
+  FromCte
+    :: Ident
+    -> a
+    -> From a
+  SqlSetOperation
+    :: ( SqlSelect a' r
+       , ToAlias a
+       , a' ~ ToAliasT a
+       , ToAliasReference a'
+       , ToAliasReferenceT a' ~ a''
+       )
+    => SqlSetOperation a
+    -> From a''
+  InnerJoinFrom
+    :: From a
+    -> (From b, (a :& b) -> SqlExpr (Value Bool))
+    -> From (a :& b)
+  InnerJoinFromLateral
+    :: ( SqlSelect b' r
+       , SqlSelect b'' r'
+       , ToAlias b
+       , b' ~ ToAliasT b
+       , ToAliasReference b'
+       , ToAliasReferenceT b' ~ b''
+       )
+    => From a
+    -> ((a -> SqlQuery b), (a :& b'') -> SqlExpr (Value Bool))
+    -> From (a :& b'')
+  CrossJoinFrom
+    :: From a
+    -> From b
+    -> From (a :& b)
+  CrossJoinFromLateral
+    :: ( SqlSelect b' r
+       , SqlSelect b'' r'
+       , ToAlias b
+       , b' ~ ToAliasT b
+       , ToAliasReference b'
+       , ToAliasReferenceT b' ~ b''
+       )
+    => From a
+    -> (a -> SqlQuery b)
+    -> From (a :& b'')
+  LeftJoinFrom
+    :: ToMaybe b
+    => From a
+    -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
+    -> From (a :& ToMaybeT b)
+  LeftJoinFromLateral
+    :: ( SqlSelect b' r
+       , SqlSelect b'' r'
+       , ToAlias b
+       , b' ~ ToAliasT b
+       , ToAliasReference b'
+       , ToAliasReferenceT b' ~ b''
+       , ToMaybe b''
+       )
+    => From a
+    -> ((a -> SqlQuery b), (a :& ToMaybeT b'') -> SqlExpr (Value Bool))
+    -> From (a :& ToMaybeT b'')
+  RightJoinFrom
+    :: ToMaybe a
+    => From a
+    -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
+    -> From (ToMaybeT a :& b)
+  FullJoinFrom
+    :: (ToMaybe a, ToMaybe b )
+    => From a
+    -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
+    -> From (ToMaybeT a :& ToMaybeT b)
+
+-- | Constraint for `on`. Ensures that only types that require an `on` can be used on
+-- the left hand side. This was previously reusing the ToFrom class which was actually
+-- a bit too lenient as it allowed to much. Expanding this class should not be needed.
+class ValidOnClauseValue a where
+instance ValidOnClauseValue (From a) where
+instance ValidOnClauseValue (SqlQuery a) where
+instance ValidOnClauseValue (SqlSetOperation a) where
+instance ValidOnClauseValue (a -> SqlQuery b) where
+instance {-# OVERLAPPABLE #-} (TypeError ('Text "Illegal use of ON")) => ValidOnClauseValue a where
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -654,20 +677,6 @@ data From a where
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
-class ValidOnClauseValue a where
-instance ValidOnClauseValue (From a) where
-instance ValidOnClauseValue (SqlQuery a) where
-instance ValidOnClauseValue (InnerJoin a b) where
-instance ValidOnClauseValue (LeftOuterJoin a b) where
-instance ValidOnClauseValue (RightOuterJoin a b) where
-instance ValidOnClauseValue (FullOuterJoin a b) where
-instance ValidOnClauseValue (SqlSetOperation a) where
-instance ValidOnClauseValue (Union a b) where
-instance ValidOnClauseValue (UnionAll a b) where
-instance ValidOnClauseValue (Except a b) where
-instance ValidOnClauseValue (Intersect a b) where
-instance ValidOnClauseValue (a -> SqlQuery b) where
-
 on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
 infix 9 `on`
