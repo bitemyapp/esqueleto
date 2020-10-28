@@ -660,6 +660,8 @@ data From a where
 -- | Constraint for `on`. Ensures that only types that require an `on` can be used on
 -- the left hand side. This was previously reusing the ToFrom class which was actually
 -- a bit too lenient as it allowed to much. Expanding this class should not be needed.
+--
+-- @since 3.4.0.0
 class ValidOnClauseValue a where
 instance ValidOnClauseValue (From a) where
 instance ValidOnClauseValue (SqlQuery a) where
