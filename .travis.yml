@@ -1,7 +1,5 @@
 language: c
 
-sudo: false
-
 services:
   - mysql
 
@@ -25,7 +23,7 @@ env:
     - GHCVER=nightly
 
 jobs:
-  fash_finish: true
+  fast_finish: true
   allow_failures:
     - env: GHCVER=nightly
 
