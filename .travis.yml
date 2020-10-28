@@ -25,8 +25,9 @@ env:
     - GHCVER=nightly
 
 jobs:
+  fash_finish: true
   allow_failures:
-    - GHCVER=nightly
+    - env: GHCVER=nightly
 
 install:
   - export STACK_YAML=stack-$GHCVER.yaml
