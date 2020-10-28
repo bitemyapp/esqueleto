@@ -595,6 +595,13 @@ val v = ERaw Never $ const ("?", [toPersistValue v])
 -- +----------------+----------------------------------+---------------+
 --
 -- In SQL, @= NULL@ and @!= NULL@ return NULL instead of true or false. For this reason, you very likely do not want to use @'!=.' Nothing@ in Esqueleto.
+-- You may find these @hlint@ rules helpful to enforce this:
+--
+-- > - error: {lhs: v ==. nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
+-- > - error: {lhs: v ==. val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
+-- > - error: {lhs: v !=. nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
+-- > - error: {lhs: v !=. val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
+
 
 
 isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
