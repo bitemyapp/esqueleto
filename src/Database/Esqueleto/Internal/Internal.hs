@@ -139,6 +139,11 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 -- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
 -- outer joins do.
 --
+-- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
+-- @Experimental@ module has a dramatically improved means for introducing
+-- tables and entities that provides more power and less potential for runtime
+-- errors.
+--
 -- If you don't include an 'on' clause (or include too many!) then a runtime
 -- exception will be thrown.
 --
@@ -1398,6 +1403,12 @@ class ToBaseId ent where
 
 
 -- | @FROM@ clause: bring entities into scope.
+--
+-- Note that this function will be replaced by the one in
+-- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
+-- @Experimental@ module has a dramatically improved means for introducing
+-- tables and entities that provides more power and less potential for runtime
+-- errors.
 --
 -- This function internally uses two type classes in order to
 -- provide some flexibility of how you may call it.  Internally

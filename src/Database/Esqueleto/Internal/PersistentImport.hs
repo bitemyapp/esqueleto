@@ -138,7 +138,6 @@ module Database.Esqueleto.Internal.PersistentImport
   SqlType(..),
   UniqueDef(..),
   UpdateException(..),
-  -- * Here's a thing
   WhyNullable(..)
   ) where
 
