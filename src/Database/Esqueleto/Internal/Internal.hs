@@ -2299,7 +2299,7 @@ unsafeSqlExtractSubField
 unsafeSqlExtractSubField subField arg =
     ERaw Never $ \info ->
         let (argsTLB, argsVals) =
-            uncommas' $ map (valueToFunctionArg info) $ toArgList arg
+                uncommas' $ map (valueToFunctionArg info) $ toArgList arg
         in
             ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
 
