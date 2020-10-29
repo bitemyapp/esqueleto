@@ -29,6 +29,8 @@ jobs:
            postgresql user: esqutest
            postgresql password: esqutest
            postgresql db: esqutest
+      - name: Shutdown Ubuntu MySQL (SUDO)
+        run: sudo service mysql stop
       - uses: mirromutth/mysql-action@v1.1
         with:
           mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
