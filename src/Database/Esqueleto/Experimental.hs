@@ -143,6 +143,7 @@ import Control.Monad.Trans.Class (lift)
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
+import Data.Kind (Constraint)
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.PersistentImport
@@ -659,15 +660,15 @@ data From a where
 
 -- | Constraint for `on`. Ensures that only types that require an `on` can be used on
 -- the left hand side. This was previously reusing the ToFrom class which was actually
--- a bit too lenient as it allowed to much. Expanding this class should not be needed.
+-- a bit too lenient as it allowed to much. Expanding this type family should not be needed.
 --
 -- @since 3.4.0.0
-class ValidOnClauseValue a where
-instance ValidOnClauseValue (From a) where
-instance ValidOnClauseValue (SqlQuery a) where
-instance ValidOnClauseValue (SqlSetOperation a) where
-instance ValidOnClauseValue (a -> SqlQuery b) where
-instance {-# OVERLAPPABLE #-} (TypeError ('Text "Illegal use of ON")) => ValidOnClauseValue a where
+type family ValidOnClauseValue a :: Constraint where
+  ValidOnClauseValue (From a) = ()
+  ValidOnClauseValue (SqlQuery a) = ()
+  ValidOnClauseValue (SqlSetOperation a) = ()
+  ValidOnClauseValue (a -> SqlQuery b) = ()
+  ValidOnClauseValue _ = TypeError ('Text "Illegal use of ON")
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -711,9 +712,9 @@ type family IsLateral a where
   IsLateral (a -> SqlQuery b) = Lateral
   IsLateral a = NotLateral
 
-class ErrorOnLateral a where
-instance (TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")) => ErrorOnLateral (a -> SqlQuery b) where
-instance {-# OVERLAPPABLE #-} ErrorOnLateral a where
+type family ErrorOnLateral a :: Constraint where
+  ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
+  ErrorOnLateral _ = ()
 
 {-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
 class ToFrom a where
