@@ -16,6 +16,7 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectDatabase
                               , connectUser
                               , connectPassword
+                              , connectPort
                               , defaultConnectInfo)
 import Database.Esqueleto
 import Database.Esqueleto.Experimental hiding (from, on)
@@ -243,4 +244,5 @@ withConn =
     , connectUser     = "travis"
     , connectPassword = "esqutest"
     , connectDatabase = "esqutest"
+    , connectPort     = 33306
     }

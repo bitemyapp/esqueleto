@@ -10,6 +10,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      # mysql-service Label used to access the service container
+      mysql-service:
+        # Docker Hub image (also with version)
+        image: mysql:8.0
+        env:
+          ## Accessing to Github secrets, where you can store your configuration
+          MYSQL_USER: travis
+          MYSQL_PASSWORD: esqutest
+          MYSQL_ROOT_PASSWORD: esqutest
+          MYSQL_DATABASE: esqutest
+        ## map the "external" 33306 port with the "internal" 3306
+        ports:
+          - 33306:3306
+        # Set health checks to wait until mysql database has started (it takes some seconds to start)
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
     strategy:
       matrix:
         cabal: ["3.2"]
@@ -30,11 +50,7 @@ jobs:
            postgresql password: esqutest
            postgresql db: esqutest
       - name: Create MySQL
-        run: |
-          mysql -uroot -h127.0.0.1 -proot -e "CREATE DATABASE esqutest;"
-          mysql -uroot -h127.0.0.1 -proot -e "CREATE USER 'travis'@'localhost' IDENTIFIED BY 'esqutest';"
-          mysql -uroot -h127.0.0.1 -proot -e "GRANT ALL PRIVILEGES ON *.* TO 'travis'@'localhost';"
-          mysql -uroot -h127.0.0.1 -proot -e "FLUSH PRIVILEGES;"
+        run: mysql -utravis -pesqutest -h127.0.0.1 --port=33306 esqutest -e "SELECT 1;"
             # - name: Shutdown Ubuntu MySQL (SUDO)
             #   run: sudo service mysql stop
             # - uses: mirromutth/mysql-action@v1.1
