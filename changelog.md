@@ -1,3 +1,9 @@
+3.4.0.1
+=======
+- @arthurxavierx
+  - [#221](https://github.com/bitemyapp/esqueleto/pull/221)
+    - Deprecate `ToAliasT` and `ToAliasReferenceT`
+
 3.4.0.0
 =======
 - @belevy, @charukiewicz
