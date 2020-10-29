@@ -69,7 +69,7 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.ghc }}-
-      - run: cabal v2-build --disable-optimizations -j $CONFIG
-      - run: cabal v2-test --disable-optimizations -j $CONFIG
+      - run: cabal v2-build --disable-optimization -j $CONFIG
+      - run: cabal v2-test --disable-optimization -j $CONFIG
       - run: cabal v2-haddock -j $CONFIG
       - run: cabal v2-sdist

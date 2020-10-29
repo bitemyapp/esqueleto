@@ -895,13 +895,17 @@ instance ( ToFrom a
          ) => ToLeftJoin NotLateral a b (a' :& mb) where
   toLeftJoin _ lhs rhs on' = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance ( ToLeftJoin (IsLateral b) a b b'
-         ) => ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
-         toFrom (LeftOuterJoin lhs (rhs, on')) =
-           let
-            toProxy :: b -> Proxy (IsLateral b)
+instance
+    ( ToLeftJoin (IsLateral b) a b b'
+    )
+  =>
+    ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool)))
+  where
+    toFrom (LeftOuterJoin lhs (rhs, on')) =
+        let toProxy :: b -> Proxy (IsLateral b)
             toProxy _ = Proxy
-        in toLeftJoin (toProxy rhs) lhs rhs on'
+        in
+            toLeftJoin (toProxy rhs) lhs rhs on'
 
 instance
     ( ToFrom a
