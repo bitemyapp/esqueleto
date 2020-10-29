@@ -1,26 +1,27 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
-{-# LANGUAGE ConstraintKinds
-           , CPP, DerivingStrategies, StandaloneDeriving
-           , TypeApplications
-           , PartialTypeSignatures
-           , UndecidableInstances
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , DeriveGeneric
-           , GADTs
-           , GeneralizedNewtypeDeriving
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , QuasiQuotes
-           , Rank2Types
-           , TemplateHaskell
-           , TypeFamilies
-           , ScopedTypeVariables
-           , TypeSynonymInstances
- #-}
-
 module Common.Test
     ( tests
     , testLocking
@@ -60,17 +61,18 @@ module Common.Test
     , Key(..)
     ) where
 
+import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Catch (MonadCatch)
+import Control.Monad.Reader (ask)
 import Data.Either
 import Data.Time
-import Control.Monad (forM_, replicateM, replicateM_, void)
-import Control.Monad.Reader (ask)
-import Control.Monad.Catch (MonadCatch)
 #if __GLASGOW_HASKELL__ >= 806
 import Control.Monad.Fail (MonadFail)
 #endif
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger (..), NoLoggingT, runNoLoggingT)
+import Control.Monad.Logger (MonadLogger(..), NoLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
+import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
 import Database.Esqueleto
@@ -79,18 +81,17 @@ import qualified Database.Esqueleto.Experimental as Experimental
 import Database.Persist.TH
 import Test.Hspec
 import UnliftIO
-import qualified Data.Attoparsec.Text as AP
 
-import Data.Conduit (ConduitT, (.|), runConduit)
+import Data.Conduit (ConduitT, runConduit, (.|))
 import qualified Data.Conduit.List as CL
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text as Text
-import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Text.Internal.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
+import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Sql as EI
 import qualified UnliftIO.Resource as R
-import qualified Database.Esqueleto.Internal.ExprParser as P
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -250,8 +251,8 @@ share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
 
 
 instance ToBaseId ArticleMetadata where
-  type BaseEnt ArticleMetadata = Article
-  toBaseIdWitness articleId = ArticleMetadataKey articleId
+    type BaseEnt ArticleMetadata = Article
+    toBaseIdWitness articleId = ArticleMetadataKey articleId
 
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
@@ -263,7 +264,7 @@ sameElementsAs l1' l2' = null (l1' L.\\ l2')
 --   [12.0, 12.3, 12.35, 12.346, 12.3456, 12.3456]
 roundTo :: (Fractional a, RealFrac a1, Integral b) => b -> a1 -> a
 roundTo n f =
-  (fromInteger $ round $ f * (10^n)) / (10.0^^n)
+    (fromInteger $ round $ f * (10^n)) / (10.0^^n)
 
 p1 :: Person
 p1 = Person "John"   (Just 36) Nothing   1
@@ -303,355 +304,347 @@ u4 = OneUnique "First" 2
 
 testSelect :: Run -> Spec
 testSelect run = do
-  describe "select" $ do
-    it "works for a single value" $
-      run $ do
-        ret <- select $ return $ val (3 :: Int)
-        liftIO $ ret `shouldBe` [ Value 3 ]
+    describe "select" $ do
+        it "works for a single value" $
+            run $ do
+                ret <- select $ return $ val (3 :: Int)
+                liftIO $ ret `shouldBe` [ Value 3 ]
 
-    it "works for a pair of a single value and ()" $
-      run $ do
-        ret <- select $ return (val (3 :: Int), ())
-        liftIO $ ret `shouldBe` [ (Value 3, ()) ]
+        it "works for a pair of a single value and ()" $
+            run $ do
+                ret <- select $ return (val (3 :: Int), ())
+                liftIO $ ret `shouldBe` [ (Value 3, ()) ]
 
-    it "works for a single ()" $
-      run $ do
-        ret <- select $ return ()
-        liftIO $ ret `shouldBe` [ () ]
+        it "works for a single ()" $
+            run $ do
+                ret <- select $ return ()
+                liftIO $ ret `shouldBe` [ () ]
 
-    it "works for a single NULL value" $
-      run $ do
-        ret <- select $ return nothing
-        liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
+        it "works for a single NULL value" $
+            run $ do
+                ret <- select $ return nothing
+                liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
 testSubSelect :: Run -> Spec
 testSubSelect run = do
-  let
-    setup :: MonadIO m => SqlPersistT m ()
-    setup = do
-      _ <- insert $ Numbers 1 2
-      _ <- insert $ Numbers 2 4
-      _ <- insert $ Numbers 3 5
-      _ <- insert $ Numbers 6 7
-      pure ()
-  describe "subSelect" $ do
-    it "is safe for queries that may return multiple results" $ do
-      let
-        query =
-          from $ \n -> do
-          orderBy [asc (n ^. NumbersInt)]
-          pure (n ^. NumbersInt)
-      res <- run $ do
-        setup
-        select $ pure $ subSelect query
-      res `shouldBe` [Value (Just 1)]
+    let setup :: MonadIO m => SqlPersistT m ()
+        setup = do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            pure ()
 
-      eres <- try $ run $ do
-        setup
-        select $ pure $ sub_select query
-      case eres of
-        Left (SomeException _) ->
-          -- We should receive an exception, but the different database
-          -- libraries throw different exceptions. Hooray.
-          pure ()
-        Right v ->
-          -- This shouldn't happen, but in sqlite land, many things are
-          -- possible.
-          v `shouldBe` [Value 1]
+    describe "subSelect" $ do
+        it "is safe for queries that may return multiple results" $ do
+            let query =
+                  from $ \n -> do
+                  orderBy [asc (n ^. NumbersInt)]
+                  pure (n ^. NumbersInt)
+            res <- run $ do
+                setup
+                select $ pure $ subSelect query
+            res `shouldBe` [Value (Just 1)]
 
-    it "is safe for queries that may not return anything" $ do
-      let
-        query =
-          from $ \n -> do
-          orderBy [asc (n ^. NumbersInt)]
-          limit 1
-          pure (n ^. NumbersInt)
-      res <- run $ select $ pure $ subSelect query
-      res `shouldBe` [Value Nothing]
+            eres <- try $ run $ do
+                setup
+                select $ pure $ sub_select query
+            case eres of
+                Left (SomeException _) ->
+                    -- We should receive an exception, but the different database
+                    -- libraries throw different exceptions. Hooray.
+                    pure ()
+                Right v ->
+                    -- This shouldn't happen, but in sqlite land, many things are
+                    -- possible.
+                    v `shouldBe` [Value 1]
 
-      eres <- try $ run $ do
-        setup
-        select $ pure $ sub_select query
+        it "is safe for queries that may not return anything" $ do
+            let query =
+                    from $ \n -> do
+                    orderBy [asc (n ^. NumbersInt)]
+                    limit 1
+                    pure (n ^. NumbersInt)
+            res <- run $ select $ pure $ subSelect query
+            res `shouldBe` [Value Nothing]
 
-      case eres of
-        Left (_ :: PersistException) ->
-          -- We expect to receive this exception. However, sqlite evidently has
-          -- no problems with it, so we can't *require* that the exception is
-          -- thrown. Sigh.
-          pure ()
-        Right v ->
-          -- This shouldn't happen, but in sqlite land, many things are
-          -- possible.
-          v `shouldBe` [Value 1]
+            eres <- try $ run $ do
+                setup
+                select $ pure $ sub_select query
 
-  describe "subSelectList" $ do
-    it "is safe on empty databases as well as good databases" $ do
-      let
-        query =
-          from $ \n -> do
-          where_ $ n ^. NumbersInt `in_` do
-            subSelectList $
-              from $ \n' -> do
-              where_ $ n' ^. NumbersInt >=. val 3
-              pure (n' ^. NumbersInt)
-          pure n
+            case eres of
+                Left (_ :: PersistException) ->
+                    -- We expect to receive this exception. However, sqlite evidently has
+                    -- no problems with it, so we can't *require* that the exception is
+                    -- thrown. Sigh.
+                    pure ()
+                Right v ->
+                    -- This shouldn't happen, but in sqlite land, many things are
+                    -- possible.
+                    v `shouldBe` [Value 1]
 
-      empty <- run $ do
-        select query
+    describe "subSelectList" $ do
+        it "is safe on empty databases as well as good databases" $ do
+            let query =
+                    from $ \n -> do
+                    where_ $ n ^. NumbersInt `in_` do
+                        subSelectList $
+                            from $ \n' -> do
+                            where_ $ n' ^. NumbersInt >=. val 3
+                            pure (n' ^. NumbersInt)
+                    pure n
 
-      full <- run $ do
-        setup
-        select query
+            empty <- run $ do
+                select query
 
-      empty `shouldBe` []
-      full `shouldSatisfy` (not . null)
+            full <- run $ do
+                setup
+                select query
 
-  describe "subSelectMaybe" $ do
-    it "is equivalent to joinV . subSelect" $ do
-      let
-        query
-          :: ( SqlQuery (SqlExpr (Value (Maybe Int)))
-            -> SqlExpr (Value (Maybe Int))
-            )
-          -> SqlQuery (SqlExpr (Value (Maybe Int)))
-        query selector =
-          from $ \n -> do
-          pure $
-            selector $
-            from $ \n' -> do
-            where_ $ n' ^. NumbersDouble >=. n ^. NumbersDouble
-            pure (max_ (n' ^. NumbersInt))
+            empty `shouldBe` []
+            full `shouldSatisfy` (not . null)
 
-      a <- run $ do
-        setup
-        select (query subSelectMaybe)
-      b <- run $ do
-        setup
-        select (query (joinV . subSelect))
-      a `shouldBe` b
+    describe "subSelectMaybe" $ do
+        it "is equivalent to joinV . subSelect" $ do
+            let query
+                    :: (SqlQuery (SqlExpr (Value (Maybe Int))) -> SqlExpr (Value (Maybe Int)))
+                    -> SqlQuery (SqlExpr (Value (Maybe Int)))
+                query selector =
+                    from $ \n -> do
+                    pure $
+                        selector $
+                        from $ \n' -> do
+                        where_ $ n' ^. NumbersDouble >=. n ^. NumbersDouble
+                        pure (max_ (n' ^. NumbersInt))
 
-  describe "subSelectCount" $ do
-    it "is a safe way to do a countRows" $ do
-      xs0 <- run $ do
-        setup
-        select $
-          from $ \n -> do
-          pure $ (,) n $
-            subSelectCount @Int $
-            from $ \n' -> do
-            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+            a <- run $ do
+                setup
+                select (query subSelectMaybe)
+            b <- run $ do
+                setup
+                select (query (joinV . subSelect))
+            a `shouldBe` b
 
-      xs1 <- run $ do
-        setup
-        select $
-          from $ \n -> do
-          pure $ (,) n $
-            subSelectUnsafe $
-            from $ \n' -> do
-            where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
-            pure (countRows :: SqlExpr (Value Int))
+    describe "subSelectCount" $ do
+        it "is a safe way to do a countRows" $ do
+            xs0 <- run $ do
+                setup
+                select $
+                    from $ \n -> do
+                    pure $ (,) n $
+                        subSelectCount @Int $
+                        from $ \n' -> do
+                        where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
 
-      let getter (Entity _ a, b) = (a, b)
-      map getter xs0 `shouldBe` map getter xs1
+            xs1 <- run $ do
+                setup
+                select $
+                    from $ \n -> do
+                    pure $ (,) n $
+                        subSelectUnsafe $
+                        from $ \n' -> do
+                        where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
+                        pure (countRows :: SqlExpr (Value Int))
 
-  describe "subSelectUnsafe" $ do
-    it "throws exceptions on multiple results" $ do
-      eres <- try $ run $ do
-        setup
-        bad <- select $
-          from $ \n -> do
-          pure $ (,) (n ^. NumbersInt) $
-            subSelectUnsafe $
-            from $ \n' -> do
-            pure (just (n' ^. NumbersDouble))
-        good <- select $
-          from $ \n -> do
-          pure $ (,) (n ^. NumbersInt) $
-            subSelect $
-            from $ \n' -> do
-            pure (n' ^. NumbersDouble)
-        pure (bad, good)
-      case eres of
-        Left (SomeException _) ->
-          -- Must use SomeException because the database libraries throw their
-          -- own errors.
-          pure ()
-        Right (bad, good) -> do
-          -- SQLite just takes the first element of the sub-select. lol.
-          --
-          bad `shouldBe` good
+            let getter (Entity _ a, b) = (a, b)
+            map getter xs0 `shouldBe` map getter xs1
 
-    it "throws exceptions on null results" $ do
-      eres <- try $ run $ do
-        setup
-        select $
-          from $ \n -> do
-          pure $ (,) (n ^. NumbersInt) $
-            subSelectUnsafe $
-            from $ \n' -> do
-            where_ $ val False
-            pure (n' ^. NumbersDouble)
-      case eres of
-        Left (_ :: PersistException) ->
-          pure ()
-        Right xs ->
-          xs `shouldBe` []
+    describe "subSelectUnsafe" $ do
+        it "throws exceptions on multiple results" $ do
+            eres <- try $ run $ do
+                setup
+                bad <- select $
+                    from $ \n -> do
+                    pure $ (,) (n ^. NumbersInt) $
+                        subSelectUnsafe $
+                        from $ \n' -> do
+                        pure (just (n' ^. NumbersDouble))
+                good <- select $
+                    from $ \n -> do
+                    pure $ (,) (n ^. NumbersInt) $
+                        subSelect $
+                        from $ \n' -> do
+                        pure (n' ^. NumbersDouble)
+                pure (bad, good)
+            case eres of
+                Left (SomeException _) ->
+                    -- Must use SomeException because the database libraries throw their
+                    -- own errors.
+                    pure ()
+                Right (bad, good) -> do
+                    -- SQLite just takes the first element of the sub-select. lol.
+                    --
+                    bad `shouldBe` good
 
+        it "throws exceptions on null results" $ do
+            eres <- try $ run $ do
+                setup
+                select $
+                    from $ \n -> do
+                    pure $ (,) (n ^. NumbersInt) $
+                        subSelectUnsafe $
+                        from $ \n' -> do
+                        where_ $ val False
+                        pure (n' ^. NumbersDouble)
+            case eres of
+                Left (_ :: PersistException) ->
+                    pure ()
+                Right xs ->
+                    xs `shouldBe` []
 
 testSelectSource :: Run -> Spec
 testSelectSource run = do
-  describe "selectSource" $ do
-    it "works for a simple example" $
-      run $ do
-        let query = selectSource $
-                    from $ \person ->
-                    return person
-        p1e <- insert' p1
-        ret <- runConduit $ query .| CL.consume
-        liftIO $ ret `shouldBe` [ p1e ]
+    describe "selectSource" $ do
+        it "works for a simple example" $ run $ do
+            let query = selectSource $
+                        from $ \person ->
+                        return person
+            p1e <- insert' p1
+            ret <- runConduit $ query .| CL.consume
+            liftIO $ ret `shouldBe` [ p1e ]
 
-    it "can run a query many times" $
-      run $ do
-        let query = selectSource $
-                    from $ \person ->
-                    return person
-        p1e <- insert' p1
-        ret0 <- runConduit $ query .| CL.consume
-        ret1 <- runConduit $ query .| CL.consume
-        liftIO $ ret0 `shouldBe` [ p1e ]
-        liftIO $ ret1 `shouldBe` [ p1e ]
+        it "can run a query many times" $ run $ do
+            let query = selectSource $
+                        from $ \person ->
+                        return person
+            p1e <- insert' p1
+            ret0 <- runConduit $ query .| CL.consume
+            ret1 <- runConduit $ query .| CL.consume
+            liftIO $ ret0 `shouldBe` [ p1e ]
+            liftIO $ ret1 `shouldBe` [ p1e ]
 
-    it "works on repro" $ do
-      let selectPerson :: R.MonadResource m => String -> ConduitT () (Key Person) (SqlPersistT m) ()
-          selectPerson name = do
-            let source = selectSource $ from $ \person -> do
-                         where_ $ person ^. PersonName ==. val name
-                         return $ person ^. PersonId
-            source .| CL.map unValue
-      run $ do
-        p1e <- insert' p1
-        p2e <- insert' p2
-        r1 <- runConduit $
-          selectPerson (personName p1) .| CL.consume
-        r2 <- runConduit $
-          selectPerson (personName p2) .| CL.consume
-        liftIO $ do
-          r1 `shouldBe` [ entityKey p1e ]
-          r2 `shouldBe` [ entityKey p2e ]
-
-
+        it "works on repro" $ do
+            let selectPerson :: R.MonadResource m => String -> ConduitT () (Key Person) (SqlPersistT m) ()
+                selectPerson name = do
+                    let source =
+                            selectSource $ from $ \person -> do
+                            where_ $ person ^. PersonName ==. val name
+                            return $ person ^. PersonId
+                    source .| CL.map unValue
+            run $ do
+                p1e <- insert' p1
+                p2e <- insert' p2
+                r1 <- runConduit $ selectPerson (personName p1) .| CL.consume
+                r2 <- runConduit $ selectPerson (personName p2) .| CL.consume
+                liftIO $ do
+                  r1 `shouldBe` [ entityKey p1e ]
+                  r2 `shouldBe` [ entityKey p2e ]
 
 testSelectFrom :: Run -> Spec
 testSelectFrom run = do
-  describe "select/from" $ do
-    it "works for a simple example" $
-      run $ do
-        p1e <- insert' p1
-        ret <- select $
-               from $ \person ->
-               return person
-        liftIO $ ret `shouldBe` [ p1e ]
+    describe "select/from" $ do
+        it "works for a simple example" $ run $ do
+            p1e <- insert' p1
+            ret <-
+                select $
+                from $ \person ->
+                return person
+            liftIO $ ret `shouldBe` [ p1e ]
 
-    it "works for a simple self-join (one entity)" $
-      run $ do
-        p1e <- insert' p1
-        ret <- select $
-               from $ \(person1, person2) ->
-               return (person1, person2)
-        liftIO $ ret `shouldBe` [ (p1e, p1e) ]
+        it "works for a simple self-join (one entity)" $ run $ do
+            p1e <- insert' p1
+            ret <-
+                select $
+                from $ \(person1, person2) ->
+                return (person1, person2)
+            liftIO $ ret `shouldBe` [ (p1e, p1e) ]
 
-    it "works for a simple self-join (two entities)" $
-      run $ do
-        p1e <- insert' p1
-        p2e <- insert' p2
-        ret <- select $
-               from $ \(person1, person2) ->
-               return (person1, person2)
-        liftIO $ ret `shouldSatisfy` sameElementsAs [ (p1e, p1e)
-                                                    , (p1e, p2e)
-                                                    , (p2e, p1e)
-                                                    , (p2e, p2e) ]
+        it "works for a simple self-join (two entities)" $ run $ do
+            p1e <- insert' p1
+            p2e <- insert' p2
+            ret <-
+                select $
+                from $ \(person1, person2) ->
+                return (person1, person2)
+            liftIO $
+                ret
+                    `shouldSatisfy`
+                        sameElementsAs
+                            [ (p1e, p1e)
+                            , (p1e, p2e)
+                            , (p2e, p1e)
+                            , (p2e, p2e)
+                            ]
+
+        it "works for a self-join via sub_select" $ run $ do
+            p1k <- insert p1
+            p2k <- insert p2
+            _f1k <- insert (Follow p1k p2k)
+            _f2k <- insert (Follow p2k p1k)
+            ret <- select $
+                   from $ \followA -> do
+                   let subquery =
+                         from $ \followB -> do
+                         where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
+                         return $ followB ^. FollowFollower
+                   where_ $ followA ^. FollowFollowed ==. sub_select subquery
+                   return followA
+            liftIO $ length ret `shouldBe` 2
+
+        it "works for a self-join via exists" $ run $ do
+            p1k <- insert p1
+            p2k <- insert p2
+            _f1k <- insert (Follow p1k p2k)
+            _f2k <- insert (Follow p2k p1k)
+            ret <- select $
+                   from $ \followA -> do
+                   where_ $ exists $
+                            from $ \followB ->
+                            where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
+                   return followA
+            liftIO $ length ret `shouldBe` 2
 
 
-    it "works for a self-join via sub_select" $
-      run $ do
-        p1k <- insert p1
-        p2k <- insert p2
-        _f1k <- insert (Follow p1k p2k)
-        _f2k <- insert (Follow p2k p1k)
-        ret <- select $
-               from $ \followA -> do
-               let subquery =
-                     from $ \followB -> do
-                     where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
-                     return $ followB ^. FollowFollower
-               where_ $ followA ^. FollowFollowed ==. sub_select subquery
-               return followA
-        liftIO $ length ret `shouldBe` 2
+        it "works for a simple projection" $ run $ do
+            p1k <- insert p1
+            p2k <- insert p2
+            ret <- select $
+                   from $ \p ->
+                   return (p ^. PersonId, p ^. PersonName)
+            liftIO $ ret `shouldBe` [ (Value p1k, Value (personName p1))
+                                    , (Value p2k, Value (personName p2)) ]
 
-    it "works for a self-join via exists" $
-      run $ do
-        p1k <- insert p1
-        p2k <- insert p2
-        _f1k <- insert (Follow p1k p2k)
-        _f2k <- insert (Follow p2k p1k)
-        ret <- select $
-               from $ \followA -> do
-               where_ $ exists $
-                        from $ \followB ->
-                        where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
-               return followA
-        liftIO $ length ret `shouldBe` 2
+        it "works for a simple projection with a simple implicit self-join" $ run $ do
+            _ <- insert p1
+            _ <- insert p2
+            ret <- select $
+                   from $ \(pa, pb) ->
+                   return (pa ^. PersonName, pb ^. PersonName)
+            liftIO $ ret `shouldSatisfy` sameElementsAs
+                                    [ (Value (personName p1), Value (personName p1))
+                                    , (Value (personName p1), Value (personName p2))
+                                    , (Value (personName p2), Value (personName p1))
+                                    , (Value (personName p2), Value (personName p2)) ]
 
-
-    it "works for a simple projection" $
-      run $ do
-        p1k <- insert p1
-        p2k <- insert p2
-        ret <- select $
-               from $ \p ->
-               return (p ^. PersonId, p ^. PersonName)
-        liftIO $ ret `shouldBe` [ (Value p1k, Value (personName p1))
-                                , (Value p2k, Value (personName p2)) ]
-
-    it "works for a simple projection with a simple implicit self-join" $
-      run $ do
-        _ <- insert p1
-        _ <- insert p2
-        ret <- select $
-               from $ \(pa, pb) ->
-               return (pa ^. PersonName, pb ^. PersonName)
-        liftIO $ ret `shouldSatisfy` sameElementsAs
-                                [ (Value (personName p1), Value (personName p1))
-                                , (Value (personName p1), Value (personName p2))
-                                , (Value (personName p2), Value (personName p1))
-                                , (Value (personName p2), Value (personName p2)) ]
-
-    it "works with many kinds of LIMITs and OFFSETs" $
-      run $ do
-        [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
-        let people = from $ \p -> do
-                     orderBy [asc (p ^. PersonName)]
-                     return p
-        ret1 <- select $ do
+        it "works with many kinds of LIMITs and OFFSETs" $ run $ do
+            [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+            let people =
+                    from $ \p -> do
+                    orderBy [asc (p ^. PersonName)]
+                    return p
+            ret1 <-
+                select $ do
                 p <- people
                 limit 2
                 limit 1
                 return p
-        liftIO $ ret1 `shouldBe` [ p1e ]
-        ret2 <- select $ do
+            liftIO $ ret1 `shouldBe` [ p1e ]
+            ret2 <-
+                select $ do
                 p <- people
                 limit 1
                 limit 2
                 return p
-        liftIO $ ret2 `shouldBe` [ p1e, p4e ]
-        ret3 <- select $ do
+            liftIO $ ret2 `shouldBe` [ p1e, p4e ]
+            ret3 <-
+                select $ do
                 p <- people
                 offset 3
                 offset 2
                 return p
-        liftIO $ ret3 `shouldBe` [ p3e, p2e ]
-        ret4 <- select $ do
+            liftIO $ ret3 `shouldBe` [ p3e, p2e ]
+            ret4 <-
+                select $ do
                 p <- people
                 offset 3
                 limit 5
@@ -660,46 +653,42 @@ testSelectFrom run = do
                 offset 1
                 limit 2
                 return p
-        liftIO $ ret4 `shouldBe` [ p4e, p3e ]
-        ret5 <- select $ do
+            liftIO $ ret4 `shouldBe` [ p4e, p3e ]
+            ret5 <-
+                select $ do
                 p <- people
                 offset 1000
                 limit  1
                 limit  1000
                 offset 0
                 return p
-        liftIO $ ret5 `shouldBe` [ p1e, p4e, p3e, p2e ]
+            liftIO $ ret5 `shouldBe` [ p1e, p4e, p3e, p2e ]
 
-    it "works with non-id primary key" $
-      run $ do
-        let fc = Frontcover number ""
-            number = 101
-            Right thePk = keyFromValues [toPersistValue number]
-        fcPk <- insert fc
-        [Entity _ ret] <- select $ from return
-        liftIO $ do
-          ret `shouldBe` fc
-          fcPk `shouldBe` thePk
+        it "works with non-id primary key" $ run $ do
+            let fc = Frontcover number ""
+                number = 101
+                Right thePk = keyFromValues [toPersistValue number]
+            fcPk <- insert fc
+            [Entity _ ret] <- select $ from return
+            liftIO $ do
+                ret `shouldBe` fc
+                fcPk `shouldBe` thePk
 
-    it "works when returning a custom non-composite primary key from a query" $
-      run $ do
-        let name = "foo"
-            t = Tag name
-            Right thePk = keyFromValues [toPersistValue name]
-        tagPk <- insert t
-        [Value ret] <- select $ from $ \t' -> return (t'^.TagId)
-        liftIO $ do
-          ret `shouldBe` thePk
-          thePk `shouldBe` tagPk
+        it "works when returning a custom non-composite primary key from a query" $ run $ do
+            let name = "foo"
+                t = Tag name
+                Right thePk = keyFromValues [toPersistValue name]
+            tagPk <- insert t
+            [Value ret] <- select $ from $ \t' -> return (t'^.TagId)
+            liftIO $ do
+                ret `shouldBe` thePk
+                thePk `shouldBe` tagPk
 
-    it "works when returning a composite primary key from a query" $
-      run $ do
-        let p = Point 10 20 ""
-        thePk <- insert p
-        [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
-        liftIO $ ppk `shouldBe` thePk
-
-
+        it "works when returning a composite primary key from a query" $ run $ do
+            let p = Point 10 20 ""
+            thePk <- insert p
+            [Value ppk] <- select $ from $ \p' -> return (p'^.PointId)
+            liftIO $ ppk `shouldBe` thePk
 
 testSelectJoin :: Run -> Spec
 testSelectJoin run = do
@@ -883,10 +872,8 @@ testSelectJoin run = do
           liftIO $ (entityVal <$> ps) `shouldBe` [p1]
 
 testSelectSubQuery :: Run -> Spec
-testSelectSubQuery run = do
-  describe "select subquery" $ do
-    it "works" $ do
-      run $ do
+testSelectSubQuery run = describe "select subquery" $ do
+    it "works" $ run $ do
         _ <- insert' p1
         let q = do
                 p <- Experimental.from $ Table @Person
@@ -894,8 +881,7 @@ testSelectSubQuery run = do
         ret <- select $ Experimental.from q
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
-    it "supports sub-selecting Maybe entities" $ do
-      run $ do
+    it "supports sub-selecting Maybe entities" $ run $ do
         l1e <- insert' l1
         l3e <- insert' l3
         l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
@@ -909,8 +895,7 @@ testSelectSubQuery run = do
           pure (lords, deeds)
         liftIO $ ret `shouldMatchList` ((l3e, Nothing) : l1WithDeeds)
 
-    it "lets you order by alias" $ do
-      run $ do
+    it "lets you order by alias" $ run $ do
         _ <- insert' p1
         _ <- insert' p3
         let q = do
@@ -923,8 +908,7 @@ testSelectSubQuery run = do
         ret <- select q
         liftIO $ ret `shouldBe` [ Value $ personName p3, Value $ personName p1 ]
 
-    it "supports groupBy" $ do
-      run $ do
+    it "supports groupBy" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
@@ -945,8 +929,7 @@ testSelectSubQuery run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
-    it "Can count results of aggregate query" $ do
-      run $ do
+    it "Can count results of aggregate query" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
@@ -967,8 +950,7 @@ testSelectSubQuery run = do
 
         liftIO $ ret `shouldMatchList` [ (Value 1) ]
 
-    it "joins on subqueries" $ do
-      run $ do
+    it "joins on subqueries" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
@@ -985,8 +967,7 @@ testSelectSubQuery run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
-    it "flattens maybe values" $ do
-      run $ do
+    it "flattens maybe values" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         let q = do
@@ -1001,8 +982,7 @@ testSelectSubQuery run = do
         (ret :: [(Value (Key Lord), Value (Maybe Int))]) <- select q
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value (lordDogs l3))
                                        , (Value l1k, Value (lordDogs l1)) ]
-    it "unions" $ do
-        run $ do
+    it "unions" $ run $ do
           _ <- insert p1
           _ <- insert p2
           let q = Experimental.from $
@@ -1024,10 +1004,8 @@ testSelectSubQuery run = do
           liftIO $ names `shouldMatchList` [ (Value $ personName p1)
                                            , (Value $ personName p2) ]
 testSelectWhere :: Run -> Spec
-testSelectWhere run = do
-  describe "select where_" $ do
-    it "works for a simple example with (==.)" $
-      run $ do
+testSelectWhere run = describe "select where_" $ do
+    it "works for a simple example with (==.)" $ run $ do
         p1e <- insert' p1
         _   <- insert' p2
         _   <- insert' p3
@@ -1037,8 +1015,7 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p1e ]
 
-    it "works for a simple example with (==.) and (||.)" $
-      run $ do
+    it "works for a simple example with (==.) and (||.)" $ run $ do
         p1e <- insert' p1
         p2e <- insert' p2
         _   <- insert' p3
@@ -1048,8 +1025,7 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p1e, p2e ]
 
-    it "works for a simple example with (>.) [uses val . Just]" $
-      run $ do
+    it "works for a simple example with (>.) [uses val . Just]" $ run $ do
         p1e <- insert' p1
         _   <- insert' p2
         _   <- insert' p3
@@ -1059,8 +1035,7 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p1e ]
 
-    it "works for a simple example with (>.) and not_ [uses just . val]" $
-      run $ do
+    it "works for a simple example with (>.) and not_ [uses just . val]" $ run $ do
         _   <- insert' p1
         _   <- insert' p2
         p3e <- insert' p3
@@ -1071,55 +1046,50 @@ testSelectWhere run = do
         liftIO $ ret `shouldBe` [ p3e ]
 
     describe "when using between" $ do
-      it "works for a simple example with [uses just . val]" $
-        run $ do
-          p1e  <- insert' p1
-          _    <- insert' p2
-          _    <- insert' p3
-          ret  <- select $
-            from $ \p -> do
-              where_ ((p ^. PersonAge) `between` (just $ val 20, just $ val 40))
-              return p
-          liftIO $ ret `shouldBe` [ p1e ]
-      it "works for a proyected fields value" $
-        run $ do
-          _ <- insert' p1 >> insert' p2 >> insert' p3
-          ret <-
-            select $
-            from $ \p -> do
-            where_ $
-              just (p ^. PersonFavNum)
-                `between`
-                  (p ^. PersonAge, p ^.  PersonWeight)
-          liftIO $ ret `shouldBe` []
-      describe "when projecting composite keys" $ do
-        it "works when using composite keys with val" $
-          run $ do
-            insert_ $ Point 1 2 ""
+        it "works for a simple example with [uses just . val]" $ run $ do
+            p1e  <- insert' p1
+            _    <- insert' p2
+            _    <- insert' p3
+            ret  <- select $
+              from $ \p -> do
+                where_ ((p ^. PersonAge) `between` (just $ val 20, just $ val 40))
+                return p
+            liftIO $ ret `shouldBe` [ p1e ]
+        it "works for a proyected fields value" $ run $ do
+            _ <- insert' p1 >> insert' p2 >> insert' p3
             ret <-
               select $
               from $ \p -> do
               where_ $
-                p ^. PointId
+                just (p ^. PersonFavNum)
                   `between`
-                    ( val $ PointKey 1 2
-                    , val $ PointKey 5 6 )
-            liftIO $ ret `shouldBe` [()]
-        it "works when using ECompositeKey constructor" $
-          run $ do
-            insert_ $ Point 1 2 ""
-            ret <-
-              select $
-              from $ \p -> do
-              where_ $
-                p ^. PointId
-                  `between`
-                    ( EI.ECompositeKey $ const ["3", "4"]
-                    , EI.ECompositeKey $ const ["5", "6"] )
+                    (p ^. PersonAge, p ^.  PersonWeight)
             liftIO $ ret `shouldBe` []
+        describe "when projecting composite keys" $ do
+            it "works when using composite keys with val" $ run $ do
+                insert_ $ Point 1 2 ""
+                ret <-
+                  select $
+                  from $ \p -> do
+                  where_ $
+                    p ^. PointId
+                      `between`
+                        ( val $ PointKey 1 2
+                        , val $ PointKey 5 6 )
+                liftIO $ ret `shouldBe` [()]
+            it "works when using ECompositeKey constructor" $ run $ do
+                insert_ $ Point 1 2 ""
+                ret <-
+                  select $
+                  from $ \p -> do
+                  where_ $
+                    p ^. PointId
+                      `between`
+                        ( EI.ECompositeKey $ const ["3", "4"]
+                        , EI.ECompositeKey $ const ["5", "6"] )
+                liftIO $ ret `shouldBe` []
 
-    it "works with avg_" $
-      run $ do
+    it "works with avg_" $ run $ do
         _ <- insert' p1
         _ <- insert' p2
         _ <- insert' p3
@@ -1145,8 +1115,7 @@ testSelectWhere run = do
                return $ joinV $ min_ (p ^. PersonAge)
         liftIO $ ret `shouldBe` [ Value $ Just (17 :: Int) ]
 
-    it "works with max_" $
-      run $ do
+    it "works with max_" $ run $ do
         _ <- insert' p1
         _ <- insert' p2
         _ <- insert' p3
@@ -1156,8 +1125,7 @@ testSelectWhere run = do
                return $ joinV $ max_ (p ^. PersonAge)
         liftIO $ ret `shouldBe` [ Value $ Just (36 :: Int) ]
 
-    it "works with lower_" $
-      run $ do
+    it "works with lower_" $ run $ do
         p1e <- insert' p1
         p2e@(Entity _ bob) <- insert' $ Person "bob" (Just 36) Nothing   1
 
@@ -1175,13 +1143,11 @@ testSelectWhere run = do
                 return p
         liftIO $ ret2 `shouldBe` [ p2e ]
 
-    it "works with round_" $
-      run $ do
+    it "works with round_" $ run $ do
         ret <- select $ return $ round_ (val (16.2 :: Double))
         liftIO $ ret `shouldBe` [ Value (16 :: Double) ]
 
-    it "works with isNothing" $
-      run $ do
+    it "works with isNothing" $ run $ do
         _   <- insert' p1
         p2e <- insert' p2
         _   <- insert' p3
@@ -1191,8 +1157,7 @@ testSelectWhere run = do
                return p
         liftIO $ ret `shouldBe` [ p2e ]
 
-    it "works with not_ . isNothing" $
-      run $ do
+    it "works with not_ . isNothing" $ run $ do
         p1e <- insert' p1
         _   <- insert' p2
         ret <- select $
@@ -1223,8 +1188,7 @@ testSelectWhere run = do
                                 , (p4e, f42, p2e)
                                 , (p2e, f21, p1e) ]
 
-    it "works for a many-to-many explicit join" $
-      run $ do
+    it "works for a many-to-many explicit join" $ run $ do
         p1e@(Entity p1k _) <- insert' p1
         p2e@(Entity p2k _) <- insert' p2
         _                  <- insert' p3
@@ -1256,8 +1220,7 @@ testSelectWhere run = do
       -- we only care that we don't have a SQL error
       True `shouldBe` True
 
-    it "works for a many-to-many explicit join with LEFT OUTER JOINs" $
-      run $ do
+    it "works for a many-to-many explicit join with LEFT OUTER JOINs" $ run $ do
         p1e@(Entity p1k _) <- insert' p1
         p2e@(Entity p2k _) <- insert' p2
         p3e                <- insert' p3
@@ -1279,8 +1242,7 @@ testSelectWhere run = do
                                 , (p3e, Nothing,  Nothing)
                                 , (p2e, Just f21, Just p1e) ]
 
-    it "works with a composite primary key" $
-      run $ do
+    it "works with a composite primary key" $ run $ do
         let p = Point x y ""
             x = 10
             y = 15
@@ -1293,13 +1255,9 @@ testSelectWhere run = do
           ret `shouldBe` p
           pPk `shouldBe` thePk
 
-
-
 testSelectOrderBy :: Run -> Spec
-testSelectOrderBy run = do
-  describe "select/orderBy" $ do
-    it "works with a single ASC field" $
-      run $ do
+testSelectOrderBy run = describe "select/orderBy" $ do
+    it "works with a single ASC field" $ run $ do
         p1e <- insert' p1
         p2e <- insert' p2
         p3e <- insert' p3
@@ -1309,8 +1267,7 @@ testSelectOrderBy run = do
                return p
         liftIO $ ret `shouldBe` [ p1e, p3e, p2e ]
 
-    it "works with a sub_select" $
-      run $ do
+    it "works with a sub_select" $ run $ do
         [p1k, p2k, p3k, p4k] <- mapM insert [p1, p2, p3, p4]
         [b1k, b2k, b3k, b4k] <- mapM (insert . BlogPost "") [p1k, p2k, p3k, p4k]
         ret <- select $
@@ -1323,8 +1280,7 @@ testSelectOrderBy run = do
                return (b ^. BlogPostId)
         liftIO $ ret `shouldBe` (Value <$> [b2k, b3k, b4k, b1k])
 
-    it "works on a composite primary key" $
-      run $ do
+    it "works on a composite primary key" $ run $ do
         let ps = [Point 2 1 "", Point 1 2 ""]
         mapM_ insert ps
         eps <- select $
@@ -1334,10 +1290,8 @@ testSelectOrderBy run = do
         liftIO $ map entityVal eps `shouldBe` reverse ps
 
 testAscRandom :: SqlExpr (Value Double) -> Run -> Spec
-testAscRandom rand' run =
-  describe "random_" $
-    it "asc random_ works" $
-      run $ do
+testAscRandom rand' run = describe "random_" $
+    it "asc random_ works" $ run $ do
         _p1e <- insert' p1
         _p2e <- insert' p2
         _p3e <- insert' p3
@@ -1382,10 +1336,8 @@ testSelectDistinct run = do
 
 
 testCoasleceDefault :: Run -> Spec
-testCoasleceDefault run = do
-  describe "coalesce/coalesceDefault" $ do
-    it "works on a simple example" $
-      run $ do
+testCoasleceDefault run = describe "coalesce/coalesceDefault" $ do
+    it "works on a simple example" $ run $ do
         mapM_ insert' [p1, p2, p3, p4, p5]
         ret1 <- select $
                 from $ \p -> do
@@ -1409,8 +1361,7 @@ testCoasleceDefault run = do
                                  , Value 5
                                  ]
 
-    it "works with sub-queries" $
-      run $ do
+    it "works with sub-queries" $ run $ do
         p1id <- insert p1
         p2id <- insert p2
         p3id <- insert p3
@@ -1432,12 +1383,9 @@ testCoasleceDefault run = do
                                 ]
 
 
-
 testDelete :: Run -> Spec
-testDelete run = do
-  describe "delete" $
-    it "works on a simple example" $
-      run $ do
+testDelete run = describe "delete" $ do
+    it "works on a simple example" $ run $ do
         p1e <- insert' p1
         p2e <- insert' p2
         p3e <- insert' p3
@@ -1458,14 +1406,9 @@ testDelete run = do
         ret3 <- getAll
         liftIO $ (n, ret3) `shouldBe` (2, [])
 
-
-
 testUpdate :: Run -> Spec
-testUpdate run = do
-  describe "update" $ do
-
-    it "works with a subexpression having COUNT(*)" $
-      run $ do
+testUpdate run = describe "update" $ do
+    it "works with a subexpression having COUNT(*)" $ run $ do
         p1k <- insert p1
         p2k <- insert p2
         p3k <- insert p3
@@ -1486,7 +1429,7 @@ testUpdate run = do
                                 , Entity p2k p2 { personAge = Just 0 } ]
 
     it "works with a composite primary key" $
-      pendingWith "Need refactor to support composite pks on ESet"
+        pendingWith "Need refactor to support composite pks on ESet"
       {-
       run $ do
         let p = Point x y ""
@@ -1503,8 +1446,7 @@ testUpdate run = do
           ret `shouldBe` Point newX newY []
       -}
 
-    it "GROUP BY works with COUNT" $
-      run $ do
+    it "GROUP BY works with COUNT" $ run $ do
         p1k <- insert p1
         p2k <- insert p2
         p3k <- insert p3
@@ -1521,8 +1463,7 @@ testUpdate run = do
                                 , (Entity p1k p1, Value 3)
                                 , (Entity p3k p3, Value 7) ]
 
-    it "GROUP BY works with COUNT and InnerJoin" $
-      run $ do
+    it "GROUP BY works with COUNT and InnerJoin" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
@@ -1537,8 +1478,7 @@ testUpdate run = do
         liftIO $ ret `shouldMatchList` [ (Value l3k, Value 7)
                                        , (Value l1k, Value 3) ]
 
-    it "GROUP BY works with nested tuples" $ do
-      run $ do
+    it "GROUP BY works with nested tuples" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
         mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
@@ -1551,8 +1491,8 @@ testUpdate run = do
           groupBy ((lord ^. LordId, lord ^. LordDogs), deed ^. DeedContract)
           return (lord ^. LordId, count $ deed ^. DeedId)
         liftIO $ length ret `shouldBe` 10
-    it "GROUP BY works with HAVING" $
-      run $ do
+
+    it "GROUP BY works with HAVING" $ run $ do
         p1k <- insert p1
         _p2k <- insert p2
         p3k <- insert p3
@@ -1568,7 +1508,6 @@ testUpdate run = do
                return (p, cnt)
         liftIO $ ret `shouldBe` [ (Entity p1k p1, Value (3 :: Int))
                                 , (Entity p3k p3, Value 7) ]
-
 
 -- we only care that this compiles. check that SqlWriteT doesn't fail on
 -- updates.
@@ -1597,10 +1536,8 @@ testSqlReadT =
   return (lord ^. LordId, count $ deed ^. DeedId)
 
 testListOfValues :: Run -> Spec
-testListOfValues run = do
-  describe "lists of values" $ do
-    it "IN works for valList" $
-      run $ do
+testListOfValues run = describe "lists of values" $ do
+    it "IN works for valList" $ run $ do
         p1k <- insert p1
         p2k <- insert p2
         _p3k <- insert p3
@@ -1611,8 +1548,7 @@ testListOfValues run = do
         liftIO $ ret `shouldBe` [ Entity p1k p1
                                 , Entity p2k p2 ]
 
-    it "IN works for valList (null list)" $
-      run $ do
+    it "IN works for valList (null list)" $ run $ do
         _p1k <- insert p1
         _p2k <- insert p2
         _p3k <- insert p3
@@ -1622,8 +1558,7 @@ testListOfValues run = do
                return p
         liftIO $ ret `shouldBe` []
 
-    it "IN works for subList_select" $
-      run $ do
+    it "IN works for subList_select" $ run $ do
         p1k <- insert p1
         _p2k <- insert p2
         p3k <- insert p3
@@ -1639,8 +1574,7 @@ testListOfValues run = do
                return p
         liftIO $ L.sort ret `shouldBe` L.sort [Entity p1k p1, Entity p3k p3]
 
-    it "NOT IN works for subList_select" $
-      run $ do
+    it "NOT IN works for subList_select" $ run $ do
         p1k <- insert p1
         p2k <- insert p2
         p3k <- insert p3
@@ -1655,8 +1589,7 @@ testListOfValues run = do
                return p
         liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
-    it "EXISTS works for subList_select" $
-      run $ do
+    it "EXISTS works for subList_select" $ run $ do
         p1k <- insert p1
         _p2k <- insert p2
         p3k <- insert p3
@@ -1672,8 +1605,7 @@ testListOfValues run = do
         liftIO $ ret `shouldBe` [ Entity p1k p1
                                 , Entity p3k p3 ]
 
-    it "EXISTS works for subList_select" $
-      run $ do
+    it "EXISTS works for subList_select" $ run $ do
         p1k <- insert p1
         p2k <- insert p2
         p3k <- insert p3
@@ -1687,24 +1619,14 @@ testListOfValues run = do
                return p
         liftIO $ ret `shouldBe` [ Entity p2k p2 ]
 
-
-
-
-
 testListFields :: Run -> Spec
-testListFields run = do
-  describe "list fields" $ do
+testListFields run = describe "list fields" $ do
     -- <https://github.com/prowdsponsor/esqueleto/issues/100>
-    it "can update list fields" $
-      run $ do
+    it "can update list fields" $ run $ do
         cclist <- insert $ CcList []
         update $ \p -> do
-          set p [ CcListNames =. val ["fred"]]
-          where_ (p ^. CcListId ==. val cclist)
-
-
-
-
+            set p [ CcListNames =. val ["fred"]]
+            where_ (p ^. CcListId ==. val cclist)
 
 testInsertsBySelect :: Run -> Spec
 testInsertsBySelect run = do
@@ -1943,21 +1865,21 @@ testRenderSql run = do
       expr `shouldBe` "? = ?"
 
   describe "EEntity Ident behavior" $ do
-    let
-      render :: SqlExpr (Entity val) -> Text.Text
-      render (EI.EEntity (EI.I ident)) = ident
-    it "renders sensibly" $ do
-      results <- run $ do
-        _ <- insert $ Foo 2
-        _ <- insert $ Foo 3
-        _ <- insert $ Person "hello" Nothing Nothing 3
-        select $
-          from $ \(a `LeftOuterJoin` b) -> do
-          on $ a ^. FooName ==. b ^. PersonFavNum
-          pure (val (render a), val (render b))
-      head results
-        `shouldBe`
-          (Value "Foo", Value "Person")
+      let render :: SqlExpr (Entity val) -> Text.Text
+          render (EI.EEntity (EI.I ident)) = ident
+          render _ = error "guess we gotta handle this in the test suite now"
+      it "renders sensibly" $ run $ do
+          _ <- insert $ Foo 2
+          _ <- insert $ Foo 3
+          _ <- insert $ Person "hello" Nothing Nothing 3
+          results <- select $
+              from $ \(a `LeftOuterJoin` b) -> do
+              on $ a ^. FooName ==. b ^. PersonFavNum
+              pure (val (render a), val (render b))
+          liftIO $
+              head results
+              `shouldBe`
+              (Value "Foo", Value "Person")
 
   describe "ExprParser" $ do
     let parse parser = AP.parseOnly (parser '#')
