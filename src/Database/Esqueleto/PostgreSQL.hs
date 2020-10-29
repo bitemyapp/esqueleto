@@ -43,22 +43,8 @@ import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import Data.Time.Clock (UTCTime)
-import Database.Esqueleto.Internal.Internal
-       ( CompositeKeyError(..)
-       , EsqueletoError(..)
-       , FinalResult(..)
-       , Ident(..)
-       , KnowResult
-       , SetClause
-       , UnexpectedCaseError(..)
-       , UnexpectedValueError(..)
-       , renderUpdates
-       , toUniqueDef
-       , uncommas
-       )
-import Database.Esqueleto.Internal.Language hiding (random_)
+import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Esqueleto.Internal.Sql
 import Database.Persist.Class (OnlyOneUniqueKey)
 
 -- | (@random()@) Split out into database specific modules

@@ -1865,21 +1865,21 @@ testRenderSql run = do
       expr `shouldBe` "? = ?"
 
   describe "EEntity Ident behavior" $ do
-    let
-      render :: SqlExpr (Entity val) -> Text.Text
-      render (EI.EEntity (EI.I ident)) = ident
-    it "renders sensibly" $ do
-      results <- run $ do
-        _ <- insert $ Foo 2
-        _ <- insert $ Foo 3
-        _ <- insert $ Person "hello" Nothing Nothing 3
-        select $
-          from $ \(a `LeftOuterJoin` b) -> do
-          on $ a ^. FooName ==. b ^. PersonFavNum
-          pure (val (render a), val (render b))
-      head results
-        `shouldBe`
-          (Value "Foo", Value "Person")
+      let render :: SqlExpr (Entity val) -> Text.Text
+          render (EI.EEntity (EI.I ident)) = ident
+          render _ = error "guess we gotta handle this in the test suite now"
+      it "renders sensibly" $ run $ do
+          _ <- insert $ Foo 2
+          _ <- insert $ Foo 3
+          _ <- insert $ Person "hello" Nothing Nothing 3
+          results <- select $
+              from $ \(a `LeftOuterJoin` b) -> do
+              on $ a ^. FooName ==. b ^. PersonFavNum
+              pure (val (render a), val (render b))
+          liftIO $
+              head results
+              `shouldBe`
+              (Value "Foo", Value "Person")
 
   describe "ExprParser" $ do
     let parse parser = AP.parseOnly (parser '#')

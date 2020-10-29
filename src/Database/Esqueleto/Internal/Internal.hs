@@ -560,10 +560,23 @@ e ^. field
             case e of
                 EEntity ident -> ident
                 EAliasedEntity baseI _ -> baseI
+                EAliasedEntityReference a b ->
+                    error $ unwords
+                        [ "Used (^.) with an EAliasedEntityReference."
+                        , "Please file this as an Esqueleto bug."
+                        , "EAliasedEntityReference", show a, show b
+                        ]
         fieldIdent =
             case e of
                 EEntity _ -> fromDBName info (fieldDB fieldDef)
                 EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+                EAliasedEntityReference a b ->
+                    error $ unwords
+                        [ "Used (^.) with an EAliasedEntityReference."
+                        , "Please file this as an Esqueleto bug."
+                        , "EAliasedEntityReference", show a, show b
+                        ]
+
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
