@@ -28,7 +28,7 @@ jobs:
            postgresql version: '12'  # See https://hub.docker.com/_/postgres for available versions  
            postgresql user: esqutest
            postgresql password: esqutest
-           postgrseql db: persistent
+           postgresql db: persistent
       - uses: mirromutth/mysql-action@v1.1
         with:
           mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
