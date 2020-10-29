@@ -838,15 +838,19 @@ instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b')
         => ToInnerJoin NotLateral a b (a' :& b') where
   toInnerJoin _ lhs rhs on' = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , ToInnerJoin (IsLateral b) a b b'
-         ) => ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
-         toFrom (InnerJoin lhs (rhs, on')) =
-           let
-            toProxy :: b -> Proxy (IsLateral b)
+instance
+    ( ToFrom a
+    , ToFromT a ~ a'
+    , ToInnerJoin (IsLateral b) a b b'
+    )
+  =>
+    ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool)))
+  where
+    toFrom (InnerJoin lhs (rhs, on')) =
+        let toProxy :: b -> Proxy (IsLateral b)
             toProxy _ = Proxy
-        in toInnerJoin (toProxy rhs) lhs rhs on'
+        in
+            toInnerJoin (toProxy rhs) lhs rhs on'
 
 instance
     ( ToFrom a
@@ -1168,8 +1172,8 @@ from parts = do
         let ret = (toMaybe leftVal) :& (toMaybe rightVal)
         pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
 
-fromSubQuery 
-    :: 
+fromSubQuery
+    ::
     ( SqlSelect a r
     , ToAlias a
     , ToAliasReference a
