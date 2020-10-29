@@ -891,7 +891,7 @@ testSelectSubQuery run = do
         let q = do
                 p <- Experimental.from $ Table @Person
                 return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ Experimental.from $ SelectQuery q
+        ret <- select $ Experimental.from q
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
     it "supports sub-selecting Maybe entities" $ do
@@ -901,7 +901,7 @@ testSelectSubQuery run = do
         l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
         let l1WithDeeds = do d <- l1Deeds
                              pure (l1e, Just d)
-        ret <- select $ Experimental.from $ SelectQuery $ do
+        ret <- select $ Experimental.from $ do
           (lords :& deeds) <-
               Experimental.from $ Table @Lord
               `LeftOuterJoin` Table @Deed
@@ -976,7 +976,7 @@ testSelectSubQuery run = do
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do
                 (lord :& deed) <- Experimental.from $ Table @Lord
-                        `InnerJoin` (SelectQuery $ Experimental.from $ Table @Deed)
+                        `InnerJoin` (Experimental.from $ Table @Deed)
                         `Experimental.on` (\(lord :& deed) ->
                                              lord ^. LordId ==. deed ^. DeedOwnerId)
                 groupBy (lord ^. LordId)
@@ -991,10 +991,9 @@ testSelectSubQuery run = do
         l3k <- insert l3
         let q = do
                 (lord :& (_, dogCounts)) <- Experimental.from $ Table @Lord
-                        `LeftOuterJoin` (SelectQuery $ do
-                                      lord <- Experimental.from $ Table @Lord
-                                      pure (lord ^. LordId, lord ^. LordDogs)
-                                   )
+                        `LeftOuterJoin` do
+                            lord <- Experimental.from $ Table @Lord
+                            pure (lord ^. LordId, lord ^. LordDogs)
                         `Experimental.on` (\(lord :& (lordId, _)) ->
                                              just (lord ^. LordId) ==. lordId)
                 groupBy (lord ^. LordId, dogCounts)
@@ -1007,17 +1006,17 @@ testSelectSubQuery run = do
           _ <- insert p1
           _ <- insert p2
           let q = Experimental.from $
-                  (SelectQuery $ do
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ not_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
-                  `Union`
-                  (SelectQuery $ do
+                  `union_`
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
-                  `Union`
-                  (SelectQuery $ do
+                  `union_`
+                  (do
                     p <- Experimental.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))

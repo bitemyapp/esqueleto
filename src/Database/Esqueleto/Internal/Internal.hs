@@ -47,6 +47,7 @@ import Data.Semigroup
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Internal.PersistentImport
+import qualified Database.Persist
 import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -57,6 +58,7 @@ import qualified Data.ByteString as B
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
@@ -137,7 +139,6 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 -- and tuple-joins do not need an 'on' clause, but 'InnerJoin' and the various
 -- outer joins do.
 --
--- Note that this function will be replaced by the one in
 -- "Database.Esqueleto.Experimental" in version 4.0.0.0 of the library. The
 -- @Experimental@ module has a dramatically improved means for introducing
 -- tables and entities that provides more power and less potential for runtime
@@ -1680,14 +1681,15 @@ data SideData = SideData { sdDistinctClause :: !DistinctClause
                          , sdOrderByClause  :: ![OrderByClause]
                          , sdLimitClause    :: !LimitClause
                          , sdLockingClause  :: !LockingClause
+                         , sdCteClause      :: ![CommonTableExpressionClause]
                          }
 
 instance Semigroup SideData where
-  SideData d f s w g h o l k <> SideData d' f' s' w' g' h' o' l' k' =
-    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k')
+  SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
+    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty
+  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
   mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
@@ -1711,14 +1713,29 @@ data FromClause =
     FromStart Ident EntityDef
   | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
   | OnClause (SqlExpr (Value Bool))
-  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue])) SubQueryType
+  | FromIdent Ident
+
+data CommonTableExpressionKind
+  = RecursiveCommonTableExpression
+  | NormalCommonTableExpression
+  deriving Eq
+
+data CommonTableExpressionClause =
+  CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+
+data SubQueryType
+  = NormalSubQuery
+  | LateralSubQuery
+  deriving Show
 
 collectIdents :: FromClause -> Set Ident
 collectIdents fc = case fc of
   FromStart i _ -> Set.singleton i
   FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
   OnClause _ -> mempty
-  FromQuery _ _ -> mempty
+  FromQuery _ _ _ -> mempty
+  FromIdent _ -> mempty
 
 instance Show FromClause where
   show fc = case fc of
@@ -1740,9 +1757,10 @@ instance Show FromClause where
       ]
     OnClause expr ->
       "(OnClause " <> render' expr <> ")"
-    FromQuery ident _->
-      "(FromQuery " <> show ident <> ")"
-
+    FromQuery ident _ subQueryType ->
+      "(FromQuery " <> show ident <> " " <> show subQueryType <> ")"
+    FromIdent ident ->
+      "(FromIdent " <> show ident <> ")"
 
     where
       dummy = SqlBackend
@@ -1800,12 +1818,14 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromStart i _) = Just i
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
-    findRightmostIdent (FromQuery _ _) = Nothing
+    findRightmostIdent (FromQuery _ _ _) = Nothing
+    findRightmostIdent (FromIdent _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
-    findLeftmostIdent (FromQuery _ _) = Nothing
+    findLeftmostIdent (FromQuery _ _ _) = Nothing
+    findLeftmostIdent (FromIdent _) = Nothing
 
     tryMatch
       :: Set Ident
@@ -2632,14 +2652,16 @@ toRawSql mode (conn, firstIdentState) query =
                havingClause
                orderByClauses
                limitClause
-               lockingClause = sd
+               lockingClause
+               cteClause = sd
       -- Pass the finalIdentState (containing all identifiers
       -- that were used) to the subsequent calls.  This ensures
       -- that no name clashes will occur on subqueries that may
       -- appear on the expressions below.
       info = (projectBackend conn, finalIdentState)
   in mconcat
-      [ makeInsertInto info mode ret
+      [ makeCte        info cteClause
+      , makeInsertInto info mode ret
       , makeSelect     info mode distinctClause ret
       , makeFrom       info mode fromClauses
       , makeSet        info setClauses
@@ -2733,6 +2755,33 @@ intersperseB a = mconcat . intersperse a . filter (/= mempty)
 uncommas' :: Monoid a => [(TLB.Builder, a)] -> (TLB.Builder, a)
 uncommas' = (uncommas *** mconcat) . unzip
 
+makeCte :: IdentInfo -> [CommonTableExpressionClause] -> (TLB.Builder, [PersistValue])
+makeCte info cteClauses =
+  let
+    withCteText
+      | hasRecursive = "WITH RECURSIVE "
+      | otherwise = "WITH "
+
+      where
+        hasRecursive =
+          any (== RecursiveCommonTableExpression) $
+            fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind) cteClauses
+
+    cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
+      first (\tlb ->
+          useIdent info cteIdent <> " AS " <> parens tlb
+      ) $ cteFn info
+
+    cteBody =
+      mconcat $
+        intersperse (",\n", mempty) $
+          fmap cteClauseToText cteClauses
+  in
+  if length cteClauses == 0 then
+    mempty
+  else
+    first (\tlb -> withCteText <> tlb <> "\n") cteBody
+
 
 makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
 makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
@@ -2783,9 +2832,15 @@ makeFrom info mode fs = ret
               , maybe mempty makeOnClause monClause
               ]
     mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
-    mk _ (FromQuery ident f) =
+    mk _ (FromQuery ident f subqueryType) =
       let (queryText, queryVals) = f info
-      in ((parens queryText) <> " AS " <> useIdent info ident, queryVals)
+          lateralKeyword =
+            case subqueryType of
+              NormalSubQuery -> ""
+              LateralSubQuery -> "LATERAL "
+      in (lateralKeyword <> (parens queryText) <> " AS " <> useIdent info ident, queryVals)
+    mk _ (FromIdent ident) =
+      (useIdent info ident, mempty)
 
     base ident@(I identText) def =
       let db@(DBName dbText) = entityDB def
@@ -3608,3 +3663,66 @@ data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
 --
 -- @since 3.2.0
 instance Exception RenderExprException
+
+
+----------------------------------------------------------------------
+
+
+-- | @valkey i = 'val' . 'toSqlKey'@
+-- (<https://github.com/prowdsponsor/esqueleto/issues/9>).
+valkey :: (ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
+          Int64 -> SqlExpr (Value (Key entity))
+valkey = val . toSqlKey
+
+
+-- | @valJ@ is like @val@ but for something that is already a @Value@. The use
+-- case it was written for was, given a @Value@ lift the @Key@ for that @Value@
+-- into the query expression in a type safe way. However, the implementation is
+-- more generic than that so we call it @valJ@.
+--
+-- Its important to note that the input entity and the output entity are
+-- constrained to be the same by the type signature on the function
+-- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
+--
+-- /Since: 1.4.2/
+valJ :: (PersistField (Key entity)) =>
+        Value (Key entity) -> SqlExpr (Value (Key entity))
+valJ = val . unValue
+
+
+----------------------------------------------------------------------
+
+
+-- | Synonym for 'Database.Persist.Store.delete' that does not
+-- clash with @esqueleto@'s 'delete'.
+deleteKey :: ( PersistStore backend
+             , BaseBackend backend ~ PersistEntityBackend val
+             , MonadIO m
+             , PersistEntity val )
+          => Key val -> R.ReaderT backend m ()
+deleteKey = Database.Persist.delete
+
+-- | Avoid N+1 queries and join entities into a map structure
+-- @
+-- getFoosAndNestedBarsFromParent :: ParentId -> (Map (Key Foo) (Foo, [Maybe (Entity Bar)]))
+-- getFoosAndNestedBarsFromParent parentId = 'fmap' associateJoin $ 'select' $
+-- 'from' $ \\(foo `'LeftOuterJoin`` bar) -> do
+--   'on' (bar '?.' BarFooId '==.' foo '^.' FooId)
+--   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
+--   'pure' (foo, bar)
+-- @
+--
+-- @since 3.1.2
+associateJoin
+  :: forall e1 e0
+   . Ord (Key e0)
+  => [(Entity e0, e1)]
+  -> Map.Map (Key e0) (e0, [e1])
+associateJoin = foldr f start
+  where
+    start = Map.empty
+    f (one, many) =
+      Map.insertWith
+        (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
+        (entityKey one)
+        (entityVal one, [many])

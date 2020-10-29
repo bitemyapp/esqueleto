@@ -33,6 +33,8 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
 import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.Experimental hiding (random_, from, on)
+import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
@@ -1151,6 +1153,146 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
+testCommonTableExpressions :: Spec
+testCommonTableExpressions = do
+  describe "You can run them" $ do
+    it "will run" $ do
+      run $ do
+
+        void $ select $ do
+          limitedLordsCte <-
+            Experimental.with $ do
+              lords <- Experimental.from $ Experimental.Table @Lord
+              limit 10
+              pure lords
+          lords <- Experimental.from limitedLordsCte
+          orderBy [asc $ lords ^. LordId]
+          pure lords
+
+      True `shouldBe` True
+
+  it "can do multiple recursive queries" $ do
+    vals <- run $ do
+      let oneToTen = Experimental.withRecursive
+                     (pure $ val (1 :: Int))
+                     Experimental.unionAll_
+                     (\self -> do
+                         v <- Experimental.from self
+                         where_ $ v <. val 10
+                         pure $ v +. val 1
+                     )
+
+      select $ do
+        cte <- oneToTen
+        cte2 <- oneToTen
+        res1 <- Experimental.from cte
+        res2 <- Experimental.from cte2
+        pure (res1, res2)
+    vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
+
+  it "passing previous query works" $
+    let
+      oneToTen =
+        Experimental.withRecursive
+           (pure $ val (1 :: Int))
+           Experimental.unionAll_
+           (\self -> do
+               v <- Experimental.from self
+               where_ $ v <. val 10
+               pure $ v +. val 1
+           )
+
+      oneMore q =
+        Experimental.with $ do
+          v <- Experimental.from q
+          pure $ v +. val 1
+    in do
+    vals <- run $ do
+
+      select $ do
+        cte <- oneToTen
+        cte2 <- oneMore cte
+        res <- Experimental.from cte2
+        pure res
+    vals `shouldBe` fmap Value [2..11]
+
+-- Since lateral queries arent supported in Sqlite or older versions of mysql
+-- the test is in the Postgres module
+testLateralQuery :: Spec
+testLateralQuery = do
+  describe "Lateral queries" $ do
+    it "supports CROSS JOIN LATERAL" $ do
+      _ <- run $ do
+        select $ do
+            l :& c <-
+              Experimental.from $ Table @Lord
+              `CrossJoin` \lord -> do
+                    deed <- Experimental.from $ Table @Deed
+                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                    pure $ countRows @Int
+            pure (l, c)
+      True `shouldBe` True
+
+    it "supports INNER JOIN LATERAL" $ do
+      run $ do
+        let subquery lord = do
+                            deed <- Experimental.from $ Table @Deed
+                            where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                            pure $ countRows @Int
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `InnerJoin` subquery
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value Int)]
+        pure ()
+      True `shouldBe` True
+
+    it "supports LEFT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `LeftOuterJoin` (\lord -> do
+                                    deed <- Experimental.from $ Table @Deed
+                                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                    pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Entity Lord, Value (Maybe Int))]
+        pure ()
+      True `shouldBe` True
+
+  {--
+    it "compile error on RIGHT JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `RightOuterJoin` (\lord -> do
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value Int)]
+        pure ()
+    it "compile error on FULL OUTER JOIN LATERAL" $ do
+      run $ do
+        res <- select $ do
+          l :& c <- Experimental.from $ Table @Lord
+                          `FullOuterJoin` (\lord -> do
+                                      deed <- Experimental.from $ Table @Deed
+                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
+                                      pure $ countRows @Int)
+                          `Experimental.on` (const $ val True)
+          pure (l, c)
+
+        let _ = res :: [(Maybe (Entity Lord), Value (Maybe Int))]
+        pure ()
+    --}
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
@@ -1226,6 +1368,7 @@ main = do
       testUpsert
       testInsertSelectWithConflict
       testFilterWhere
+      testCommonTableExpressions
       describe "PostgreSQL JSON tests" $ do
         -- NOTE: We only clean the table once, so we
         -- can use its contents across all JSON tests
@@ -1234,6 +1377,7 @@ main = do
           cleanJSON
         testJSONInsertions
         testJSONOperators
+      testLateralQuery
 
 
 run, runSilent, runVerbose :: Run

@@ -1,8 +1,19 @@
-3.3.4.1
+3.4.0.0
+=======
+- @belevy, @charukiewicz
+  - [#215](https://github.com/bitemyapp/esqueleto/pull/215)
+    - Added support for common table expressions (`with`, `withRecursive`)
+    - Added support for lateral JOINs with updated example (Example #6)
+    - Deprecated `SelectQuery`, removing the neccessity to tag `SqlQuery` values
+    - Deprecated use of data constructors for SQL set operations (replaced with functions)
+    - Refactored module structure to fix haddock build (fixes build from `3.3.4.0`)
 
+3.3.4.1
+=======
 - @maxgabriel
   - [#214](https://github.com/bitemyapp/esqueleto/pull/214)
     - Add suggested hlint rules for proper `isNothing` usage
+
 
 3.3.4.0
 =======
