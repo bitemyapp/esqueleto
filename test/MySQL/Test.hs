@@ -241,6 +241,6 @@ withConn =
   withMySQLConn defaultConnectInfo
     { connectHost     = "localhost"
     , connectUser     = "travis"
-    , connectPassword = ""
+    , connectPassword = "esqutest"
     , connectDatabase = "esqutest"
     }
