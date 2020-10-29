@@ -1166,7 +1166,7 @@ withRecursive baseCase unionKind recursiveCase = do
   Q $ W.tell mempty{sdCteClause = [clause]}
   pure refFrom
 
-{-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release. #-}
+{-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasT a = a
 
 -- Tedious tuple magic
@@ -1244,7 +1244,7 @@ instance ( ToAlias a
   toAlias x = to8 <$> (toAlias $ from8 x)
 
 
-{-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release. #-}
+{-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasReferenceT a = a
 
 -- more tedious tuple magic
