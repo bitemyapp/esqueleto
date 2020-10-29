@@ -1205,29 +1205,20 @@ withRecursive baseCase unionKind recursiveCase = do
   Q $ W.tell mempty{sdCteClause = [clause]}
   pure refFrom
 
-type family ToAliasT a where
-  ToAliasT (SqlExpr (Value a)) = SqlExpr (Value a)
-  ToAliasT (SqlExpr (Entity a)) = SqlExpr (Entity a)
-  ToAliasT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
-  ToAliasT (a, b) = (ToAliasT a, ToAliasT b)
-  ToAliasT (a, b, c) = (ToAliasT a, ToAliasT b, ToAliasT c)
-  ToAliasT (a, b, c, d) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d)
-  ToAliasT (a, b, c, d, e) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e)
-  ToAliasT (a, b, c, d, e, f) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f)
-  ToAliasT (a, b, c, d, e, f, g) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g)
-  ToAliasT (a, b, c, d, e, f, g, h) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g, ToAliasT h)
-
 -- Tedious tuple magic
 class ToAlias a where
+  type ToAliasT a :: *
   toAlias :: a -> SqlQuery (ToAliasT a)
 
 instance ToAlias (SqlExpr (Value a)) where
+  type ToAliasT (SqlExpr (Value a)) = SqlExpr (Value a)
   toAlias v@(EAliasedValue _ _) = pure v
   toAlias v = do
     ident <- newIdentFor (DBName "v")
     pure $ EAliasedValue ident v
 
 instance ToAlias (SqlExpr (Entity a)) where
+  type ToAliasT (SqlExpr (Entity a)) = SqlExpr (Entity a)
   toAlias v@(EAliasedEntityReference _ _) = pure v
   toAlias v@(EAliasedEntity _ _) = pure v
   toAlias (EEntity tableIdent) = do
@@ -1235,15 +1226,18 @@ instance ToAlias (SqlExpr (Entity a)) where
     pure $ EAliasedEntity ident tableIdent
 
 instance ToAlias (SqlExpr (Maybe (Entity a))) where
+  type ToAliasT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
   toAlias (EMaybe e) = EMaybe <$> toAlias e
 
 instance (ToAlias a, ToAlias b) => ToAlias (a,b) where
+  type ToAliasT (a, b) = (ToAliasT a, ToAliasT b)
   toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
 
 instance ( ToAlias a
          , ToAlias b
          , ToAlias c
          ) => ToAlias (a,b,c) where
+  type ToAliasT (a, b, c) = (ToAliasT a, ToAliasT b, ToAliasT c)
   toAlias x = to3 <$> (toAlias $ from3 x)
 
 instance ( ToAlias a
@@ -1251,6 +1245,7 @@ instance ( ToAlias a
          , ToAlias c
          , ToAlias d
          ) => ToAlias (a,b,c,d) where
+  type ToAliasT (a, b, c, d) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d)
   toAlias x = to4 <$> (toAlias $ from4 x)
 
 instance ( ToAlias a
@@ -1259,6 +1254,7 @@ instance ( ToAlias a
          , ToAlias d
          , ToAlias e
          ) => ToAlias (a,b,c,d,e) where
+  type ToAliasT (a, b, c, d, e) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e)
   toAlias x = to5 <$> (toAlias $ from5 x)
 
 instance ( ToAlias a
@@ -1268,6 +1264,7 @@ instance ( ToAlias a
          , ToAlias e
          , ToAlias f
          ) => ToAlias (a,b,c,d,e,f) where
+  type ToAliasT (a, b, c, d, e, f) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f)
   toAlias x = to6 <$> (toAlias $ from6 x)
 
 instance ( ToAlias a
@@ -1278,6 +1275,7 @@ instance ( ToAlias a
          , ToAlias f
          , ToAlias g
          ) => ToAlias (a,b,c,d,e,f,g) where
+  type ToAliasT (a, b, c, d, e, f, g) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g)
   toAlias x = to7 <$> (toAlias $ from7 x)
 
 instance ( ToAlias a
@@ -1289,45 +1287,41 @@ instance ( ToAlias a
          , ToAlias g
          , ToAlias h
          ) => ToAlias (a,b,c,d,e,f,g,h) where
+  type ToAliasT (a, b, c, d, e, f, g, h) = (ToAliasT a, ToAliasT b, ToAliasT c, ToAliasT d, ToAliasT e, ToAliasT f, ToAliasT g, ToAliasT h)
   toAlias x = to8 <$> (toAlias $ from8 x)
 
 
-type family ToAliasReferenceT a where
-  ToAliasReferenceT (SqlExpr (Value a)) = SqlExpr (Value a)
-  ToAliasReferenceT (SqlExpr (Entity a)) = SqlExpr (Entity a)
-  ToAliasReferenceT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
-  ToAliasReferenceT (a,b) = (ToAliasReferenceT a, ToAliasReferenceT b)
-  ToAliasReferenceT (a,b,c) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c)
-  ToAliasReferenceT (a, b, c, d) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d)
-  ToAliasReferenceT (a, b, c, d, e) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e)
-  ToAliasReferenceT (a, b, c, d, e, f) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f)
-  ToAliasReferenceT (a, b, c, d, e, f, g) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g)
-  ToAliasReferenceT (a, b, c, d, e, f, g, h) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g, ToAliasReferenceT h)
-
 -- more tedious tuple magic
 class ToAliasReference a where
+  type ToAliasReferenceT a :: *
   toAliasReference :: Ident -> a -> SqlQuery (ToAliasReferenceT a)
 
 instance ToAliasReference (SqlExpr (Value a)) where
+  type ToAliasReferenceT (SqlExpr (Value a)) = SqlExpr (Value a)
   toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
   toAliasReference _           v@(ERaw _ _)                 = toAlias v
   toAliasReference _           v@(ECompositeKey _)          = toAlias v
   toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
 
 instance ToAliasReference (SqlExpr (Entity a)) where
+  type ToAliasReferenceT (SqlExpr (Entity a)) = SqlExpr (Entity a)
   toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
   toAliasReference _ e@(EEntity _) = toAlias e
   toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
 
 instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
+  type ToAliasReferenceT (SqlExpr (Maybe (Entity a))) = SqlExpr (Maybe (Entity a))
   toAliasReference s (EMaybe e) = EMaybe <$> toAliasReference s e
+
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
+  type ToAliasReferenceT (a,b) = (ToAliasReferenceT a, ToAliasReferenceT b)
   toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
 
 instance ( ToAliasReference a
          , ToAliasReference b
          , ToAliasReference c
          ) => ToAliasReference (a,b,c) where
+  type ToAliasReferenceT (a,b,c) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c)
   toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
 
 instance ( ToAliasReference a
@@ -1335,6 +1329,7 @@ instance ( ToAliasReference a
          , ToAliasReference c
          , ToAliasReference d
          ) => ToAliasReference (a,b,c,d) where
+  type ToAliasReferenceT (a, b, c, d) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d)
   toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
 
 instance ( ToAliasReference a
@@ -1343,6 +1338,7 @@ instance ( ToAliasReference a
          , ToAliasReference d
          , ToAliasReference e
          ) => ToAliasReference (a,b,c,d,e) where
+  type ToAliasReferenceT (a, b, c, d, e) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e)
   toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
 instance ( ToAliasReference a
@@ -1352,6 +1348,7 @@ instance ( ToAliasReference a
          , ToAliasReference e
          , ToAliasReference f
          ) => ToAliasReference (a,b,c,d,e,f) where
+  type ToAliasReferenceT (a, b, c, d, e, f) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f)
   toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
 
 instance ( ToAliasReference a
@@ -1362,6 +1359,7 @@ instance ( ToAliasReference a
          , ToAliasReference f
          , ToAliasReference g
          ) => ToAliasReference (a,b,c,d,e,f,g) where
+  type ToAliasReferenceT (a, b, c, d, e, f, g) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g)
   toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
 
 instance ( ToAliasReference a
@@ -1373,6 +1371,7 @@ instance ( ToAliasReference a
          , ToAliasReference g
          , ToAliasReference h
          ) => ToAliasReference (a,b,c,d,e,f,g,h) where
+  type ToAliasReferenceT (a, b, c, d, e, f, g, h) = (ToAliasReferenceT a, ToAliasReferenceT b, ToAliasReferenceT c, ToAliasReferenceT d, ToAliasReferenceT e, ToAliasReferenceT f, ToAliasReferenceT g, ToAliasReferenceT h)
   toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
 
 
