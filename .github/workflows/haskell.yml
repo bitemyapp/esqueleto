@@ -30,11 +30,11 @@ jobs:
            postgresql password: esqutest
            postgresql db: esqutest
       - name: Create MySQL
-        run:
-          - mysql -uroot -proot -e "CREATE DATABASE esqutest;"
-          - mysql -uroot -proot -e "CREATE USER 'travis'@'localhost' IDENTIFIED BY 'esqutest';"
-          - mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON *.* TO 'travis'@'localhost';"
-          - mysql -uroot -proot -e "FLUSH PRIVILEGES;"
+        run: |
+          mysql -uroot -proot -e "CREATE DATABASE esqutest;"
+          mysql -uroot -proot -e "CREATE USER 'travis'@'localhost' IDENTIFIED BY 'esqutest';"
+          mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON *.* TO 'travis'@'localhost';"
+          mysql -uroot -proot -e "FLUSH PRIVILEGES;"
             # - name: Shutdown Ubuntu MySQL (SUDO)
             #   run: sudo service mysql stop
             # - uses: mirromutth/mysql-action@v1.1
