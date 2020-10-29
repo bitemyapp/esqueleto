@@ -1,27 +1,20 @@
-{-# LANGUAGE DeriveDataTypeable
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , MultiParamTypeClasses
-           , TypeFamilies
-           , UndecidableInstances
-           , GADTs
- #-}
-{-# LANGUAGE ConstraintKinds
-           , EmptyDataDecls
-           , FlexibleContexts
-           , FlexibleInstances
-           , FunctionalDependencies
-           , GADTs
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , UndecidableInstances
-           , ScopedTypeVariables
-           , InstanceSigs
-           , Rank2Types
-           , CPP
- #-}
+{-# LANGUAGE CPP #-}
+{-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
@@ -31,26 +24,19 @@
 module Database.Esqueleto.Internal.Internal where
 
 import Control.Applicative ((<|>))
-import Control.Arrow ((***), first)
+import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
-import qualified Data.Maybe as Maybe
-import Control.Monad (guard, ap, MonadPlus(..), void)
+import Control.Monad (MonadPlus(..), ap, guard, void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
-import Data.Acquire (with, allocateAcquire, Acquire)
+import Data.Acquire (Acquire, allocateAcquire, with)
 import Data.Int (Int64)
 import Data.List (intersperse)
+import qualified Data.Maybe as Maybe
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
-import qualified Data.Monoid as Monoid
-import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Internal.PersistentImport
-import qualified Database.Persist
-import Database.Persist.Sql.Util (entityColumnNames, entityColumnCount, parseEntityValues, isIdField, hasCompositeKey)
-import qualified Data.Set as Set
-import Data.Set (Set)
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
@@ -59,15 +45,25 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
 import qualified Data.Map.Strict as Map
+import qualified Data.Monoid as Monoid
+import Data.Proxy (Proxy(..))
+import Data.Set (Set)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
-
 import Data.Typeable (Typeable)
-import Text.Blaze.Html (Html)
-
-
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
+import Database.Esqueleto.Internal.PersistentImport
+import qualified Database.Persist
+import Database.Persist.Sql.Util
+       ( entityColumnCount
+       , entityColumnNames
+       , hasCompositeKey
+       , isIdField
+       , parseEntityValues
+       )
+import Text.Blaze.Html (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -83,53 +79,55 @@ import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 --   In the end, 'fromFinish' is called to materialize the
 --   @JOIN@.
 fromStart
-  :: ( PersistEntity a
-     , BackendCompatible SqlBackend (PersistEntityBackend a) )
-  => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a))))
-fromStart = x
-  where
-    x = do
-      let ed = entityDef (getVal x)
-      ident <- newIdentFor (entityDB ed)
-      let ret   = EEntity ident
-          f' = FromStart ident ed
-      return (EPreprocessedFrom ret f')
-    getVal :: SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))) -> Proxy a
-    getVal = const Proxy
+    :: forall a.
+    ( PersistEntity a
+    , BackendCompatible SqlBackend (PersistEntityBackend a)
+    )
+    => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a))))
+fromStart = do
+    let ed = entityDef (Proxy :: Proxy a)
+    ident <- newIdentFor (entityDB ed)
+    let ret = EEntity ident
+        f' = FromStart ident ed
+    return (EPreprocessedFrom ret f')
 
 -- | (Internal) Same as 'fromStart', but entity may be missing.
 fromStartMaybe
-  :: ( PersistEntity a
-     , BackendCompatible SqlBackend (PersistEntityBackend a) )
-  => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a)))))
+    :: ( PersistEntity a
+       , BackendCompatible SqlBackend (PersistEntityBackend a)
+       )
+    => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a)))))
 fromStartMaybe = maybelize <$> fromStart
   where
-    maybelize :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
-              -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
+    maybelize
+        :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
+        -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
     maybelize (EPreprocessedFrom ret f') = EPreprocessedFrom (EMaybe ret) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
-  :: IsJoinKind join
-  => SqlExpr (PreprocessedFrom a)
-  -> SqlExpr (PreprocessedFrom b)
-  -> SqlQuery (SqlExpr (PreprocessedFrom (join a b)))
+    :: IsJoinKind join
+    => SqlExpr (PreprocessedFrom a)
+    -> SqlExpr (PreprocessedFrom b)
+    -> SqlQuery (SqlExpr (PreprocessedFrom (join a b)))
 fromJoin (EPreprocessedFrom lhsRet lhsFrom)
          (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
-  let ret   = smartJoin lhsRet rhsRet
-      from' = FromJoin lhsFrom             -- LHS
-                       (reifyJoinKind ret) -- JOIN
-                       rhsFrom             -- RHS
-                       Nothing             -- ON
-  return (EPreprocessedFrom ret from')
+    let ret = smartJoin lhsRet rhsRet
+        from' =
+            FromJoin
+                lhsFrom             -- LHS
+                (reifyJoinKind ret) -- JOIN
+                rhsFrom             -- RHS
+                Nothing             -- ON
+    return (EPreprocessedFrom ret from')
 
 -- | (Internal) Finish a @JOIN@.
 fromFinish
   :: SqlExpr (PreprocessedFrom a)
   -> SqlQuery a
 fromFinish (EPreprocessedFrom ret f') = Q $ do
-  W.tell mempty { sdFromClause = [f'] }
-  return ret
+    W.tell mempty { sdFromClause = [f'] }
+    return ret
 
 -- | @WHERE@ clause: restrict the query's result.
 where_ :: SqlExpr (Value Bool) -> SqlQuery ()
@@ -283,7 +281,7 @@ offset n = Q $ W.tell mempty { sdLimitClause = Limit Nothing  (Just n) }
 --   ...
 -- @
 --
--- /Since: 2.2.4/
+-- @since 2.2.4
 distinct :: SqlQuery a -> SqlQuery a
 distinct act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
 
@@ -318,14 +316,14 @@ distinct act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
 --
 -- Supported by PostgreSQL only.
 --
--- /Since: 2.2.4/
+-- @since 2.2.4
 distinctOn :: [SqlExpr DistinctOn] -> SqlQuery a -> SqlQuery a
 distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs }) >> act
 
 -- | Erase an SqlExpression's type so that it's suitable to
 -- be used by 'distinctOn'.
 --
--- /Since: 2.2.4/
+-- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
 don = EDistinctOn
 
@@ -345,27 +343,27 @@ don = EDistinctOn
 --   ...
 -- @
 --
--- /Since: 2.2.4/
+-- @since 2.2.4
 distinctOnOrderBy :: [SqlExpr OrderBy] -> SqlQuery a -> SqlQuery a
 distinctOnOrderBy exprs act =
-  distinctOn (toDistinctOn <$> exprs) $ do
-    orderBy exprs
-    act
+    distinctOn (toDistinctOn <$> exprs) $ do
+        orderBy exprs
+        act
   where
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
     toDistinctOn (EOrderBy _ f) = EDistinctOn f
     toDistinctOn EOrderRandom =
-      error "We can't select distinct by a random order!"
+        error "We can't select distinct by a random order!"
 
 -- | @ORDER BY random()@ clause.
 --
--- /Since: 1.3.10/
+-- @since 1.3.10
 rand :: SqlExpr OrderBy
 rand = EOrderRandom
 
 -- | @HAVING@.
 --
--- /Since: 1.2.2/
+-- @since 1.2.2
 having :: SqlExpr (Value Bool) -> SqlQuery ()
 having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
@@ -375,7 +373,7 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 -- If multiple calls to 'locking' are made on the same query,
 -- the last one is used.
 --
--- /Since: 2.2.7/
+-- @since 2.2.7
 locking :: LockingKind -> SqlQuery ()
 locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
 
@@ -433,9 +431,9 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 --
 -- @since 3.2.0
 subSelectMaybe
-  :: PersistField a
-  => SqlQuery (SqlExpr (Value (Maybe a)))
-  -> SqlExpr (Value (Maybe a))
+    :: PersistField a
+    => SqlQuery (SqlExpr (Value (Maybe a)))
+    -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
 -- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
@@ -443,13 +441,13 @@ subSelectMaybe = joinV . subSelect
 --
 -- @since 3.2.0
 subSelectCount
-  :: (Num a, PersistField a)
-  => SqlQuery ignored
-  -> SqlExpr (Value a)
-subSelectCount query = do
-  subSelectUnsafe $ do
-    _ <- query
-    pure countRows
+    :: (Num a, PersistField a)
+    => SqlQuery ignored
+    -> SqlExpr (Value a)
+subSelectCount query =
+    subSelectUnsafe $ do
+        _ <- query
+        pure countRows
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr' that returns a list. This is an
 -- alias for 'subList_select' and is provided for symmetry with the other safe
@@ -457,9 +455,9 @@ subSelectCount query = do
 --
 -- @since 3.2.0
 subSelectList
-  :: PersistField a
-  => SqlQuery (SqlExpr (Value a))
-  -> SqlExpr (ValueList a)
+    :: PersistField a
+    => SqlQuery (SqlExpr (Value a))
+    -> SqlExpr (ValueList a)
 subSelectList = subList_select
 
 -- | Performs a sub-select using the given foreign key on the entity. This is
@@ -486,22 +484,22 @@ subSelectList = subList_select
 --
 -- @since 3.2.0
 subSelectForeign
-  ::
-  ( BackendCompatible SqlBackend (PersistEntityBackend val1)
-  , PersistEntity val1, PersistEntity val2, PersistField a
-  )
-  => SqlExpr (Entity val2)
-  -- ^ An expression representing the table you have access to now.
-  -> EntityField val2 (Key val1)
-  -- ^ The foreign key field on the table.
-  -> (SqlExpr (Entity val1) -> SqlExpr (Value a))
-  -- ^ A function to extract a value from the foreign reference table.
-  -> SqlExpr (Value a)
+    ::
+    ( BackendCompatible SqlBackend (PersistEntityBackend val1)
+    , PersistEntity val1, PersistEntity val2, PersistField a
+    )
+    => SqlExpr (Entity val2)
+    -- ^ An expression representing the table you have access to now.
+    -> EntityField val2 (Key val1)
+    -- ^ The foreign key field on the table.
+    -> (SqlExpr (Entity val1) -> SqlExpr (Value a))
+    -- ^ A function to extract a value from the foreign reference table.
+    -> SqlExpr (Value a)
 subSelectForeign expr foreignKey k =
-  subSelectUnsafe $
-  from $ \table -> do
-  where_ $ expr ^. foreignKey ==. table ^. persistIdField
-  pure (k table)
+    subSelectUnsafe $
+    from $ \table -> do
+    where_ $ expr ^. foreignKey ==. table ^. persistIdField
+    pure (k table)
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is unsafe,
 -- because it can throw runtime exceptions in two cases:
@@ -524,61 +522,65 @@ subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
 (^.)
-  :: forall typ val. (PersistEntity val, PersistField typ)
-  => SqlExpr (Entity val)
-  -> EntityField val typ
-  -> SqlExpr (Value typ)
+    :: forall typ val. (PersistEntity val, PersistField typ)
+    => SqlExpr (Entity val)
+    -> EntityField val typ
+    -> SqlExpr (Value typ)
 (EAliasedEntityReference source base) ^. field =
-  EValueReference source (\_ -> aliasedEntityColumnIdent base fieldDef)
-    where
-      fieldDef =
+    EValueReference source (\_ -> aliasedEntityColumnIdent base fieldDef)
+  where
+    fieldDef =
         if isIdField field then
-          -- TODO what about composite natural keys in a join this will ignore them
-          head $ entityKeyFields ed
+            -- TODO what about composite natural keys in a join this will ignore them
+            head $ entityKeyFields ed
         else
-          persistFieldDef field
+            persistFieldDef field
 
-      ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
+    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
 e ^. field
-  | isIdField field = idFieldValue
-  | otherwise = ERaw Never $ \info -> (dot info $ persistFieldDef field, [])
+    | isIdField field = idFieldValue
+    | otherwise = ERaw Never $ \info -> (dot info $ persistFieldDef field, [])
   where
     idFieldValue =
-      case entityKeyFields ed of
-        idField:[] ->
-          ERaw Never    $ \info -> (dot info idField, [])
+        case entityKeyFields ed of
+            idField:[] ->
+                ERaw Never    $ \info -> (dot info idField, [])
 
-        idFields ->
-          ECompositeKey $ \info ->  dot info <$> idFields
+            idFields ->
+                ECompositeKey $ \info ->  dot info <$> idFields
 
 
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
     dot info fieldDef =
-      useIdent info sourceIdent <> "." <> fieldIdent
-        where
-          sourceIdent =
+        useIdent info sourceIdent <> "." <> fieldIdent
+      where
+        sourceIdent =
             case e of
-              EEntity ident -> ident
-              EAliasedEntity baseI _ -> baseI
-          fieldIdent =
+                EEntity ident -> ident
+                EAliasedEntity baseI _ -> baseI
+        fieldIdent =
             case e of
-              EEntity _ -> fromDBName info (fieldDB fieldDef)
-              EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+                EEntity _ -> fromDBName info (fieldDB fieldDef)
+                EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
-withNonNull :: PersistField typ
-            => SqlExpr (Value (Maybe typ))
-            -> (SqlExpr (Value typ) -> SqlQuery a)
-            -> SqlQuery a
+withNonNull
+    :: PersistField typ
+    => SqlExpr (Value (Maybe typ))
+    -> (SqlExpr (Value typ) -> SqlQuery a)
+    -> SqlQuery a
 withNonNull field f = do
-  where_ $ not_ $ isNothing field
-  f $ veryUnsafeCoerceSqlExprValue field
+    where_ $ not_ $ isNothing field
+    f $ veryUnsafeCoerceSqlExprValue field
 
 -- | Project a field of an entity that may be null.
-(?.) :: (PersistEntity val, PersistField typ) =>
-        SqlExpr (Maybe (Entity val)) -> EntityField val typ -> SqlExpr (Value (Maybe typ))
+(?.)
+    :: (PersistEntity val, PersistField typ)
+    => SqlExpr (Maybe (Entity val))
+    -> EntityField val typ
+    -> SqlExpr (Value (Maybe typ))
 EMaybe r ?. field = just (r ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
@@ -606,16 +608,17 @@ val v = ERaw Never $ const ("?", [toPersistValue v])
 -- > - error: {lhs: v ==. val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
 -- > - error: {lhs: v !=. nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
 -- > - error: {lhs: v !=. val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
-
-
-
 isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
 isNothing v =
     case v of
-      ERaw p f             -> isNullExpr $ first (parensM p) . f
-      EAliasedValue i _    -> isNullExpr $ aliasedValueIdentToRawSql i
-      EValueReference i i' -> isNullExpr $ valueReferenceToRawSql i i'
-      ECompositeKey f      -> ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
+        ERaw p f ->
+            isNullExpr $ first (parensM p) . f
+        EAliasedValue i _ ->
+            isNullExpr $ aliasedValueIdentToRawSql i
+        EValueReference i i' ->
+            isNullExpr $ valueReferenceToRawSql i i'
+        ECompositeKey f ->
+            ERaw Parens $ flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) . f
   where
     isNullExpr :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value Bool)
     isNullExpr g = ERaw Parens $ first ((<> " IS NULL")) . g
@@ -624,10 +627,11 @@ isNothing v =
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
 just :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
-just (ERaw p f)             = ERaw p f
-just (ECompositeKey f)      = ECompositeKey f
-just (EAliasedValue i v)    = EAliasedValue i (just v)
-just (EValueReference i i') = EValueReference i i'
+just exprVal = case exprVal of
+    ERaw p f -> ERaw p f
+    ECompositeKey f -> ECompositeKey f
+    EAliasedValue i v -> EAliasedValue i (just v)
+    EValueReference i i' -> EValueReference i i'
 
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
@@ -636,10 +640,11 @@ nothing = unsafeSqlValue "NULL"
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
 joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
-joinV (ERaw p f)             = ERaw p f
-joinV (ECompositeKey f)      = ECompositeKey f
-joinV (EAliasedValue i v)    = EAliasedValue i (joinV v)
-joinV (EValueReference i i') = EValueReference i i'
+joinV exprMM = case exprMM of
+    ERaw p f -> ERaw p f
+    ECompositeKey f -> ECompositeKey f
+    EAliasedValue i v -> EAliasedValue i (joinV v)
+    EValueReference i i' -> EValueReference i i'
 
 
 countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a)
@@ -655,15 +660,15 @@ countHelper open close v =
 
 -- | @COUNT(*)@ value.
 countRows :: Num a => SqlExpr (Value a)
-countRows     = unsafeSqlValue "COUNT(*)"
+countRows = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
 count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
-count         = countHelper ""           ""
+count = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
--- /Since: 2.4.1/
+-- @since 2.4.1
 countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
@@ -671,13 +676,16 @@ not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 not_ v = ERaw Never (\info -> first ("NOT " <>) $ x info)
   where
     x info =
-      case v of
-        ERaw p f ->
-          let (b, vals) = f info
-          in (parensM p b, vals)
-        ECompositeKey _      -> throw (CompositeKeyErr NotError)
-        EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-        EValueReference i i' -> valueReferenceToRawSql i i' info
+        case v of
+            ERaw p f ->
+                let (b, vals) = f info
+                in (parensM p b, vals)
+            ECompositeKey _      ->
+                throw (CompositeKeyErr NotError)
+            EAliasedValue i _    ->
+                aliasedValueIdentToRawSql i info
+            EValueReference i i' ->
+                valueReferenceToRawSql i i' info
 
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
@@ -757,13 +765,13 @@ avg_     = unsafeSqlFunction "AVG"
 -- the query not being accepted by the RDBMS or @persistent@
 -- not being able to parse it.
 --
--- /Since: 2.2.9/
+-- @since 2.2.9
 castNum :: (Num a, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 castNum  = veryUnsafeCoerceSqlExprValue
 
 -- | Same as 'castNum', but for nullable values.
 --
--- /Since: 2.2.9/
+-- @since 2.2.9
 castNumM :: (Num a, Num b) => SqlExpr (Value (Maybe a)) -> SqlExpr (Value (Maybe b))
 castNumM = veryUnsafeCoerceSqlExprValue
 
@@ -773,7 +781,7 @@ castNumM = veryUnsafeCoerceSqlExprValue
 -- at least two arguments; please refer to the appropriate
 -- documentation.
 --
--- /Since: 1.4.3/
+-- @since 1.4.3
 coalesce :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value (Maybe a))
 coalesce              = unsafeSqlFunctionParens "COALESCE"
 
@@ -781,7 +789,7 @@ coalesce              = unsafeSqlFunctionParens "COALESCE"
 -- placed at the end of the SqlExpression list, which guarantees
 -- a non-NULL result.
 --
--- /Since: 1.4.3/
+-- @since 1.4.3
 coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
@@ -790,37 +798,37 @@ lower_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 lower_  = unsafeSqlFunction "LOWER"
 
 -- | @UPPER@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 upper_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 upper_  = unsafeSqlFunction "UPPER"
 
 -- | @TRIM@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 trim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 trim_  = unsafeSqlFunction "TRIM"
 
 -- | @RTRIM@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 rtrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 rtrim_  = unsafeSqlFunction "RTRIM"
 
 -- | @LTRIM@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 ltrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
 ltrim_  = unsafeSqlFunction "LTRIM"
 
 -- | @LENGTH@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 length_ :: (SqlString s, Num a) => SqlExpr (Value s) -> SqlExpr (Value a)
 length_ = unsafeSqlFunction "LENGTH"
 
 -- | @LEFT@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 left_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
 left_ = unsafeSqlFunction "LEFT"
 
 -- | @RIGHT@ function.
--- /Since: 3.3.0/
+-- @since 3.3.0
 right_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
 right_ = unsafeSqlFunction "RIGHT"
 
@@ -832,7 +840,7 @@ like    = unsafeSqlBinOp    " LIKE "
 --
 -- Supported by PostgreSQL only.
 --
--- /Since: 2.2.3/
+-- @since 2.2.3
 ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
 ilike   = unsafeSqlBinOp    " ILIKE "
 
@@ -886,7 +894,7 @@ valList vals = EList $ ERaw Parens $ const ( uncommas ("?" <$ vals)
 -- won't need it, though, because you can use 'just' from
 -- inside 'subList_select' or 'Just' from inside 'valList'.
 --
--- /Since: 2.2.12/
+-- @since 2.2.12
 justList :: SqlExpr (ValueList typ) -> SqlExpr (ValueList (Maybe typ))
 justList EEmptyList = EEmptyList
 justList (EList v)  = EList (just v)
@@ -967,17 +975,19 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
 -- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
 (<&>) :: SqlExpr (Insertion (a -> b)) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(EInsert _ f) <&> v = EInsert Proxy $ \x ->
-  let (fb, fv) = f x
-      (gb, gv) = g x
-  in (fb <> ", " <> gb, fv ++ gv)
- where
-  g =
-    case v of
-      ERaw _ f' -> f'
-      EAliasedValue i _ -> aliasedValueIdentToRawSql i
-      EValueReference i i' -> valueReferenceToRawSql i i'
-      ECompositeKey _ -> throw (CompositeKeyErr CombineInsertionError)
+(EInsert _ f) <&> v =
+    EInsert Proxy $ \x ->
+        let (fb, fv) = f x
+            (gb, gv) = g x
+        in
+            (fb <> ", " <> gb, fv ++ gv)
+  where
+    g =
+        case v of
+            ERaw _ f' -> f'
+            EAliasedValue i _ -> aliasedValueIdentToRawSql i
+            EValueReference i i' -> valueReferenceToRawSql i i'
+            ECompositeKey _ -> throw (CompositeKeyErr CombineInsertionError)
 
 -- | @CASE@ statement.  For example:
 --
@@ -1019,7 +1029,7 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --      if the @ELSE@ is omitted it will return a @NULL@. You can
 --      reproduce this via 'nothing'.
 --
--- /Since: 2.1.2/
+-- @since 2.1.2
 case_ :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
 case_ = unsafeSqlCase
 
@@ -1058,7 +1068,7 @@ case_ = unsafeSqlCase
 -- Note: this function may be unsafe to use in conditions not like the
 -- one of the example above.
 --
--- /Since: 2.4.3/
+-- @since 2.4.3
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
@@ -1078,31 +1088,29 @@ infixl 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuter
 
 -- | Syntax sugar for 'case_'.
 --
--- /Since: 2.1.2/
+-- @since 2.1.2
 when_ :: expr (Value Bool) -> () -> expr a -> (expr (Value Bool), expr a)
 when_ cond _ expr = (cond, expr)
 
 -- | Syntax sugar for 'case_'.
 --
--- /Since: 2.1.2/
+-- @since 2.1.2
 then_ :: ()
 then_ = ()
 
 -- | Syntax sugar for 'case_'.
 --
--- /Since: 2.1.2/
+-- @since 2.1.2
 else_ :: expr a -> expr a
 else_ = id
-
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
 newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
 
-
--- | /Since: 1.4.4/
+-- | @since 1.4.4
 instance Functor Value where
-  fmap f (Value a) = Value (f a)
+    fmap f (Value a) = Value (f a)
 
 instance Applicative Value where
   (<*>) (Value f) (Value a) = Value (f a)
@@ -1117,83 +1125,116 @@ instance Monad Value where
 -- 'valList', 'in_' and 'exists').
 newtype ValueList a = ValueList a deriving (Eq, Ord, Show, Typeable)
 
-
 -- | A wrapper type for for any @expr (Value a)@ for all a.
 data SomeValue where
-  SomeValue :: SqlExpr (Value a) -> SomeValue
+    SomeValue :: SqlExpr (Value a) -> SomeValue
 
 -- | A class of things that can be converted into a list of SomeValue. It has
 -- instances for tuples and is the reason why 'groupBy' can take tuples, like
 -- @'groupBy' (foo '^.' FooId, foo '^.' FooName, foo '^.' FooType)@.
 class ToSomeValues a where
-  toSomeValues :: a -> [SomeValue]
+    toSomeValues :: a -> [SomeValue]
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         ) => ToSomeValues (a, b) where
-  toSomeValues (a,b) = toSomeValues a ++ toSomeValues b
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    )
+  =>
+    ToSomeValues (a, b)
+  where
+    toSomeValues (a,b) = toSomeValues a ++ toSomeValues b
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         ) => ToSomeValues (a, b, c) where
-  toSomeValues (a,b,c) = toSomeValues a ++ toSomeValues b ++ toSomeValues c
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    )
+  =>
+    ToSomeValues (a, b, c)
+  where
+    toSomeValues (a,b,c) = toSomeValues a ++ toSomeValues b ++ toSomeValues c
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         , ToSomeValues d
-         ) => ToSomeValues (a, b, c, d) where
-  toSomeValues (a,b,c,d) = toSomeValues a ++ toSomeValues b ++ toSomeValues c ++
-    toSomeValues d
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    , ToSomeValues d
+    )
+  =>
+    ToSomeValues (a, b, c, d)
+  where
+    toSomeValues (a,b,c,d) =
+        toSomeValues a ++ toSomeValues b ++ toSomeValues c ++ toSomeValues d
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         , ToSomeValues d
-         , ToSomeValues e
-         ) => ToSomeValues (a, b, c, d, e) where
-  toSomeValues (a,b,c,d,e) = toSomeValues a ++ toSomeValues b ++
-    toSomeValues c ++ toSomeValues d ++ toSomeValues e
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    , ToSomeValues d
+    , ToSomeValues e
+    )
+  =>
+    ToSomeValues (a, b, c, d, e)
+  where
+    toSomeValues (a,b,c,d,e) = concat
+        [ toSomeValues a, toSomeValues b, toSomeValues c , toSomeValues d
+        , toSomeValues e
+        ]
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         , ToSomeValues d
-         , ToSomeValues e
-         , ToSomeValues f
-         ) => ToSomeValues (a, b, c, d, e, f) where
-  toSomeValues (a,b,c,d,e,f) = toSomeValues a ++ toSomeValues b ++
-    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    , ToSomeValues d
+    , ToSomeValues e
+    , ToSomeValues f
+    )
+  =>
+    ToSomeValues (a, b, c, d, e, f)
+  where
+    toSomeValues (a,b,c,d,e,f) = concat
+        [ toSomeValues a, toSomeValues b, toSomeValues c, toSomeValues d
+        , toSomeValues e , toSomeValues f
+        ]
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         , ToSomeValues d
-         , ToSomeValues e
-         , ToSomeValues f
-         , ToSomeValues g
-         ) => ToSomeValues (a, b, c, d, e, f, g) where
-  toSomeValues (a,b,c,d,e,f,g) = toSomeValues a ++ toSomeValues b ++
-    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f ++
-    toSomeValues g
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    , ToSomeValues d
+    , ToSomeValues e
+    , ToSomeValues f
+    , ToSomeValues g
+    )
+  =>
+    ToSomeValues (a, b, c, d, e, f, g)
+  where
+    toSomeValues (a,b,c,d,e,f,g) = concat
+        [ toSomeValues a,  toSomeValues b, toSomeValues c,  toSomeValues d
+        , toSomeValues e,  toSomeValues f, toSomeValues g
+        ]
 
-instance ( ToSomeValues a
-         , ToSomeValues b
-         , ToSomeValues c
-         , ToSomeValues d
-         , ToSomeValues e
-         , ToSomeValues f
-         , ToSomeValues g
-         , ToSomeValues h
-         ) => ToSomeValues (a, b, c, d, e, f, g, h) where
-  toSomeValues (a,b,c,d,e,f,g,h) = toSomeValues a ++ toSomeValues b ++
-    toSomeValues c ++ toSomeValues d ++ toSomeValues e ++ toSomeValues f ++
-    toSomeValues g ++ toSomeValues h
+instance
+    ( ToSomeValues a
+    , ToSomeValues b
+    , ToSomeValues c
+    , ToSomeValues d
+    , ToSomeValues e
+    , ToSomeValues f
+    , ToSomeValues g
+    , ToSomeValues h
+    )
+  =>
+    ToSomeValues (a, b, c, d, e, f, g, h)
+  where
+    toSomeValues (a,b,c,d,e,f,g,h) = concat
+        [ toSomeValues a, toSomeValues b, toSomeValues c, toSomeValues d
+        , toSomeValues e, toSomeValues f, toSomeValues g, toSomeValues h
+        ]
 
 type family KnowResult a where
-  KnowResult (i -> o) = KnowResult o
-  KnowResult a = a
+    KnowResult (i -> o) = KnowResult o
+    KnowResult a = a
 
 -- | A class for constructors or function which result type is known.
 --
@@ -1207,13 +1248,19 @@ instance FinalResult (Unique val) where
 instance (FinalResult b) => FinalResult (a -> b) where
   finalR f = finalR (f undefined)
 
--- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef' that defines it. You
--- can supply just the constructor itself, or a value of the type - the library is capable of figuring
--- it out from there.
+-- | Convert a constructor for a 'Unique' key on a record to the 'UniqueDef'
+-- that defines it. You can supply just the constructor itself, or a value of
+-- the type - the library is capable of figuring it out from there.
 --
 -- @since 3.1.3
-toUniqueDef :: forall a val. (KnowResult a ~ (Unique val), PersistEntity val,FinalResult a) =>
-  a -> UniqueDef
+toUniqueDef
+    :: forall a val.
+    ( KnowResult a ~ Unique val
+    , PersistEntity val
+    , FinalResult a
+    )
+    => a
+    -> UniqueDef
 toUniqueDef uniqueConstructor = uniqueDef
   where
     proxy :: Proxy val
@@ -1227,21 +1274,22 @@ toUniqueDef uniqueConstructor = uniqueDef
 -- | Render updates to be use in a SET clause for a given sql backend.
 --
 -- @since 3.1.3
-renderUpdates :: (BackendCompatible SqlBackend backend) =>
-    backend
+renderUpdates
+    :: (BackendCompatible SqlBackend backend)
+    => backend
     -> [SqlExpr (Update val)]
     -> (TLB.Builder, [PersistValue])
 renderUpdates conn = uncommas' . concatMap renderUpdate
-    where
-      mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
-      mk (ERaw _ f)             = [f info]
-      mk (ECompositeKey _)      = throw (CompositeKeyErr MakeSetError) -- FIXME
-      mk (EAliasedValue i _)    = [aliasedValueIdentToRawSql i info]
-      mk (EValueReference i i') = [valueReferenceToRawSql i i' info]
+  where
+    mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
+    mk (ERaw _ f)             = [f info]
+    mk (ECompositeKey _)      = throw (CompositeKeyErr MakeSetError) -- FIXME
+    mk (EAliasedValue i _)    = [aliasedValueIdentToRawSql i info]
+    mk (EValueReference i i') = [valueReferenceToRawSql i i' info]
 
-      renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
-      renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
-      info = (projectBackend conn, initialIdentState)
+    renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
+    renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
+    info = (projectBackend conn, initialIdentState)
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
 data InnerJoin a b = a `InnerJoin` b
@@ -1276,70 +1324,64 @@ data FullOuterJoin a b = a `FullOuterJoin` b
 
 
 -- | (Internal) A kind of @JOIN@.
-data JoinKind =
-    InnerJoinKind      -- ^ @INNER JOIN@
-  | CrossJoinKind      -- ^ @CROSS JOIN@
-  | LeftOuterJoinKind  -- ^ @LEFT OUTER JOIN@
-  | RightOuterJoinKind -- ^ @RIGHT OUTER JOIN@
-  | FullOuterJoinKind  -- ^ @FULL OUTER JOIN@
+data JoinKind
+    = InnerJoinKind      -- ^ @INNER JOIN@
+    | CrossJoinKind      -- ^ @CROSS JOIN@
+    | LeftOuterJoinKind  -- ^ @LEFT OUTER JOIN@
+    | RightOuterJoinKind -- ^ @RIGHT OUTER JOIN@
+    | FullOuterJoinKind  -- ^ @FULL OUTER JOIN@
     deriving (Eq, Show)
 
 
 -- | (Internal) Functions that operate on types (that should be)
 -- of kind 'JoinKind'.
 class IsJoinKind join where
-  -- | (Internal) @smartJoin a b@ is a @JOIN@ of the correct kind.
-  smartJoin :: a -> b -> join a b
-  -- | (Internal) Reify a @JoinKind@ from a @JOIN@.  This
-  -- function is non-strict.
-  reifyJoinKind :: join a b -> JoinKind
+    -- | (Internal) @smartJoin a b@ is a @JOIN@ of the correct kind.
+    smartJoin :: a -> b -> join a b
+    -- | (Internal) Reify a @JoinKind@ from a @JOIN@.  This
+    -- function is non-strict.
+    reifyJoinKind :: join a b -> JoinKind
 
 instance IsJoinKind InnerJoin where
-  smartJoin a b = a `InnerJoin` b
-  reifyJoinKind _ = InnerJoinKind
+    smartJoin a b = a `InnerJoin` b
+    reifyJoinKind _ = InnerJoinKind
 instance IsJoinKind CrossJoin where
-  smartJoin a b = a `CrossJoin` b
-  reifyJoinKind _ = CrossJoinKind
+    smartJoin a b = a `CrossJoin` b
+    reifyJoinKind _ = CrossJoinKind
 instance IsJoinKind LeftOuterJoin where
-  smartJoin a b = a `LeftOuterJoin` b
-  reifyJoinKind _ = LeftOuterJoinKind
+    smartJoin a b = a `LeftOuterJoin` b
+    reifyJoinKind _ = LeftOuterJoinKind
 instance IsJoinKind RightOuterJoin where
-  smartJoin a b = a `RightOuterJoin` b
-  reifyJoinKind _ = RightOuterJoinKind
+    smartJoin a b = a `RightOuterJoin` b
+    reifyJoinKind _ = RightOuterJoinKind
 instance IsJoinKind FullOuterJoin where
-  smartJoin a b = a `FullOuterJoin` b
-  reifyJoinKind _ = FullOuterJoinKind
+    smartJoin a b = a `FullOuterJoin` b
+    reifyJoinKind _ = FullOuterJoinKind
 
 
 -- | Exception thrown whenever 'on' is used to create an @ON@
 -- clause but no matching @JOIN@ is found.
 data OnClauseWithoutMatchingJoinException =
-  OnClauseWithoutMatchingJoinException String
-  deriving (Eq, Ord, Show, Typeable)
-instance Exception OnClauseWithoutMatchingJoinException where
+    OnClauseWithoutMatchingJoinException String
+    deriving (Eq, Ord, Show, Typeable)
+
+instance Exception OnClauseWithoutMatchingJoinException
 
 -- | (Internal) Phantom type used to process 'from' (see 'fromStart').
 data PreprocessedFrom a
 
-
-
-
 -- | Phantom type used by 'orderBy', 'asc' and 'desc'.
 data OrderBy
 
-
 -- | Phantom type used by 'distinctOn' and 'don'.
 data DistinctOn
-
 
 -- | Phantom type for a @SET@ operation on an entity of the given
 -- type (see 'set' and '(=.)').
 data Update typ
 
-
 -- | Phantom type used by 'insertSelect'.
 data Insertion a
-
 
 -- | Different kinds of locking clauses supported by 'locking'.
 --
@@ -1349,27 +1391,26 @@ data Insertion a
 -- though both MySQL and PostgreSQL support 'ForUpdate', there
 -- are no guarantees that they will behave the same.
 --
--- /Since: 2.2.7/
-data LockingKind =
-    ForUpdate
-    -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
-    -- PostgreSQL.
-    --
-    -- /Since: 2.2.7/
-  | ForUpdateSkipLocked
-    -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
-    -- PostgreSQL.
-    --
-    -- /Since: 2.2.7/
-  | ForShare
-    -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
-    --
-    -- /Since: 2.2.7/
-  | LockInShareMode
-    -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
-    --
-    -- /Since: 2.2.7/
-
+-- @since 2.2.7
+data LockingKind
+    = ForUpdate
+      -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
+      -- PostgreSQL.
+      --
+      -- @since 2.2.7
+    | ForUpdateSkipLocked
+      -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
+      -- PostgreSQL.
+      --
+      -- @since 2.2.7
+    | ForShare
+      -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
+      --
+      -- @since 2.2.7
+    | LockInShareMode
+      -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
+      --
+      -- @since 2.2.7
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -1378,35 +1419,35 @@ data LockingKind =
 -- If you have a custom data type or @newtype@, feel free to make
 -- it an instance of this class.
 --
--- /Since: 2.4.0/
+-- @since 2.4.0
 class PersistField a => SqlString a where
 
--- | /Since: 2.3.0/
+-- | @since 2.3.0
 instance (a ~ Char) => SqlString [a] where
 
--- | /Since: 2.3.0/
+-- | @since 2.3.0
 instance SqlString T.Text where
 
--- | /Since: 2.3.0/
+-- | @since 2.3.0
 instance SqlString TL.Text where
 
--- | /Since: 2.3.0/
+-- | @since 2.3.0
 instance SqlString B.ByteString where
 
--- | /Since: 2.3.0/
+-- | @since 2.3.0
 instance SqlString Html where
 
--- | /Since: 2.4.0/
+-- | @since 2.4.0
 instance SqlString a => SqlString (Maybe a) where
 
 -- | Class that enables one to use 'toBaseId' to convert an entity's
 -- key on a query into another (cf. 'toBaseId').
 class ToBaseId ent where
-  -- | e.g. @type BaseEnt MyBase = MyChild@
-  type BaseEnt ent :: *
-  -- | Convert from the key of the BaseEnt(ity) to the key of the child entity.
-  -- This function is not actually called, but that it typechecks proves this operation is safe.
-  toBaseIdWitness :: Key (BaseEnt ent) -> Key ent
+    -- | e.g. @type BaseEnt MyBase = MyChild@
+    type BaseEnt ent :: *
+    -- | Convert from the key of the BaseEnt(ity) to the key of the child entity.
+    -- This function is not actually called, but that it typechecks proves this operation is safe.
+    toBaseIdWitness :: Key (BaseEnt ent) -> Key ent
 
 
 -- | @FROM@ clause: bring entities into scope.
@@ -1487,184 +1528,167 @@ from = (from_ >>=)
 -- | (Internal) Class that implements the tuple 'from' magic (see
 -- 'fromStart').
 class From a where
-  from_ :: SqlQuery a
+    from_ :: SqlQuery a
 
-instance ( FromPreprocess (SqlExpr (Entity val))
-         ) => From (SqlExpr (Entity val)) where
-  from_ = fromPreprocess >>= fromFinish
+instance
+    ( FromPreprocess (SqlExpr (Entity val))
+    )
+  =>
+    From (SqlExpr (Entity val))
+  where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (SqlExpr (Maybe (Entity val)))
-         ) => From (SqlExpr (Maybe (Entity val))) where
-  from_ = fromPreprocess >>= fromFinish
+instance
+    ( FromPreprocess (SqlExpr (Maybe (Entity val)))
+    )
+  =>
+    From (SqlExpr (Maybe (Entity val)))
+  where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (InnerJoin a b)
-         ) => From (InnerJoin a b) where
-  from_ = fromPreprocess >>= fromFinish
+instance
+    ( FromPreprocess (InnerJoin a b)
+    )
+  =>
+    From (InnerJoin a b)
+  where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (CrossJoin a b)
-         ) => From (CrossJoin a b) where
-  from_ = fromPreprocess >>= fromFinish
+instance
+    ( FromPreprocess (CrossJoin a b)
+    )
+  =>
+    From (CrossJoin a b)
+  where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (LeftOuterJoin a b)
-         ) => From (LeftOuterJoin a b) where
-  from_ = fromPreprocess >>= fromFinish
+instance (FromPreprocess (LeftOuterJoin a b)) => From (LeftOuterJoin a b) where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (RightOuterJoin a b)
-         ) => From (RightOuterJoin a b) where
-  from_ = fromPreprocess >>= fromFinish
+instance (FromPreprocess (RightOuterJoin a b)) => From (RightOuterJoin a b) where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( FromPreprocess (FullOuterJoin a b)
-         ) => From (FullOuterJoin a b) where
-  from_ = fromPreprocess >>= fromFinish
+instance (FromPreprocess (FullOuterJoin a b)) => From (FullOuterJoin a b) where
+    from_ = fromPreprocess >>= fromFinish
 
-instance ( From a
-         , From b
-         ) => From (a, b) where
-  from_ = (,) <$> from_ <*> from_
+instance (From a, From b) => From (a, b) where
+    from_ = (,) <$> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         ) => From (a, b, c) where
-  from_ = (,,) <$> from_ <*> from_ <*> from_
+instance (From a, From b, From c) => From (a, b, c) where
+    from_ = (,,) <$> from_ <*> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         , From d
-         ) => From (a, b, c, d) where
-  from_ = (,,,) <$> from_ <*> from_ <*> from_ <*> from_
+instance (From a, From b, From c, From d) => From (a, b, c, d) where
+    from_ = (,,,) <$> from_ <*> from_ <*> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         , From d
-         , From e
-         ) => From (a, b, c, d, e) where
-  from_ = (,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_
+instance (From a, From b, From c, From d, From e) => From (a, b, c, d, e) where
+    from_ = (,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         , From d
-         , From e
-         , From f
-         ) => From (a, b, c, d, e, f) where
-  from_ = (,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
+instance
+    (From a, From b, From c, From d, From e, From f)
+  =>
+    From (a, b, c, d, e, f)
+  where
+    from_ = (,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         , From d
-         , From e
-         , From f
-         , From g
-         ) => From (a, b, c, d, e, f, g) where
-  from_ = (,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
+instance
+    (From a, From b, From c, From d, From e, From f, From g)
+  =>
+    From (a, b, c, d, e, f, g)
+  where
+    from_ =
+        (,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
-instance ( From a
-         , From b
-         , From c
-         , From d
-         , From e
-         , From f
-         , From g
-         , From h
-         ) => From (a, b, c, d, e, f, g, h) where
-  from_ = (,,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
+instance
+    (From a, From b, From c, From d, From e, From f, From g, From h)
+  =>
+    From (a, b, c, d, e, f, g, h)
+  where
+    from_ =
+        (,,,,,,,) <$> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_ <*> from_
 
 
 
 -- | (Internal) Class that implements the @JOIN@ 'from' magic
 -- (see 'fromStart').
 class FromPreprocess a where
-  fromPreprocess :: SqlQuery (SqlExpr (PreprocessedFrom a))
+    fromPreprocess :: SqlQuery (SqlExpr (PreprocessedFrom a))
 
-instance ( PersistEntity val
-         , BackendCompatible SqlBackend (PersistEntityBackend val)
-         ) => FromPreprocess (SqlExpr (Entity val)) where
-  fromPreprocess = fromStart
+instance
+    (PersistEntity val, BackendCompatible SqlBackend (PersistEntityBackend val))
+  =>
+    FromPreprocess (SqlExpr (Entity val))
+  where
+    fromPreprocess = fromStart
 
-instance ( PersistEntity val
-         , BackendCompatible SqlBackend (PersistEntityBackend val)
-         ) => FromPreprocess (SqlExpr (Maybe (Entity val))) where
-  fromPreprocess = fromStartMaybe
+instance
+    (PersistEntity val, BackendCompatible SqlBackend (PersistEntityBackend val))
+  =>
+    FromPreprocess (SqlExpr (Maybe (Entity val)))
+  where
+    fromPreprocess = fromStartMaybe
 
-instance ( FromPreprocess a
-         , FromPreprocess b
-         , IsJoinKind join
-         ) => FromPreprocess (join a b) where
-  fromPreprocess = do
-    a <- fromPreprocess
-    b <- fromPreprocess
-    fromJoin a b
+instance
+    (FromPreprocess a, FromPreprocess b, IsJoinKind join)
+  =>
+    FromPreprocess (join a b)
+  where
+    fromPreprocess = do
+        a <- fromPreprocess
+        b <- fromPreprocess
+        fromJoin a b
 
 -- | Exception data type for @esqueleto@ internal errors
-data EsqueletoError =
-    CompositeKeyErr CompositeKeyError
-  | AliasedValueErr UnexpectedValueError
-  | UnexpectedCaseErr UnexpectedCaseError
-  | SqlBinOpCompositeErr SqlBinOpCompositeError
-  deriving (Show)
+data EsqueletoError
+    = CompositeKeyErr CompositeKeyError
+    | AliasedValueErr UnexpectedValueError
+    | UnexpectedCaseErr UnexpectedCaseError
+    | SqlBinOpCompositeErr SqlBinOpCompositeError
+    deriving (Show)
 
 instance Exception EsqueletoError
 
-data UnexpectedValueError =
-    NotError
-  | ToInsertionError
-  | CombineInsertionError
-  | FoldHelpError
-  | SqlCaseError
-  | SqlCastAsError
-  | SqlFunctionError
-  | MakeOnClauseError
-  | MakeExcError
-  | MakeSetError
-  | MakeWhereError
-  | MakeHavingError
-  | FilterWhereAggError
-  | FilterWhereClauseError
-  deriving (Show)
+data UnexpectedValueError
+    = NotError
+    | ToInsertionError
+    | CombineInsertionError
+    | FoldHelpError
+    | SqlCaseError
+    | SqlCastAsError
+    | SqlFunctionError
+    | MakeOnClauseError
+    | MakeExcError
+    | MakeSetError
+    | MakeWhereError
+    | MakeHavingError
+    | FilterWhereAggError
+    | FilterWhereClauseError
+    deriving (Show)
 
 type CompositeKeyError = UnexpectedValueError
 
-data UnexpectedCaseError =
-    EmptySqlExprValueList
-  | MakeFromError
-  | UnsupportedSqlInsertIntoType
-  | InsertionFinalError
-  | NewIdentForError
-  | UnsafeSqlCaseError
-  | OperationNotSupported
-  | NotImplemented
-  deriving (Show)
+data UnexpectedCaseError
+    = EmptySqlExprValueList
+    | MakeFromError
+    | UnsupportedSqlInsertIntoType
+    | InsertionFinalError
+    | NewIdentForError
+    | UnsafeSqlCaseError
+    | OperationNotSupported
+    | NotImplemented
+    deriving (Show)
 
-data SqlBinOpCompositeError =
-    MismatchingLengthsError
-  | NullPlaceholdersError
-  | DeconstructionError
-  deriving (Show)
-
-
+data SqlBinOpCompositeError
+    = MismatchingLengthsError
+    | NullPlaceholdersError
+    | DeconstructionError
+    deriving (Show)
 
 -- | SQL backend for @esqueleto@ using 'SqlPersistT'.
-newtype SqlQuery a =
-  Q { unQ :: W.WriterT SideData (S.State IdentState) a }
-
-instance Functor SqlQuery where
-  fmap f = Q . fmap f . unQ
-
-instance Monad SqlQuery where
-  return  = Q . return
-  m >>= f = Q (unQ m >>= unQ . f)
-
-instance Applicative SqlQuery where
-  pure  = return
-  (<*>) = ap
-
+newtype SqlQuery a = Q { unQ :: W.WriterT SideData (S.State IdentState) a }
+    deriving newtype (Functor, Applicative, Monad)
 
 -- | Constraint synonym for @persistent@ entities whose backend
--- is 'SqlPersistT'.
+-- is 'SqlBackend'.
 type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlBackend)
 
 
@@ -1672,148 +1696,148 @@ type SqlEntity ent = (PersistEntity ent, PersistEntityBackend ent ~ SqlBackend)
 
 
 -- | Side data written by 'SqlQuery'.
-data SideData = SideData { sdDistinctClause :: !DistinctClause
-                         , sdFromClause     :: ![FromClause]
-                         , sdSetClause      :: ![SetClause]
-                         , sdWhereClause    :: !WhereClause
-                         , sdGroupByClause  :: !GroupByClause
-                         , sdHavingClause   :: !HavingClause
-                         , sdOrderByClause  :: ![OrderByClause]
-                         , sdLimitClause    :: !LimitClause
-                         , sdLockingClause  :: !LockingClause
-                         , sdCteClause      :: ![CommonTableExpressionClause]
-                         }
+data SideData = SideData
+    { sdDistinctClause :: !DistinctClause
+    , sdFromClause     :: ![FromClause]
+    , sdSetClause      :: ![SetClause]
+    , sdWhereClause    :: !WhereClause
+    , sdGroupByClause  :: !GroupByClause
+    , sdHavingClause   :: !HavingClause
+    , sdOrderByClause  :: ![OrderByClause]
+    , sdLimitClause    :: !LimitClause
+    , sdLockingClause  :: !LockingClause
+    , sdCteClause      :: ![CommonTableExpressionClause]
+    }
 
 instance Semigroup SideData where
-  SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
-    SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
+    SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
+        SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
 
 instance Monoid SideData where
-  mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
-  mappend = (<>)
+    mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+    mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
-data DistinctClause =
-    DistinctAll                     -- ^ The default, everything.
-  | DistinctStandard                -- ^ Only @DISTINCT@, SQL standard.
-  | DistinctOn [SqlExpr DistinctOn] -- ^ @DISTINCT ON@, PostgreSQL extension.
+data DistinctClause
+    = DistinctAll
+    -- ^ The default, everything.
+    | DistinctStandard
+    -- ^ Only @DISTINCT@, SQL standard.
+    | DistinctOn [SqlExpr DistinctOn]
+    -- ^ @DISTINCT ON@, PostgreSQL extension.
 
 instance Semigroup DistinctClause where
-  DistinctOn a     <> DistinctOn b = DistinctOn (a <> b)
-  DistinctOn a     <> _            = DistinctOn a
-  DistinctStandard <> _            = DistinctStandard
-  DistinctAll      <> b            = b
+    DistinctOn a     <> DistinctOn b = DistinctOn (a <> b)
+    DistinctOn a     <> _            = DistinctOn a
+    DistinctStandard <> _            = DistinctStandard
+    DistinctAll      <> b            = b
 
 instance Monoid DistinctClause where
-  mempty = DistinctAll
-  mappend = (<>)
+    mempty = DistinctAll
+    mappend = (<>)
 
 -- | A part of a @FROM@ clause.
-data FromClause =
-    FromStart Ident EntityDef
-  | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
-  | OnClause (SqlExpr (Value Bool))
-  | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue])) SubQueryType
-  | FromIdent Ident
+data FromClause
+    = FromStart Ident EntityDef
+    | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
+    | OnClause (SqlExpr (Value Bool))
+    | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue])) SubQueryType
+    | FromIdent Ident
 
 data CommonTableExpressionKind
-  = RecursiveCommonTableExpression
-  | NormalCommonTableExpression
-  deriving Eq
+    = RecursiveCommonTableExpression
+    | NormalCommonTableExpression
+    deriving Eq
 
 data CommonTableExpressionClause =
-  CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+    CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data SubQueryType
-  = NormalSubQuery
-  | LateralSubQuery
-  deriving Show
+    = NormalSubQuery
+    | LateralSubQuery
+    deriving Show
 
 collectIdents :: FromClause -> Set Ident
 collectIdents fc = case fc of
-  FromStart i _ -> Set.singleton i
-  FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
-  OnClause _ -> mempty
-  FromQuery _ _ _ -> mempty
-  FromIdent _ -> mempty
+    FromStart i _ -> Set.singleton i
+    FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
+    OnClause _ -> mempty
+    FromQuery _ _ _ -> mempty
+    FromIdent _ -> mempty
 
 instance Show FromClause where
-  show fc = case fc of
-    FromStart i _ ->
-      "(FromStart " <> show i <> ")"
-    FromJoin lhs jk rhs mexpr ->
-      mconcat
-        [ "(FromJoin "
-        , show lhs
-        , " "
-        , show jk
-        , " "
-        , case mexpr of
-            Nothing -> "(no on clause)"
-            Just expr -> "(" <> render' expr <> ")"
-        , " "
-        , show rhs
-        , ")"
-      ]
-    OnClause expr ->
-      "(OnClause " <> render' expr <> ")"
-    FromQuery ident _ subQueryType ->
-      "(FromQuery " <> show ident <> " " <> show subQueryType <> ")"
-    FromIdent ident ->
-      "(FromIdent " <> show ident <> ")"
+    show fc = case fc of
+        FromStart i _ ->
+            "(FromStart " <> show i <> ")"
+        FromJoin lhs jk rhs mexpr ->
+            mconcat
+            [ "(FromJoin "
+            , show lhs
+            , " "
+            , show jk
+            , " "
+            , case mexpr of
+                Nothing -> "(no on clause)"
+                Just expr -> "(" <> render' expr <> ")"
+            , " "
+            , show rhs
+            , ")"
+            ]
+        OnClause expr ->
+            "(OnClause " <> render' expr <> ")"
+        FromQuery ident _ subQueryType ->
+            "(FromQuery " <> show ident <> " " <> show subQueryType <> ")"
+        FromIdent ident ->
+            "(FromIdent " <> show ident <> ")"
 
-    where
-      dummy = SqlBackend
-        { connEscapeName = \(DBName x) -> x
-        }
-      render' = T.unpack . renderExpr dummy
-
+      where
+        dummy = SqlBackend
+            { connEscapeName = \(DBName x) -> x
+            }
+        render' = T.unpack . renderExpr dummy
 
 -- | A part of a @SET@ clause.
 newtype SetClause = SetClause (SqlExpr (Value ()))
-
 
 -- | Collect 'OnClause's on 'FromJoin's.  Returns the first
 -- unmatched 'OnClause's data on error.  Returns a list without
 -- 'OnClauses' on success.
 collectOnClauses
-  :: SqlBackend
-  -> [FromClause]
-  -> Either (SqlExpr (Value Bool)) [FromClause]
+    :: SqlBackend
+    -> [FromClause]
+    -> Either (SqlExpr (Value Bool)) [FromClause]
 collectOnClauses sqlBackend = go Set.empty []
- --  . (\fc -> Debug.trace ("From Clauses: " <> show fc) fc)
   where
     go is []  (f@(FromStart i _) : fs) =
-      fmap (f:) (go (Set.insert i is) [] fs) -- fast path
+        fmap (f:) (go (Set.insert i is) [] fs) -- fast path
     go idents acc (OnClause expr : fs) = do
-      (idents', a) <- findMatching idents acc expr
-      go idents' a fs
+        (idents', a) <- findMatching idents acc expr
+        go idents' a fs
     go idents acc (f:fs) =
-      go idents (f:acc) fs
+        go idents (f:acc) fs
     go _ acc [] =
-      return $ reverse acc
+        return $ reverse acc
 
     findMatching
-      :: Set Ident
-      -> [FromClause]
-      -> SqlExpr (Value Bool)
-      -> Either (SqlExpr (Value Bool)) (Set Ident, [FromClause])
+        :: Set Ident
+        -> [FromClause]
+        -> SqlExpr (Value Bool)
+        -> Either (SqlExpr (Value Bool)) (Set Ident, [FromClause])
     findMatching idents fromClauses expr =
-      -- Debug.trace ("From Clause: " <> show fromClauses) $
-      case fromClauses of
-        f : acc ->
-          let
-            idents' =
-              idents
-              <> Set.fromList (Maybe.catMaybes [findLeftmostIdent f, findRightmostIdent f])
-          in
-            case tryMatch idents' expr f of
-              Just (idents'', f') ->
-                return (idents'', f' : acc)
-              Nothing ->
-                fmap (f:) <$> findMatching idents' acc expr
-        [] ->
-          Left expr
+        case fromClauses of
+            f : acc ->
+              let idents' =
+                      idents
+                      <> Set.fromList
+                          (Maybe.catMaybes [findLeftmostIdent f, findRightmostIdent f])
+              in
+                  case tryMatch idents' expr f of
+                      Just (idents'', f') ->
+                          return (idents'', f' : acc)
+                      Nothing ->
+                          fmap (f:) <$> findMatching idents' acc expr
+            [] ->
+                Left expr
 
     findRightmostIdent (FromStart i _) = Just i
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
@@ -1828,10 +1852,10 @@ collectOnClauses sqlBackend = go Set.empty []
     findLeftmostIdent (FromIdent _) = Nothing
 
     tryMatch
-      :: Set Ident
-      -> SqlExpr (Value Bool)
-      -> FromClause
-      -> Maybe (Set Ident, FromClause)
+        :: Set Ident
+        -> SqlExpr (Value Bool)
+        -> FromClause
+        -> Maybe (Set Ident, FromClause)
     tryMatch idents expr fromClause =
       case fromClause of
         FromJoin l k r onClause ->
@@ -1922,7 +1946,6 @@ type HavingClause = WhereClause
 -- | A @ORDER BY@ clause.
 type OrderByClause = SqlExpr OrderBy
 
-
 -- | A @LIMIT@ clause.
 data LimitClause = Limit (Maybe Int64) (Maybe Int64)
   deriving Eq
@@ -1941,14 +1964,11 @@ instance Monoid LimitClause where
 -- | A locking clause.
 type LockingClause = Monoid.Last LockingKind
 
-
 ----------------------------------------------------------------------
-
 
 -- | Identifier used for table names.
 newtype Ident = I T.Text
   deriving (Eq, Ord, Show)
-
 
 -- | List of identifiers already in use and supply of temporary
 -- identifiers.
@@ -1956,7 +1976,6 @@ newtype IdentState = IdentState { inUse :: HS.HashSet T.Text }
 
 initialIdentState :: IdentState
 initialIdentState = IdentState mempty
-
 
 -- | Create a fresh 'Ident'.  If possible, use the given
 -- 'DBName'.
@@ -1977,112 +1996,108 @@ newIdentFor (DBName original) = Q $ lift $ findFree Nothing
 -- | Information needed to escape and use identifiers.
 type IdentInfo = (SqlBackend, IdentState)
 
-
 -- | Use an identifier.
 useIdent :: IdentInfo -> Ident -> TLB.Builder
 useIdent info (I ident) = fromDBName info $ DBName ident
-
-
-
 
 -- | An expression on the SQL backend.
 --
 -- There are many comments describing the constructors of this
 -- data type.  However, Haddock doesn't like GADTs, so you'll have to read them by hitting \"Source\".
 data SqlExpr a where
-  -- An entity, created by 'from' (cf. 'fromStart').
-  EEntity  :: Ident -> SqlExpr (Entity val)
-  --                Base     Table
-  EAliasedEntity :: Ident -> Ident -> SqlExpr (Entity val)
-  --                         Source   Base
-  EAliasedEntityReference :: Ident -> Ident -> SqlExpr (Entity val)
+    -- An entity, created by 'from' (cf. 'fromStart').
+    EEntity  :: Ident -> SqlExpr (Entity val)
+    --                Base     Table
+    EAliasedEntity :: Ident -> Ident -> SqlExpr (Entity val)
+    --                         Source   Base
+    EAliasedEntityReference :: Ident -> Ident -> SqlExpr (Entity val)
 
-  -- Just a tag stating that something is nullable.
-  EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
+    -- Just a tag stating that something is nullable.
+    EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
 
-  -- Raw expression: states whether parenthesis are needed
-  -- around this expression, and takes information about the SQL
-  -- connection (mainly for escaping names) and returns both an
-  -- string ('TLB.Builder') and a list of values to be
-  -- interpolated by the SQL backend.
-  ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
+    -- Raw expression: states whether parenthesis are needed
+    -- around this expression, and takes information about the SQL
+    -- connection (mainly for escaping names) and returns both an
+    -- string ('TLB.Builder') and a list of values to be
+    -- interpolated by the SQL backend.
+    ERaw     :: NeedParens -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
 
 
-  -- A raw expression with an alias
-  EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Value a)
+    -- A raw expression with an alias
+    EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Value a)
 
-  -- A reference to an aliased field in a table or subquery
-  EValueReference :: Ident -> (IdentInfo -> Ident) -> SqlExpr (Value a)
+    -- A reference to an aliased field in a table or subquery
+    EValueReference :: Ident -> (IdentInfo -> Ident) -> SqlExpr (Value a)
 
-  -- A composite key.
-  --
-  -- Persistent uses the same 'PersistList' constructor for both
-  -- fields which are (homogeneous) lists of values and the
-  -- (probably heterogeneous) values of a composite primary key.
-  --
-  -- We need to treat composite keys as fields.  For example, we
-  -- have to support using ==., otherwise you wouldn't be able to
-  -- join.  OTOH, lists of values should be treated exactly the
-  -- same as any other scalar value.
-  --
-  -- In particular, this is valid for persistent via rawSql for
-  -- an F field that is a list:
-  --
-  --   A.F in ?    -- [PersistList [foo, bar]]
-  --
-  -- However, this is not for a composite key entity:
-  --
-  --   A.ID = ?    -- [PersistList [foo, bar]]
-  --
-  -- The ID field doesn't exist on the DB for a composite key
-  -- table, it exists only on the Haskell side.  Those variations
-  -- also don't work:
-  --
-  --   (A.KeyA, A.KeyB) = ?    -- [PersistList [foo, bar]]
-  --   [A.KeyA, A.KeyB] = ?    -- [PersistList [foo, bar]]
-  --
-  -- We have to generate:
-  --
-  --   A.KeyA = ? AND A.KeyB = ?      -- [foo, bar]
-  --
-  -- Note that the PersistList had to be deconstructed into its
-  -- components.
-  --
-  -- In order to disambiguate behaviors, this constructor is used
-  -- /only/ to represent a composite field access.  It does not
-  -- represent a 'PersistList', not even if the 'PersistList' is
-  -- used in the context of a composite key.  That's because it's
-  -- impossible, e.g., for 'val' to disambiguate between these
-  -- uses.
-  ECompositeKey :: (IdentInfo -> [TLB.Builder]) -> SqlExpr (Value a)
+    -- A composite key.
+    --
+    -- Persistent uses the same 'PersistList' constructor for both
+    -- fields which are (homogeneous) lists of values and the
+    -- (probably heterogeneous) values of a composite primary key.
+    --
+    -- We need to treat composite keys as fields.  For example, we
+    -- have to support using ==., otherwise you wouldn't be able to
+    -- join.  OTOH, lists of values should be treated exactly the
+    -- same as any other scalar value.
+    --
+    -- In particular, this is valid for persistent via rawSql for
+    -- an F field that is a list:
+    --
+    --   A.F in ?    -- [PersistList [foo, bar]]
+    --
+    -- However, this is not for a composite key entity:
+    --
+    --   A.ID = ?    -- [PersistList [foo, bar]]
+    --
+    -- The ID field doesn't exist on the DB for a composite key
+    -- table, it exists only on the Haskell side.  Those variations
+    -- also don't work:
+    --
+    --   (A.KeyA, A.KeyB) = ?    -- [PersistList [foo, bar]]
+    --   [A.KeyA, A.KeyB] = ?    -- [PersistList [foo, bar]]
+    --
+    -- We have to generate:
+    --
+    --   A.KeyA = ? AND A.KeyB = ?      -- [foo, bar]
+    --
+    -- Note that the PersistList had to be deconstructed into its
+    -- components.
+    --
+    -- In order to disambiguate behaviors, this constructor is used
+    -- /only/ to represent a composite field access.  It does not
+    -- represent a 'PersistList', not even if the 'PersistList' is
+    -- used in the context of a composite key.  That's because it's
+    -- impossible, e.g., for 'val' to disambiguate between these
+    -- uses.
+    ECompositeKey :: (IdentInfo -> [TLB.Builder]) -> SqlExpr (Value a)
 
-  -- 'EList' and 'EEmptyList' are used by list operators.
-  EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
-  EEmptyList :: SqlExpr (ValueList a)
+    -- 'EList' and 'EEmptyList' are used by list operators.
+    EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
+    EEmptyList :: SqlExpr (ValueList a)
 
-  -- A 'SqlExpr' accepted only by 'orderBy'.
-  EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
+    -- A 'SqlExpr' accepted only by 'orderBy'.
+    EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
 
-  EOrderRandom :: SqlExpr OrderBy
+    EOrderRandom :: SqlExpr OrderBy
 
-  -- A 'SqlExpr' accepted only by 'distinctOn'.
-  EDistinctOn :: SqlExpr (Value a) -> SqlExpr DistinctOn
+    -- A 'SqlExpr' accepted only by 'distinctOn'.
+    EDistinctOn :: SqlExpr (Value a) -> SqlExpr DistinctOn
 
-  -- A 'SqlExpr' accepted only by 'set'.
-  ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
+    -- A 'SqlExpr' accepted only by 'set'.
+    ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
 
-  -- An internal 'SqlExpr' used by the 'from' hack.
-  EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
+    -- An internal 'SqlExpr' used by the 'from' hack.
+    EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
 
-  -- Used by 'insertSelect'.
-  EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
-  EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
+    -- Used by 'insertSelect'.
+    EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
+    EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
 
 -- | Phantom type used to mark a @INSERT INTO@ query.
 data InsertFinal
 
 data NeedParens = Parens | Never
-   deriving Eq
+    deriving Eq
 
 parensM :: NeedParens -> TLB.Builder -> TLB.Builder
 parensM Never  = id
@@ -2090,21 +2105,23 @@ parensM Parens = parens
 
 data OrderByType = ASC | DESC
 
-
 instance ToSomeValues (SqlExpr (Value a)) where
   toSomeValues a = [SomeValue a]
 
-fieldName :: (PersistEntity val, PersistField typ)
-          => IdentInfo -> EntityField val typ -> TLB.Builder
+fieldName
+    :: (PersistEntity val, PersistField typ)
+    => IdentInfo -> EntityField val typ -> TLB.Builder
 fieldName info = fromDBName info . fieldDB . persistFieldDef
 
 -- FIXME: Composite/non-id pKS not supported on set
-setAux :: (PersistEntity val, PersistField typ)
-       => EntityField val typ
-       -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
-       -> SqlExpr (Update val)
+setAux
+    :: (PersistEntity val, PersistField typ)
+    => EntityField val typ
+    -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
+    -> SqlExpr (Update val)
 setAux field mkVal = ESet $ \ent -> unsafeSqlBinOp " = " name (mkVal ent)
-  where name = ERaw Never $ \info -> (fieldName info field, mempty)
+  where
+    name = ERaw Never $ \info -> (fieldName info field, mempty)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
 sub mode query = ERaw Parens $ \info -> toRawSql mode info query
@@ -2122,11 +2139,6 @@ ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlEx
 ifNotEmptyList EEmptyList b _ = val b
 ifNotEmptyList (EList _)  _ x = x
 
-
-
-----------------------------------------------------------------------
-
-
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
@@ -2135,9 +2147,9 @@ unsafeSqlCase when v = ERaw Never buildCase
   where
     buildCase :: IdentInfo -> (TLB.Builder, [PersistValue])
     buildCase info =
-      let (elseText, elseVals) = valueToSql v info
-          (whenText, whenVals) = mapWhen when info
-      in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
+        let (elseText, elseVals) = valueToSql v info
+            (whenText, whenVals) = mapWhen when info
+        in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
     mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> IdentInfo -> (TLB.Builder, [PersistValue])
     mapWhen []    _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
@@ -2172,28 +2184,31 @@ unsafeSqlCase when v = ERaw Never buildCase
 unsafeSqlBinOp :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
 unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
   where
-    f info = let (b1, vals1) = f1 info
-                 (b2, vals2) = f2 info
-             in ( parensM p1 b1 <> op <> parensM p2 b2
-                , vals1 <> vals2 )
+    f info =
+        let (b1, vals1) = f1 info
+            (b2, vals2) = f2 info
+        in
+            ( parensM p1 b1 <> op <> parensM p2 b2
+            , vals1 <> vals2
+            )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
-    where construct :: SqlExpr (Value a) -> SqlExpr (Value a)
-          construct (ERaw p f)        = ERaw (if p == Never then Parens else Never) $ \info ->
+  where
+    construct :: SqlExpr (Value a) -> SqlExpr (Value a)
+    construct (ERaw p f) =
+        ERaw (if p == Never then Parens else Never) $ \info ->
             let (b1, vals) = f info
                 build ("?", [PersistList vals']) =
-                  (uncommas $ replicate (length vals') "?", vals')
+                    (uncommas $ replicate (length vals') "?", vals')
                 build expr = expr
-             in  build (parensM p b1, vals)
-          construct (ECompositeKey f) =
-            ERaw Parens $ \info -> (uncommas $ f info, mempty)
-          construct (EAliasedValue i _) =
-            ERaw Never $ aliasedValueIdentToRawSql i
-          construct (EValueReference i i') =
-            ERaw Never $ valueReferenceToRawSql i i'
+             in
+                build (parensM p b1, vals)
+    construct (ECompositeKey f) =
+        ERaw Parens $ \info -> (uncommas $ f info, mempty)
+    construct (EAliasedValue i _) =
+        ERaw Never $ aliasedValueIdentToRawSql i
+    construct (EValueReference i i') =
+        ERaw Never $ valueReferenceToRawSql i i'
 {-# INLINE unsafeSqlBinOp #-}
-
-
-
 
 -- | Similar to 'unsafeSqlBinOp', but may also be applied to
 -- composite keys.  Uses the operator given as the second
@@ -2239,9 +2254,9 @@ unsafeSqlBinOpComposite op sep a b
     deconstruct _ = throw (SqlBinOpCompositeErr DeconstructionError)
 
     compose f1 f2 info
-      | not (null v1 || null v2) = throw (SqlBinOpCompositeErr NullPlaceholdersError)
-      | length b1 /= length b2   = throw (SqlBinOpCompositeErr MismatchingLengthsError)
-      | otherwise                = (bc, vc)
+        | not (null v1 || null v2) = throw (SqlBinOpCompositeErr NullPlaceholdersError)
+        | length b1 /= length b2   = throw (SqlBinOpCompositeErr MismatchingLengthsError)
+        | otherwise                = (bc, vc)
       where
         (b1, v1) = f1 info
         (b2, v2) = f2 info
@@ -2257,49 +2272,54 @@ unsafeSqlValue v = ERaw Never $ const (v, mempty)
 valueToFunctionArg :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
 valueToFunctionArg info v =
     case v of
-      ERaw _ f             -> f info
-      EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-      EValueReference i i' -> valueReferenceToRawSql i i' info
-      ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
+        ERaw _ f             -> f info
+        EAliasedValue i _    -> aliasedValueIdentToRawSql i info
+        EValueReference i i' -> valueReferenceToRawSql i i' info
+        ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
 
 -- | (Internal) A raw SQL function.  Once again, the same warning
 -- from 'unsafeSqlBinOp' applies to this function as well.
-unsafeSqlFunction :: UnsafeSqlFunctionArgument a =>
-                     TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlFunction
+    :: UnsafeSqlFunctionArgument a
+    => TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunction name arg =
-  ERaw Never $ \info ->
-    let (argsTLB, argsVals) =
-          uncommas' $ map (valueToFunctionArg info) $ toArgList arg
-    in (name <> parens argsTLB, argsVals)
+    ERaw Never $ \info ->
+        let (argsTLB, argsVals) =
+              uncommas' $ map (valueToFunctionArg info) $ toArgList arg
+        in
+            (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An unsafe SQL function to extract a subfield from a compound
 -- field, e.g. datetime. See 'unsafeSqlBinOp' for warnings.
 --
 -- Since: 1.3.6.
-unsafeSqlExtractSubField :: UnsafeSqlFunctionArgument a =>
-                     TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlExtractSubField
+    :: UnsafeSqlFunctionArgument a
+    => TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlExtractSubField subField arg =
-  ERaw Never $ \info ->
-    let (argsTLB, argsVals) =
-          uncommas' $ map (valueToFunctionArg info) $ toArgList arg
-    in ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
+    ERaw Never $ \info ->
+        let (argsTLB, argsVals) =
+            uncommas' $ map (valueToFunctionArg info) $ toArgList arg
+        in
+            ("EXTRACT" <> parens (subField <> " FROM " <> argsTLB), argsVals)
 
 -- | (Internal) A raw SQL function. Preserves parentheses around arguments.
 -- See 'unsafeSqlBinOp' for warnings.
-unsafeSqlFunctionParens :: UnsafeSqlFunctionArgument a =>
-                           TLB.Builder -> a -> SqlExpr (Value b)
+unsafeSqlFunctionParens
+    :: UnsafeSqlFunctionArgument a
+    => TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunctionParens name arg =
-  ERaw Never $ \info ->
-    let
-      valueToFunctionArgParens v =
-        case v of
-          ERaw p f             -> first (parensM p) (f info)
-          EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-          EValueReference i i' -> valueReferenceToRawSql i i' info
-          ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
-      (argsTLB, argsVals) =
-          uncommas' $ map valueToFunctionArgParens $ toArgList arg
-    in (name <> parens argsTLB, argsVals)
+    ERaw Never $ \info ->
+        let valueToFunctionArgParens v =
+                case v of
+                    ERaw p f             -> first (parensM p) (f info)
+                    EAliasedValue i _    -> aliasedValueIdentToRawSql i info
+                    EValueReference i i' -> valueReferenceToRawSql i i' info
+                    ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
+            (argsTLB, argsVals) =
+                uncommas' $ map valueToFunctionArgParens $ toArgList arg
+        in
+            (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
@@ -2307,13 +2327,14 @@ unsafeSqlCastAs :: T.Text -> SqlExpr (Value a) -> SqlExpr (Value b)
 unsafeSqlCastAs t v = ERaw Never ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . valueToText)
   where
     valueToText info =
-      case v of
-        (ERaw p f) ->
-          let (b, vals) = f info
-          in (parensM p b, vals)
-        EAliasedValue i _ -> aliasedValueIdentToRawSql i info
-        EValueReference i i' -> valueReferenceToRawSql i i' info
-        ECompositeKey _ -> throw (CompositeKeyErr SqlCastAsError)
+        case v of
+            (ERaw p f) ->
+              let (b, vals) = f info
+              in (parensM p b, vals)
+            EAliasedValue i _ -> aliasedValueIdentToRawSql i info
+            EValueReference i i' -> valueReferenceToRawSql i i' info
+            ECompositeKey _ -> throw (CompositeKeyErr SqlCastAsError)
+
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
 -- numbers of arguments; specifically it allows providing arguments to a sql
 -- function via an n-tuple of @SqlExpr (Value _)@ values, which are not all
@@ -2322,51 +2343,75 @@ unsafeSqlCastAs t v = ERaw Never ((first (\value -> "CAST" <> parens (value <> "
 -- also nest tuples, as e.g. @toArgList ((a,b),(c,d))@ is the same as
 -- @toArgList (a,b,c,d)@.
 class UnsafeSqlFunctionArgument a where
-  toArgList :: a -> [SqlExpr (Value ())]
+    toArgList :: a -> [SqlExpr (Value ())]
 
 -- | Useful for 0-argument functions, like @now@ in Postgresql.
 --
 -- @since 3.2.1
 instance UnsafeSqlFunctionArgument () where
-  toArgList _ = []
+    toArgList _ = []
 
 instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
-  toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
-instance UnsafeSqlFunctionArgument a =>
-         UnsafeSqlFunctionArgument [a] where
+    toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
+
+instance UnsafeSqlFunctionArgument a => UnsafeSqlFunctionArgument [a] where
   toArgList = concatMap toArgList
-instance ( UnsafeSqlFunctionArgument a
-         , UnsafeSqlFunctionArgument b
-         ) => UnsafeSqlFunctionArgument (a, b) where
-  toArgList (a, b) = toArgList a ++ toArgList b
-instance ( UnsafeSqlFunctionArgument a
-         , UnsafeSqlFunctionArgument b
-         , UnsafeSqlFunctionArgument c
-         ) => UnsafeSqlFunctionArgument (a, b, c) where
-  toArgList = toArgList . from3
-instance ( UnsafeSqlFunctionArgument a
-         , UnsafeSqlFunctionArgument b
-         , UnsafeSqlFunctionArgument c
-         , UnsafeSqlFunctionArgument d
-         ) => UnsafeSqlFunctionArgument (a, b, c, d) where
-  toArgList = toArgList . from4
+
+instance
+    (UnsafeSqlFunctionArgument a , UnsafeSqlFunctionArgument b)
+  =>
+    UnsafeSqlFunctionArgument (a, b)
+  where
+    toArgList (a, b) = toArgList a ++ toArgList b
+
+instance
+    ( UnsafeSqlFunctionArgument a
+    , UnsafeSqlFunctionArgument b
+    , UnsafeSqlFunctionArgument c
+    )
+  =>
+    UnsafeSqlFunctionArgument (a, b, c)
+  where
+    toArgList = toArgList . from3
+
+instance
+    ( UnsafeSqlFunctionArgument a
+    , UnsafeSqlFunctionArgument b
+    , UnsafeSqlFunctionArgument c
+    , UnsafeSqlFunctionArgument d
+    )
+  =>
+    UnsafeSqlFunctionArgument (a, b, c, d)
+  where
+    toArgList = toArgList . from4
+
 -- | @since 3.2.3
-instance ( UnsafeSqlFunctionArgument a
-         , UnsafeSqlFunctionArgument b
-         , UnsafeSqlFunctionArgument c
-         , UnsafeSqlFunctionArgument d
-         , UnsafeSqlFunctionArgument e
-         ) => UnsafeSqlFunctionArgument (a, b, c, d, e) where
-  toArgList = toArgList . from5
+instance
+    ( UnsafeSqlFunctionArgument a
+    , UnsafeSqlFunctionArgument b
+    , UnsafeSqlFunctionArgument c
+    , UnsafeSqlFunctionArgument d
+    , UnsafeSqlFunctionArgument e
+    )
+  =>
+    UnsafeSqlFunctionArgument (a, b, c, d, e)
+  where
+    toArgList = toArgList . from5
+
 -- | @since 3.2.3
-instance ( UnsafeSqlFunctionArgument a
-         , UnsafeSqlFunctionArgument b
-         , UnsafeSqlFunctionArgument c
-         , UnsafeSqlFunctionArgument d
-         , UnsafeSqlFunctionArgument e
-         , UnsafeSqlFunctionArgument f
-         ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f) where
-  toArgList = toArgList . from6
+instance
+    ( UnsafeSqlFunctionArgument a
+    , UnsafeSqlFunctionArgument b
+    , UnsafeSqlFunctionArgument c
+    , UnsafeSqlFunctionArgument d
+    , UnsafeSqlFunctionArgument e
+    , UnsafeSqlFunctionArgument f
+    )
+  =>
+    UnsafeSqlFunctionArgument (a, b, c, d, e, f)
+  where
+    toArgList = toArgList . from6
+
 -- | @since 3.2.3
 instance ( UnsafeSqlFunctionArgument a
          , UnsafeSqlFunctionArgument b
@@ -2436,51 +2481,51 @@ veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlE
 
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawSelectSource :: ( SqlSelect a r
-                   , MonadIO m1
-                   , MonadIO m2
-                   )
-                 => Mode
-                 -> SqlQuery a
-                 -> SqlReadT m1 (Acquire (C.ConduitT () r m2 ()))
-rawSelectSource mode query =
-      do
-        conn <- projectBackend <$> R.ask
-        let _ = conn :: SqlBackend
-        res <- R.withReaderT (const conn) (run conn)
-        return $ (C..| massage) `fmap` res
-    where
-
-      run conn =
+rawSelectSource
+    ::
+    ( SqlSelect a r
+    , MonadIO m1
+    , MonadIO m2
+    )
+    => Mode
+    -> SqlQuery a
+    -> SqlReadT m1 (Acquire (C.ConduitT () r m2 ()))
+rawSelectSource mode query = do
+    conn <- projectBackend <$> R.ask
+    let _ = conn :: SqlBackend
+    res <- R.withReaderT (const conn) (run conn)
+    return $ (C..| massage) `fmap` res
+  where
+    run conn =
         uncurry rawQueryRes $
         first builderToText $
         toRawSql mode (conn, initialIdentState) query
 
-      massage = do
+    massage = do
         mrow <- C.await
-        case process <$> mrow of
-          Just (Right r)  -> C.yield r >> massage
-          Just (Left err) -> liftIO $ throwIO $ PersistMarshalError err
-          Nothing         -> return ()
-
-      process = sqlSelectProcessRow
-
+        case sqlSelectProcessRow <$> mrow of
+            Just (Right r)  -> C.yield r >> massage
+            Just (Left err) -> liftIO $ throwIO $ PersistMarshalError err
+            Nothing         -> return ()
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a 'C.Source' of rows.
-selectSource :: ( SqlSelect a r
-               , BackendCompatible SqlBackend backend
-               , IsPersistBackend backend
-               , PersistQueryRead backend
-               , PersistStoreRead backend, PersistUniqueRead backend
-               , MonadResource m )
-             => SqlQuery a
-             -> C.ConduitT () r (R.ReaderT backend m) ()
+selectSource
+    ::
+    ( SqlSelect a r
+    , BackendCompatible SqlBackend backend
+    , IsPersistBackend backend
+    , PersistQueryRead backend
+    , PersistStoreRead backend, PersistUniqueRead backend
+    , MonadResource m
+    )
+    => SqlQuery a
+    -> C.ConduitT () r (R.ReaderT backend m) ()
 selectSource query = do
-  res <- lift $ rawSelectSource SELECT query
-  (key, src) <- lift $ allocateAcquire res
-  src
-  lift $ release key
+    res <- lift $ rawSelectSource SELECT query
+    (key, src) <- lift $ allocateAcquire res
+    src
+    lift $ release key
 
 -- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
 -- 'SqlPersistT' monad and return a list of rows.
@@ -2523,37 +2568,37 @@ selectSource query = do
 -- we are able to infer from that single @personName . entityVal@
 -- function composition that the @p@ inside the query is of type
 -- @SqlExpr (Entity Person)@.
-select :: ( SqlSelect a r
-          , MonadIO m
-          )
-       => SqlQuery a -> SqlReadT m [r]
+select
+    ::
+    ( SqlSelect a r
+    , MonadIO m
+    )
+    => SqlQuery a
+    -> SqlReadT m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
     liftIO $ with res $ flip R.runReaderT conn . runSource
 
 -- | (Internal) Run a 'C.Source' of rows.
-runSource :: Monad m =>
-             C.ConduitT () r (R.ReaderT backend m) ()
-          -> R.ReaderT backend m [r]
+runSource
+    :: Monad m
+    => C.ConduitT () r (R.ReaderT backend m) ()
+    -> R.ReaderT backend m [r]
 runSource src = C.runConduit $ src C..| CL.consume
-
-
-----------------------------------------------------------------------
-
 
 -- | (Internal) Execute an @esqueleto@ statement inside
 -- @persistent@'s 'SqlPersistT' monad.
-rawEsqueleto :: ( MonadIO m, SqlSelect a r, BackendCompatible SqlBackend backend)
-           => Mode
-           -> SqlQuery a
-           -> R.ReaderT backend m Int64
+rawEsqueleto
+    :: (MonadIO m, SqlSelect a r, BackendCompatible SqlBackend backend)
+    => Mode
+    -> SqlQuery a
+    -> R.ReaderT backend m Int64
 rawEsqueleto mode query = do
-  conn <- R.ask
-  uncurry rawExecuteCount $
-    first builderToText $
-    toRawSql mode (conn, initialIdentState) query
-
+    conn <- R.ask
+    uncurry rawExecuteCount $
+        first builderToText $
+        toRawSql mode (conn, initialIdentState) query
 
 -- | Execute an @esqueleto@ @DELETE@ query inside @persistent@'s
 -- 'SqlPersistT' monad.  Note that currently there are no type
@@ -2577,17 +2622,18 @@ rawEsqueleto mode query = do
 -- 'from' $ \\(appointment :: 'SqlExpr' ('Entity' Appointment)) ->
 -- return ()
 -- @
-delete :: ( MonadIO m )
-       => SqlQuery ()
-       -> SqlWriteT m ()
+delete
+    :: (MonadIO m)
+    => SqlQuery ()
+    -> SqlWriteT m ()
 delete = void . deleteCount
 
 -- | Same as 'delete', but returns the number of rows affected.
-deleteCount :: ( MonadIO m )
-            => SqlQuery ()
-            -> SqlWriteT m Int64
+deleteCount
+    :: (MonadIO m)
+    => SqlQuery ()
+    -> SqlWriteT m Int64
 deleteCount = rawEsqueleto DELETE
-
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
 -- 'SqlPersistT' monad.  Note that currently there are no type
@@ -2602,33 +2648,28 @@ deleteCount = rawEsqueleto DELETE
 -- 'where_' $ isNothing (p '^.' PersonAge)
 -- @
 update
-  ::
-  ( MonadIO m, PersistEntity val
-  , BackendCompatible SqlBackend (PersistEntityBackend val)
-  )
-  => (SqlExpr (Entity val) -> SqlQuery ())
-  -> SqlWriteT m ()
+    ::
+    ( MonadIO m, PersistEntity val
+    , BackendCompatible SqlBackend (PersistEntityBackend val)
+    )
+    => (SqlExpr (Entity val) -> SqlQuery ())
+    -> SqlWriteT m ()
 update = void . updateCount
 
 -- | Same as 'update', but returns the number of rows affected.
 updateCount
-  ::
-  ( MonadIO m, PersistEntity val
-  , BackendCompatible SqlBackend (PersistEntityBackend val)
-  )
-  => (SqlExpr (Entity val) -> SqlQuery ())
-  -> SqlWriteT m Int64
+    ::
+    ( MonadIO m, PersistEntity val
+    , BackendCompatible SqlBackend (PersistEntityBackend val)
+    )
+    => (SqlExpr (Entity val) -> SqlQuery ())
+    -> SqlWriteT m Int64
 updateCount = rawEsqueleto UPDATE . from
-
-
-----------------------------------------------------------------------
-
 
 builderToText :: TLB.Builder -> T.Text
 builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
   where
     defaultChunkSize = 1024 - 32
-
 
 -- | (Internal) Pretty prints a 'SqlQuery' into a SQL query.
 --
@@ -2640,38 +2681,38 @@ toRawSql
   :: (SqlSelect a r, BackendCompatible SqlBackend backend)
   => Mode -> (backend, IdentState) -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode (conn, firstIdentState) query =
-  let ((ret, sd), finalIdentState) =
-        flip S.runState firstIdentState $
-        W.runWriterT $
-        unQ query
-      SideData distinctClause
-               fromClauses
-               setClauses
-               whereClauses
-               groupByClause
-               havingClause
-               orderByClauses
-               limitClause
-               lockingClause
-               cteClause = sd
-      -- Pass the finalIdentState (containing all identifiers
-      -- that were used) to the subsequent calls.  This ensures
-      -- that no name clashes will occur on subqueries that may
-      -- appear on the expressions below.
-      info = (projectBackend conn, finalIdentState)
-  in mconcat
-      [ makeCte        info cteClause
-      , makeInsertInto info mode ret
-      , makeSelect     info mode distinctClause ret
-      , makeFrom       info mode fromClauses
-      , makeSet        info setClauses
-      , makeWhere      info whereClauses
-      , makeGroupBy    info groupByClause
-      , makeHaving     info havingClause
-      , makeOrderBy    info orderByClauses
-      , makeLimit      info limitClause orderByClauses
-      , makeLocking         lockingClause
-      ]
+    let ((ret, sd), finalIdentState) =
+            flip S.runState firstIdentState $
+            W.runWriterT $
+            unQ query
+        SideData distinctClause
+                 fromClauses
+                 setClauses
+                 whereClauses
+                 groupByClause
+                 havingClause
+                 orderByClauses
+                 limitClause
+                 lockingClause
+                 cteClause = sd
+        -- Pass the finalIdentState (containing all identifiers
+        -- that were used) to the subsequent calls.  This ensures
+        -- that no name clashes will occur on subqueries that may
+        -- appear on the expressions below.
+        info = (projectBackend conn, finalIdentState)
+    in mconcat
+        [ makeCte        info cteClause
+        , makeInsertInto info mode ret
+        , makeSelect     info mode distinctClause ret
+        , makeFrom       info mode fromClauses
+        , makeSet        info setClauses
+        , makeWhere      info whereClauses
+        , makeGroupBy    info groupByClause
+        , makeHaving     info havingClause
+        , makeOrderBy    info orderByClauses
+        , makeLimit      info limitClause orderByClauses
+        , makeLocking         lockingClause
+        ]
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
@@ -2683,26 +2724,26 @@ toRawSql mode (conn, firstIdentState) query =
 --
 -- @since 3.1.1
 renderQueryToText
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
-  => Mode
-  -- ^ Whether to render as an 'SELECT', 'DELETE', etc.
-  -> SqlQuery a
-  -- ^ The SQL query you want to render.
-  -> R.ReaderT backend m (T.Text, [PersistValue])
+    :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+    => Mode
+    -- ^ Whether to render as an 'SELECT', 'DELETE', etc.
+    -> SqlQuery a
+    -- ^ The SQL query you want to render.
+    -> R.ReaderT backend m (T.Text, [PersistValue])
 renderQueryToText mode query = do
-  backend <- R.ask
-  let (builder, pvals) = toRawSql mode (backend, initialIdentState) query
-  pure (builderToText builder, pvals)
+    backend <- R.ask
+    let (builder, pvals) = toRawSql mode (backend, initialIdentState) query
+    pure (builderToText builder, pvals)
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
 --
 -- @since 3.1.1
 renderQuerySelect
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
-  => SqlQuery a
-  -- ^ The SQL query you want to render.
-  -> R.ReaderT backend m (T.Text, [PersistValue])
+    :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+    => SqlQuery a
+    -- ^ The SQL query you want to render.
+    -> R.ReaderT backend m (T.Text, [PersistValue])
 renderQuerySelect = renderQueryToText SELECT
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -2710,10 +2751,10 @@ renderQuerySelect = renderQueryToText SELECT
 --
 -- @since 3.1.1
 renderQueryDelete
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
-  => SqlQuery a
-  -- ^ The SQL query you want to render.
-  -> R.ReaderT backend m (T.Text, [PersistValue])
+    :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+    => SqlQuery a
+    -- ^ The SQL query you want to render.
+    -> R.ReaderT backend m (T.Text, [PersistValue])
 renderQueryDelete = renderQueryToText DELETE
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -2721,10 +2762,10 @@ renderQueryDelete = renderQueryToText DELETE
 --
 -- @since 3.1.1
 renderQueryUpdate
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
-  => SqlQuery a
-  -- ^ The SQL query you want to render.
-  -> R.ReaderT backend m (T.Text, [PersistValue])
+    :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+    => SqlQuery a
+    -- ^ The SQL query you want to render.
+    -> R.ReaderT backend m (T.Text, [PersistValue])
 renderQueryUpdate = renderQueryToText UPDATE
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -2732,19 +2773,18 @@ renderQueryUpdate = renderQueryToText UPDATE
 --
 -- @since 3.1.1
 renderQueryInsertInto
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
-  => SqlQuery a
-  -- ^ The SQL query you want to render.
-  -> R.ReaderT backend m (T.Text, [PersistValue])
+    :: (SqlSelect a r, BackendCompatible SqlBackend backend, Monad m)
+    => SqlQuery a
+    -- ^ The SQL query you want to render.
+    -> R.ReaderT backend m (T.Text, [PersistValue])
 renderQueryInsertInto = renderQueryToText INSERT_INTO
 
 -- | (Internal) Mode of query being converted by 'toRawSql'.
-data Mode =
-    SELECT
-  | DELETE
-  | UPDATE
-  | INSERT_INTO
-
+data Mode
+    = SELECT
+    | DELETE
+    | UPDATE
+    | INSERT_INTO
 
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = intersperseB ", "
@@ -2759,95 +2799,102 @@ makeCte :: IdentInfo -> [CommonTableExpressionClause] -> (TLB.Builder, [PersistV
 makeCte info cteClauses =
   let
     withCteText
-      | hasRecursive = "WITH RECURSIVE "
-      | otherwise = "WITH "
-
+        | hasRecursive = "WITH RECURSIVE "
+        | otherwise = "WITH "
       where
         hasRecursive =
-          any (== RecursiveCommonTableExpression) $
-            fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind) cteClauses
+            elem RecursiveCommonTableExpression
+            $ fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind)
+            $ cteClauses
 
     cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
-      first (\tlb ->
-          useIdent info cteIdent <> " AS " <> parens tlb
-      ) $ cteFn info
+        first
+            (\tlb -> useIdent info cteIdent <> " AS " <> parens tlb)
+            (cteFn info)
 
     cteBody =
-      mconcat $
-        intersperse (",\n", mempty) $
-          fmap cteClauseToText cteClauses
+        mconcat
+        $ intersperse (",\n", mempty)
+        $ fmap cteClauseToText cteClauses
   in
-  if length cteClauses == 0 then
-    mempty
-  else
-    first (\tlb -> withCteText <> tlb <> "\n") cteBody
-
+    case cteClauses of
+        [] ->
+            mempty
+        _ ->
+          first (\tlb -> withCteText <> tlb <> "\n") cteBody
 
 makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
 makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
 makeInsertInto _    _           _   = mempty
 
-
 makeSelect :: SqlSelect a r => IdentInfo -> Mode -> DistinctClause -> a -> (TLB.Builder, [PersistValue])
 makeSelect info mode_ distinctClause ret = process mode_
   where
     process mode =
-      case mode of
-        SELECT      -> withCols selectKind
-        DELETE      -> plain "DELETE "
-        UPDATE      -> plain "UPDATE "
-        INSERT_INTO -> process SELECT
+        case mode of
+            SELECT      -> withCols selectKind
+            DELETE      -> plain "DELETE "
+            UPDATE      -> plain "UPDATE "
+            INSERT_INTO -> process SELECT
     selectKind =
-      case distinctClause of
-        DistinctAll      -> ("SELECT ", [])
-        DistinctStandard -> ("SELECT DISTINCT ", [])
-        DistinctOn exprs -> first (("SELECT DISTINCT ON (" <>) . (<> ") ")) $
-                            uncommas' (processExpr <$> exprs)
-      where processExpr (EDistinctOn f) = materializeExpr info f
+        case distinctClause of
+            DistinctAll      -> ("SELECT ", [])
+            DistinctStandard -> ("SELECT DISTINCT ", [])
+            DistinctOn exprs ->
+                first (("SELECT DISTINCT ON (" <>) . (<> ") "))
+                $ uncommas' (processExpr <$> exprs)
+      where
+        processExpr (EDistinctOn f) = materializeExpr info f
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
-
 makeFrom
-  :: IdentInfo
-  -> Mode
-  -> [FromClause]
-  -> (TLB.Builder, [PersistValue])
+    :: IdentInfo
+    -> Mode
+    -> [FromClause]
+    -> (TLB.Builder, [PersistValue])
 makeFrom _    _    [] = mempty
 makeFrom info mode fs = ret
   where
-    ret = case collectOnClauses (fst info) fs of
+    ret =
+        case collectOnClauses (fst info) fs of
             Left expr -> throw $ mkExc expr
             Right fs' -> keyword $ uncommas' (map (mk Never) fs')
-    keyword = case mode of
-                UPDATE -> id
-                _      -> first ("\nFROM " <>)
+    keyword =
+        case mode of
+            UPDATE -> id
+            _      -> first ("\nFROM " <>)
 
     mk _     (FromStart i def) = base i def
     mk paren (FromJoin lhs kind rhs monClause) =
-      first (parensM paren) $
-      mconcat [ mk Never lhs
-              , (fromKind kind, mempty)
-              , mk Parens rhs
-              , maybe mempty makeOnClause monClause
-              ]
+        first (parensM paren) $
+        mconcat [ mk Never lhs
+                , (fromKind kind, mempty)
+                , mk Parens rhs
+                , maybe mempty makeOnClause monClause
+                ]
     mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
     mk _ (FromQuery ident f subqueryType) =
-      let (queryText, queryVals) = f info
-          lateralKeyword =
-            case subqueryType of
-              NormalSubQuery -> ""
-              LateralSubQuery -> "LATERAL "
-      in (lateralKeyword <> (parens queryText) <> " AS " <> useIdent info ident, queryVals)
+        let (queryText, queryVals) = f info
+            lateralKeyword =
+              case subqueryType of
+                NormalSubQuery -> ""
+                LateralSubQuery -> "LATERAL "
+        in
+            ( lateralKeyword <> (parens queryText) <> " AS " <> useIdent info ident
+            , queryVals
+            )
     mk _ (FromIdent ident) =
-      (useIdent info ident, mempty)
+        (useIdent info ident, mempty)
 
     base ident@(I identText) def =
-      let db@(DBName dbText) = entityDB def
-      in ( if dbText == identText
-           then fromDBName info db
-           else fromDBName info db <> (" AS " <> useIdent info ident)
-         , mempty )
+        let db@(DBName dbText) = entityDB def
+        in ( fromDBNameinfo db <>
+                 if dbText == identText
+                 then mempty
+                 else " AS " <> useIdent info ident
+           , mempty
+           )
 
     fromKind InnerJoinKind      = " INNER JOIN "
     fromKind CrossJoinKind      = " CROSS JOIN "
@@ -2862,8 +2909,8 @@ makeFrom info mode fs = ret
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
-      OnClauseWithoutMatchingJoinException $
-      TL.unpack $ TLB.toLazyText $ fst (f info)
+        OnClauseWithoutMatchingJoinException $
+            TL.unpack $ TLB.toLazyText $ fst (f info)
     mkExc (ECompositeKey _) = throw (CompositeKeyErr MakeExcError)
     mkExc (EAliasedValue _ _) = throw (AliasedValueErr MakeExcError)
     mkExc (EValueReference _ _) = throw (AliasedValueErr MakeExcError)
@@ -2882,11 +2929,11 @@ makeWhere _    NoWhere                       = mempty
 makeWhere info (Where v) = first ("\nWHERE " <>) $ x info
   where
     x =
-      case v of
-        ERaw _ f             -> f
-        EAliasedValue i _    -> aliasedValueIdentToRawSql i
-        EValueReference i i' -> valueReferenceToRawSql i i'
-        ECompositeKey _      -> throw (CompositeKeyErr MakeWhereError)
+        case v of
+            ERaw _ f             -> f
+            EAliasedValue i _    -> aliasedValueIdentToRawSql i
+            EValueReference i i' -> valueReferenceToRawSql i i'
+            ECompositeKey _      -> throw (CompositeKeyErr MakeWhereError)
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
 makeGroupBy _ (GroupBy []) = (mempty, [])
@@ -2906,30 +2953,31 @@ makeHaving _    NoWhere   = mempty
 makeHaving info (Where v) = first ("\nHAVING " <>) $ x info
   where
     x =
-      case v of
-        ERaw _ f             -> f
-        EAliasedValue i _    -> aliasedValueIdentToRawSql i
-        EValueReference i i' -> valueReferenceToRawSql i i'
-        ECompositeKey _      -> throw (CompositeKeyErr MakeHavingError)
+        case v of
+            ERaw _ f             -> f
+            EAliasedValue i _    -> aliasedValueIdentToRawSql i
+            EValueReference i i' -> valueReferenceToRawSql i i'
+            ECompositeKey _      -> throw (CompositeKeyErr MakeHavingError)
 
 -- makeHaving, makeWhere and makeOrderBy
-makeOrderByNoNewline ::
-     IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
+makeOrderByNoNewline
+    :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderByNoNewline _    [] = mempty
 makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk os
   where
     mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
     mk (EOrderBy t (ECompositeKey f)) =
-      let fs = f info
-          vals = repeat []
-      in zip (map (<> orderByType t) fs) vals
+        let fs = f info
+            vals = repeat []
+        in zip (map (<> orderByType t) fs) vals
     mk (EOrderBy t v) =
-      let x = case v of
-                ERaw p f -> (first (parensM p)) . f
-                EAliasedValue i _ -> aliasedValueIdentToRawSql i
-                EValueReference i i' -> valueReferenceToRawSql i i'
-                ECompositeKey _ -> undefined -- defined above
-      in [ first (<> orderByType t) $ x info ]
+        let x =
+                case v of
+                    ERaw p f -> (first (parensM p)) . f
+                    EAliasedValue i _ -> aliasedValueIdentToRawSql i
+                    EValueReference i i' -> valueReferenceToRawSql i i'
+                    ECompositeKey _ -> undefined -- defined above
+        in [ first (<> orderByType t) $ x info ]
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
 
     orderByType ASC  = " ASC"
@@ -2938,18 +2986,17 @@ makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk
 makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _ [] = mempty
 makeOrderBy info is =
-  let (tlb, vals) = makeOrderByNoNewline info is
-  in ("\n" <> tlb, vals)
+    let (tlb, vals) = makeOrderByNoNewline info is
+    in ("\n" <> tlb, vals)
 
 {-# DEPRECATED EOrderRandom "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 
 makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) orderByClauses =
-  let limitRaw = connLimitOffset conn (v ml, v mo) hasOrderClause "\n"
-      hasOrderClause = not (null orderByClauses)
-      v = maybe 0 fromIntegral
-  in (TLB.fromText limitRaw, mempty)
-
+    let limitRaw = connLimitOffset conn (v ml, v mo) hasOrderClause "\n"
+        hasOrderClause = not (null orderByClauses)
+        v = maybe 0 fromIntegral
+    in (TLB.fromText limitRaw, mempty)
 
 makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
 makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
@@ -2959,29 +3006,23 @@ makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
     toTLB ForShare            = "\nFOR SHARE"
     toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
 
-
-
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
 
 aliasedValueIdentToRawSql :: Ident -> IdentInfo -> (TLB.Builder, [PersistValue])
-aliasedValueIdentToRawSql i info =
-  (useIdent info i, mempty)
+aliasedValueIdentToRawSql i info = (useIdent info i, mempty)
 
 valueReferenceToRawSql ::  Ident -> (IdentInfo -> Ident) -> IdentInfo -> (TLB.Builder, [PersistValue])
 valueReferenceToRawSql sourceIdent columnIdentF info =
-  (useIdent info sourceIdent <> "." <> useIdent info (columnIdentF info), mempty)
+    (useIdent info sourceIdent <> "." <> useIdent info (columnIdentF info), mempty)
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
 aliasedEntityColumnIdent (I baseIdent) field =
-  I (baseIdent <> "_" <> (unDBName $ fieldDB field))
+    I (baseIdent <> "_" <> (unDBName $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
 aliasedColumnName (I baseIdent) info columnName =
-  useIdent info (I (baseIdent <> "_" <> columnName))
-
-----------------------------------------------------------------------
-
+    useIdent info (I (baseIdent <> "_" <> columnName))
 
 -- | (Internal) Class for mapping results coming from 'SqlQuery'
 -- into actual results.
@@ -2990,52 +3031,53 @@ aliasedColumnName (I baseIdent) info columnName =
 -- there are some crucial differences and ultimately they're
 -- different classes.
 class SqlSelect a r | a -> r, r -> a where
-  -- | Creates the variable part of the @SELECT@ query and
-  -- returns the list of 'PersistValue's that will be given to
-  -- 'rawQuery'.
-  sqlSelectCols :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
+    -- | Creates the variable part of the @SELECT@ query and
+    -- returns the list of 'PersistValue's that will be given to
+    -- 'rawQuery'.
+    sqlSelectCols :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
 
-  -- | Number of columns that will be consumed.
-  sqlSelectColCount :: Proxy a -> Int
+    -- | Number of columns that will be consumed.
+    sqlSelectColCount :: Proxy a -> Int
 
-  -- | Transform a row of the result into the data type.
-  sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
+    -- | Transform a row of the result into the data type.
+    sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
 
-  -- | Create @INSERT INTO@ clause instead.
-  sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
-  sqlInsertInto = throw (UnexpectedCaseErr UnsupportedSqlInsertIntoType)
+    -- | Create @INSERT INTO@ clause instead.
+    sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
+    sqlInsertInto = throw (UnexpectedCaseErr UnsupportedSqlInsertIntoType)
 
 
 -- | @INSERT INTO@ hack.
 instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
-  sqlInsertInto info (EInsertFinal (EInsert p _)) =
-    let fields = uncommas $
-                 map (fromDBName info . fieldDB) $
-                 entityFields $
-                 entityDef p
-        table  = fromDBName info . entityDB . entityDef $ p
-    in ("INSERT INTO " <> table <> parens fields <> "\n", [])
-  sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
-  sqlSelectColCount   = const 0
-  sqlSelectProcessRow =
-    const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
-
+    sqlInsertInto info (EInsertFinal (EInsert p _)) =
+        let fields =
+                uncommas $
+                map (fromDBName info . fieldDB) $
+                entityFields $
+                entityDef p
+            table  =
+                fromDBName info . entityDB . entityDef $ p
+        in
+            ("INSERT INTO " <> table <> parens fields <> "\n", [])
+    sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
+    sqlSelectColCount   = const 0
+    sqlSelectProcessRow =
+      const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
 instance SqlSelect () () where
-  sqlSelectCols _ _ = ("1", [])
-  sqlSelectColCount _ = 1
-  sqlSelectProcessRow _ = Right ()
+    sqlSelectCols _ _ = ("1", [])
+    sqlSelectColCount _ = 1
+    sqlSelectProcessRow _ = Right ()
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
-     (if hasCompositeKey ent
-      then [] else [fieldDB (entityId ent)])
-   <> map fieldDB (entityFields ent)
+    (if hasCompositeKey ent then id else ( fieldDB (entityId ent) :))
+    <> map fieldDB (entityFields ent)
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
-  sqlSelectCols info expr@(EEntity ident) = ret
+    sqlSelectCols info expr@(EEntity ident) = ret
       where
         process ed = uncommas $
                      map ((name <>) . TLB.fromText) $
@@ -3049,7 +3091,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         name = useIdent info ident <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
-  sqlSelectCols info expr@(EAliasedEntity aliasIdent tableIdent) = ret
+    sqlSelectCols info expr@(EAliasedEntity aliasIdent tableIdent) = ret
       where
         process ed = uncommas $
                      map ((name <>) . aliasName) $
@@ -3058,7 +3100,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         name = useIdent info tableIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
-  sqlSelectCols info expr@(EAliasedEntityReference sourceIdent baseIdent) = ret
+    sqlSelectCols info expr@(EAliasedEntityReference sourceIdent baseIdent) = ret
       where
         process ed = uncommas $
                      map ((name <>) . aliasedColumnName baseIdent info . unDBName) $
@@ -3066,78 +3108,74 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
         name = useIdent info sourceIdent <> "."
         ret = let ed = entityDef $ getEntityVal $ return expr
               in (process ed, mempty)
-  sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
-  sqlSelectProcessRow = parseEntityValues ed
-    where ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
-
+    sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
+    sqlSelectProcessRow = parseEntityValues ed
+      where
+        ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
 
 getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
 getEntityVal = const Proxy
 
-
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
-  sqlSelectCols info (EMaybe ent) = sqlSelectCols info ent
-  sqlSelectColCount = sqlSelectColCount . fromEMaybe
-    where
-      fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
-      fromEMaybe = const Proxy
-  sqlSelectProcessRow cols
-    | all (== PersistNull) cols = return Nothing
-    | otherwise                 = Just <$> sqlSelectProcessRow cols
+    sqlSelectCols info (EMaybe ent) = sqlSelectCols info ent
+    sqlSelectColCount = sqlSelectColCount . fromEMaybe
+      where
+        fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
+        fromEMaybe = const Proxy
+    sqlSelectProcessRow cols
+        | all (== PersistNull) cols = return Nothing
+        | otherwise                 = Just <$> sqlSelectProcessRow cols
 
 
 -- | You may return any single value (i.e. a single column) from
 -- a 'select' query.
 instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
-  sqlSelectCols = materializeExpr
-  sqlSelectColCount = const 1
-  sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
-  sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
+    sqlSelectCols = materializeExpr
+    sqlSelectColCount = const 1
+    sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
+    sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
 materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
 materializeExpr info (ERaw p f) =
-  let (b, vals) = f info
-  in (parensM p b, vals)
+    let (b, vals) = f info
+    in (parensM p b, vals)
 materializeExpr info (ECompositeKey f) =
-  let bs = f info
-  in (uncommas $ map (parensM Parens) bs, [])
+    let bs = f info
+    in (uncommas $ map (parensM Parens) bs, [])
 materializeExpr info (EAliasedValue ident x) =
-  let (b, vals) = materializeExpr info x
-  in (b <> " AS " <> (useIdent info ident), vals)
+    let (b, vals) = materializeExpr info x
+    in (b <> " AS " <> (useIdent info ident), vals)
 materializeExpr info (EValueReference sourceIdent columnIdent) =
-  valueReferenceToRawSql sourceIdent columnIdent info
+    valueReferenceToRawSql sourceIdent columnIdent info
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
 -- from a 'select' query.
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         ) => SqlSelect (a, b) (ra, rb) where
-  sqlSelectCols esc (a, b) =
-    uncommas'
-      [ sqlSelectCols esc a
-      , sqlSelectCols esc b
-      ]
-  sqlSelectColCount = uncurry (+) . (sqlSelectColCount *** sqlSelectColCount) . fromTuple
-    where
-      fromTuple :: Proxy (a,b) -> (Proxy a, Proxy b)
-      fromTuple = const (Proxy, Proxy)
-  sqlSelectProcessRow =
-    let x = getType processRow
-        getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
-        getType = const Proxy
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
+    sqlSelectCols esc (a, b) =
+        uncommas'
+            [ sqlSelectCols esc a
+            , sqlSelectCols esc b
+            ]
+    sqlSelectColCount = uncurry (+) . (sqlSelectColCount *** sqlSelectColCount) . fromTuple
+      where
+        fromTuple :: Proxy (a,b) -> (Proxy a, Proxy b)
+        fromTuple = const (Proxy, Proxy)
+    sqlSelectProcessRow =
+      let x = getType processRow
+          getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
+          getType = const Proxy
 
-        colCountFst = sqlSelectColCount x
+          colCountFst = sqlSelectColCount x
 
-        processRow row =
-            let (rowFst, rowSnd) = splitAt colCountFst row
-            in (,) <$> sqlSelectProcessRow rowFst
-                   <*> sqlSelectProcessRow rowSnd
+          processRow row =
+              let (rowFst, rowSnd) = splitAt colCountFst row
+              in (,) <$> sqlSelectProcessRow rowFst
+                     <*> sqlSelectProcessRow rowSnd
 
-    in colCountFst `seq` processRow
-       -- Avoids recalculating 'colCountFst'.
-
+      in colCountFst `seq` processRow
+         -- Avoids recalculating 'colCountFst'.
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3160,7 +3198,6 @@ from3 (a,b,c) = ((a,b),c)
 
 to3 :: ((a,b),c) -> (a,b,c)
 to3 ((a,b),c) = (a,b,c)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3185,7 +3222,6 @@ from4 (a,b,c,d) = ((a,b),(c,d))
 
 to4 :: ((a,b),(c,d)) -> (a,b,c,d)
 to4 ((a,b),(c,d)) = (a,b,c,d)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3212,7 +3248,6 @@ from5 (a,b,c,d,e) = ((a,b),(c,d),e)
 
 to5 :: ((a,b),(c,d),e) -> (a,b,c,d,e)
 to5 ((a,b),(c,d),e) = (a,b,c,d,e)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3241,7 +3276,6 @@ from6 (a,b,c,d,e,f) = ((a,b),(c,d),(e,f))
 
 to6 :: ((a,b),(c,d),(e,f)) -> (a,b,c,d,e,f)
 to6 ((a,b),(c,d),(e,f)) = (a,b,c,d,e,f)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3272,7 +3306,6 @@ from7 (a,b,c,d,e,f,g) = ((a,b),(c,d),(e,f),g)
 
 to7 :: ((a,b),(c,d),(e,f),g) -> (a,b,c,d,e,f,g)
 to7 ((a,b),(c,d),(e,f),g) = (a,b,c,d,e,f,g)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3375,7 +3408,6 @@ from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
 
 to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
 to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)
-
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3617,17 +3649,20 @@ from16P = const Proxy
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 
-
 -- | Insert a 'PersistField' for every selected value.
 --
--- /Since: 2.4.2/
-insertSelect :: (MonadIO m, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m ()
+-- @since 2.4.2
+insertSelect
+    :: (MonadIO m, PersistEntity a)
+    => SqlQuery (SqlExpr (Insertion a))
+    -> SqlWriteT m ()
 insertSelect = void . insertSelectCount
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
-insertSelectCount :: (MonadIO m, PersistEntity a) =>
-  SqlQuery (SqlExpr (Insertion a)) -> SqlWriteT m Int64
+insertSelectCount
+    :: (MonadIO m, PersistEntity a)
+    => SqlQuery (SqlExpr (Insertion a))
+    -> SqlWriteT m Int64
 insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
@@ -3635,45 +3670,41 @@ insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
 --
 -- @since 3.2.0
 renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
-renderExpr sqlBackend e =
-  case e of
+renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues -> do
-      let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
-       in (builderToText builder)
+        let (builder, _) = mkBuilderValues (sqlBackend, initialIdentState)
+         in (builderToText builder)
     ECompositeKey mkInfo ->
-      throw
-        . RenderExprUnexpectedECompositeKey
-        . builderToText
-        . mconcat
-        . mkInfo
-        $ (sqlBackend, initialIdentState)
+        throw
+          . RenderExprUnexpectedECompositeKey
+          . builderToText
+          . mconcat
+          . mkInfo
+          $ (sqlBackend, initialIdentState)
     EAliasedValue i _   ->
-      builderToText $ useIdent (sqlBackend, initialIdentState) i
+        builderToText $ useIdent (sqlBackend, initialIdentState) i
     EValueReference i i' ->
-      let (builder, _) = valueReferenceToRawSql i i' (sqlBackend, initialIdentState)
-       in (builderToText builder)
+        let (builder, _) = valueReferenceToRawSql i i' (sqlBackend, initialIdentState)
+         in (builderToText builder)
+
 -- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
 -- keys, and will blow up if you give it one.
 --
 -- @since 3.2.0
 data RenderExprException = RenderExprUnexpectedECompositeKey T.Text
-  deriving Show
+    deriving Show
 
 -- |
 --
 -- @since 3.2.0
 instance Exception RenderExprException
 
-
-----------------------------------------------------------------------
-
-
 -- | @valkey i = 'val' . 'toSqlKey'@
 -- (<https://github.com/prowdsponsor/esqueleto/issues/9>).
-valkey :: (ToBackendKey SqlBackend entity, PersistField (Key entity)) =>
-          Int64 -> SqlExpr (Value (Key entity))
+valkey
+    :: (ToBackendKey SqlBackend entity, PersistField (Key entity))
+    => Int64 -> SqlExpr (Value (Key entity))
 valkey = val . toSqlKey
-
 
 -- | @valJ@ is like @val@ but for something that is already a @Value@. The use
 -- case it was written for was, given a @Value@ lift the @Key@ for that @Value@
@@ -3684,22 +3715,25 @@ valkey = val . toSqlKey
 -- constrained to be the same by the type signature on the function
 -- (<https://github.com/prowdsponsor/esqueleto/pull/69>).
 --
--- /Since: 1.4.2/
-valJ :: (PersistField (Key entity)) =>
-        Value (Key entity) -> SqlExpr (Value (Key entity))
+-- @since 1.4.2
+valJ
+    :: (PersistField (Key entity))
+    => Value (Key entity)
+    -> SqlExpr (Value (Key entity))
 valJ = val . unValue
-
-
-----------------------------------------------------------------------
 
 
 -- | Synonym for 'Database.Persist.Store.delete' that does not
 -- clash with @esqueleto@'s 'delete'.
-deleteKey :: ( PersistStore backend
-             , BaseBackend backend ~ PersistEntityBackend val
-             , MonadIO m
-             , PersistEntity val )
-          => Key val -> R.ReaderT backend m ()
+deleteKey
+    ::
+    ( PersistStore backend
+    , BaseBackend backend ~ PersistEntityBackend val
+    , MonadIO m
+    , PersistEntity val
+    )
+    => Key val
+    -> R.ReaderT backend m ()
 deleteKey = Database.Persist.delete
 
 -- | Avoid N+1 queries and join entities into a map structure
@@ -3714,15 +3748,14 @@ deleteKey = Database.Persist.delete
 --
 -- @since 3.1.2
 associateJoin
-  :: forall e1 e0
-   . Ord (Key e0)
-  => [(Entity e0, e1)]
-  -> Map.Map (Key e0) (e0, [e1])
+    :: forall e1 e0.  Ord (Key e0)
+    => [(Entity e0, e1)]
+    -> Map.Map (Key e0) (e0, [e1])
 associateJoin = foldr f start
   where
     start = Map.empty
     f (one, many) =
-      Map.insertWith
-        (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
-        (entityKey one)
-        (entityVal one, [many])
+        Map.insertWith
+            (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
+            (entityKey one)
+            (entityVal one, [many])

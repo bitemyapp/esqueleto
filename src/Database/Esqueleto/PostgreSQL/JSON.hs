@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+
 {-|
   This module contains PostgreSQL-specific JSON functions.
 
@@ -22,129 +23,127 @@
   @since 3.1.0
 -}
 module Database.Esqueleto.PostgreSQL.JSON
-  ( -- * JSONB Newtype
+    ( -- * JSONB Newtype
+      --
+      -- | With 'JSONB', you can use your Haskell types in your
+      -- database table models as long as your type has 'FromJSON'
+      -- and 'ToJSON' instances.
+      --
+      -- @
+      -- import Database.Persist.TH
+      --
+      -- share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
+      --   Example
+      --     json (JSONB MyType)
+      -- |]
+      -- @
+      --
+      -- CAUTION: Remember that changing the 'FromJSON' instance
+      -- of your type might result in old data becoming unparsable!
+      -- You can use (@JSONB Data.Aeson.Value@) for unstructured/variable JSON.
+      JSONB(..)
+    , JSONBExpr
+    , jsonbVal
+    -- * JSONAccessor
+    , JSONAccessor(..)
+    -- * Arrow operators
     --
-    -- | With 'JSONB', you can use your Haskell types in your
-    -- database table models as long as your type has 'FromJSON'
-    -- and 'ToJSON' instances.
+    -- | /Better documentation included with individual functions/
+    --
+    -- The arrow operators are selection functions to select values
+    -- from JSON arrays or objects.
+    --
+    -- === PostgreSQL Documentation
+    --
+    -- /Requires PostgreSQL version >= 9.3/
     --
     -- @
-    -- import Database.Persist.TH
+    --      | Type   | Description                                |  Example                                         | Example Result
+    -- -----+--------+--------------------------------------------+--------------------------------------------------+----------------
+    --  ->  | int    | Get JSON array element (indexed from zero, | '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json->2 | {"c":"baz"}
+    --      |        | negative integers count from the end)      |                                                  |
+    --  ->  | text   | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
+    --  ->> | int    | Get JSON array element as text             | '[1,2,3]'::json->>2                              | 3
+    --  ->> | text   | Get JSON object field as text              | '{"a":1,"b":2}'::json->>'b'                      | 2
+    --  \#>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
+    --  \#>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
+    -- @
+    , (->.)
+    , (->>.)
+    , (#>.)
+    , (#>>.)
+    -- * Filter operators
     --
-    -- share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
-    --   Example
-    --     json (JSONB MyType)
-    -- |]
+    -- | /Better documentation included with individual functions/
+    --
+    -- These functions test certain properties of JSON values
+    -- and return booleans, so are mainly used in WHERE clauses.
+    --
+    -- === PostgreSQL Documentation
+    --
+    -- /Requires PostgreSQL version >= 9.4/
+    --
+    -- @
+    --     | Type   | Description                                                     |  Example
+    -- ----+--------+-----------------------------------------------------------------+---------------------------------------------------
+    --  \@> | jsonb  | Does the left JSON value contain within it the right value?     | '{"a":1, "b":2}'::jsonb \@> '{"b":2}'::jsonb
+    --  <\@ | jsonb  | Is the left JSON value contained within the right value?        | '{"b":2}'::jsonb <\@ '{"a":1, "b":2}'::jsonb
+    --  ?  | text   | Does the string exist as a top-level key within the JSON value? | '{"a":1, "b":2}'::jsonb ? 'b'
+    --  ?| | text[] | Do any of these array strings exist as top-level keys?          | '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']
+    --  ?& | text[] | Do all of these array strings exist as top-level keys?          | '["a", "b"]'::jsonb ?& array['a', 'b']
+    -- @
+    , (@>.)
+    , (<@.)
+    , (?.)
+    , (?|.)
+    , (?&.)
+    -- * Deletion and concatenation operators
+    --
+    -- | /Better documentation included with individual functions/
+    --
+    -- These operators change the shape of the JSON value and
+    -- also have the highest risk of throwing an exception.
+    -- Please read the descriptions carefully before using these functions.
+    --
+    -- === PostgreSQL Documentation
+    --
+    -- /Requires PostgreSQL version >= 9.5/
+    --
+    -- @
+    --     | Type    | Description                                                            |  Example
+    -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
+    --  || | jsonb   | Concatenate two jsonb values into a new jsonb value                    | '["a", "b"]'::jsonb || '["c", "d"]'::jsonb
+    --  -  | text    | Delete key/value pair or string element from left operand.             | '{"a": "b"}'::jsonb - 'a'
+    --     |         | Key/value pairs are matched based on their key value.                  |
+    --  -  | integer | Delete the array element with specified index (Negative integers count | '["a", "b"]'::jsonb - 1
+    --     |         | from the end). Throws an error if top level container is not an array. |
+    --  \#- | text[]  | Delete the field or element with specified path                        | '["a", {"b":1}]'::jsonb \#- '{1,b}'
+    --     |         | (for JSON arrays, negative integers count from the end)                |
     -- @
     --
-    -- CAUTION: Remember that changing the 'FromJSON' instance
-    -- of your type might result in old data becoming unparsable!
-    -- You can use (@JSONB Data.Aeson.Value@) for unstructured/variable JSON.
-    JSONB(..)
-  , JSONBExpr
-  , jsonbVal
-  -- * JSONAccessor
-  , JSONAccessor(..)
-  -- * Arrow operators
-  --
-  -- | /Better documentation included with individual functions/
-  --
-  -- The arrow operators are selection functions to select values
-  -- from JSON arrays or objects.
-  --
-  -- === PostgreSQL Documentation
-  --
-  -- /Requires PostgreSQL version >= 9.3/
-  --
-  -- @
-  --      | Type   | Description                                |  Example                                         | Example Result
-  -- -----+--------+--------------------------------------------+--------------------------------------------------+----------------
-  --  ->  | int    | Get JSON array element (indexed from zero, | '[{"a":"foo"},{"b":"bar"},{"c":"baz"}]'::json->2 | {"c":"baz"}
-  --      |        | negative integers count from the end)      |                                                  |
-  --  ->  | text   | Get JSON object field by key               | '{"a": {"b":"foo"}}'::json->'a'                  | {"b":"foo"}
-  --  ->> | int    | Get JSON array element as text             | '[1,2,3]'::json->>2                              | 3
-  --  ->> | text   | Get JSON object field as text              | '{"a":1,"b":2}'::json->>'b'                      | 2
-  --  \#>  | text[] | Get JSON object at specified path          | '{"a": {"b":{"c": "foo"}}}'::json#>'{a,b}'       | {"c": "foo"}
-  --  \#>> | text[] | Get JSON object at specified path as text  | '{"a":[1,2,3],"b":[4,5,6]}'::json#>>'{a,2}'      | 3
-  -- @
-  , (->.)
-  , (->>.)
-  , (#>.)
-  , (#>>.)
-  -- * Filter operators
-  --
-  -- | /Better documentation included with individual functions/
-  --
-  -- These functions test certain properties of JSON values
-  -- and return booleans, so are mainly used in WHERE clauses.
-  --
-  -- === PostgreSQL Documentation
-  --
-  -- /Requires PostgreSQL version >= 9.4/
-  --
-  -- @
-  --     | Type   | Description                                                     |  Example
-  -- ----+--------+-----------------------------------------------------------------+---------------------------------------------------
-  --  \@> | jsonb  | Does the left JSON value contain within it the right value?     | '{"a":1, "b":2}'::jsonb \@> '{"b":2}'::jsonb
-  --  <\@ | jsonb  | Is the left JSON value contained within the right value?        | '{"b":2}'::jsonb <\@ '{"a":1, "b":2}'::jsonb
-  --  ?  | text   | Does the string exist as a top-level key within the JSON value? | '{"a":1, "b":2}'::jsonb ? 'b'
-  --  ?| | text[] | Do any of these array strings exist as top-level keys?          | '{"a":1, "b":2, "c":3}'::jsonb ?| array['b', 'c']
-  --  ?& | text[] | Do all of these array strings exist as top-level keys?          | '["a", "b"]'::jsonb ?& array['a', 'b']
-  -- @
-  , (@>.)
-  , (<@.)
-  , (?.)
-  , (?|.)
-  , (?&.)
-  -- * Deletion and concatenation operators
-  --
-  -- | /Better documentation included with individual functions/
-  --
-  -- These operators change the shape of the JSON value and
-  -- also have the highest risk of throwing an exception.
-  -- Please read the descriptions carefully before using these functions.
-  --
-  -- === PostgreSQL Documentation
-  --
-  -- /Requires PostgreSQL version >= 9.5/
-  --
-  -- @
-  --     | Type    | Description                                                            |  Example
-  -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
-  --  || | jsonb   | Concatenate two jsonb values into a new jsonb value                    | '["a", "b"]'::jsonb || '["c", "d"]'::jsonb
-  --  -  | text    | Delete key/value pair or string element from left operand.             | '{"a": "b"}'::jsonb - 'a'
-  --     |         | Key/value pairs are matched based on their key value.                  |
-  --  -  | integer | Delete the array element with specified index (Negative integers count | '["a", "b"]'::jsonb - 1
-  --     |         | from the end). Throws an error if top level container is not an array. |
-  --  \#- | text[]  | Delete the field or element with specified path                        | '["a", {"b":1}]'::jsonb \#- '{1,b}'
-  --     |         | (for JSON arrays, negative integers count from the end)                |
-  -- @
-  --
-  -- /Requires PostgreSQL version >= 10/
-  --
-  -- @
-  --     | Type    | Description                                                            |  Example
-  -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
-  --  -  | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
-  --     |         | Key/value pairs are matched based on their key value.                  |
-  -- @
-  , (-.)
-  , (--.)
-  , (#-.)
-  , (||.)
-  ) where
+    -- /Requires PostgreSQL version >= 10/
+    --
+    -- @
+    --     | Type    | Description                                                            |  Example
+    -- ----+---------+------------------------------------------------------------------------+-------------------------------------------------
+    --  -  | text[]  | Delete multiple key/value pairs or string elements from left operand.  | '{"a": "b", "c": "d"}'::jsonb - '{a,c}'::text[]
+    --     |         | Key/value pairs are matched based on their key value.                  |
+    -- @
+    , (-.)
+    , (--.)
+    , (#-.)
+    , (||.)
+    ) where
 
 import Data.Text (Text)
-import Database.Esqueleto.Internal.Language hiding ((?.), (-.), (||.))
+import Database.Esqueleto.Internal.Language hiding ((-.), (?.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Internal.Sql
 import Database.Esqueleto.PostgreSQL.JSON.Instances
 
-
 infixl 6 ->., ->>., #>., #>>.
 infixl 6 @>., <@., ?., ?|., ?&.
 infixl 6 ||., -., --., #-.
-
 
 -- | /Requires PostgreSQL version >= 9.3/
 --
