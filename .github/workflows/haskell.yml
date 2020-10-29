@@ -95,6 +95,12 @@ jobs:
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-haskell@v1.1.2
+        id: setup-haskell-cabal
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
       - run: cabal v2-test esqueleto:test:mysql--disable-optimization -j $CONFIG
 
   test-sqlite:
@@ -107,6 +113,12 @@ jobs:
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-haskell@v1.1.2
+        id: setup-haskell-cabal
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
       - run: cabal v2-test esqueleto:test:sqlite --disable-optimization -j $CONFIG
 
   test-postgresql:
@@ -119,6 +131,12 @@ jobs:
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-haskell@v1.1.2
+        id: setup-haskell-cabal
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
       - uses: harmon758/postgresql-action@v1
         with:
            postgresql version: '12'  # See https://hub.docker.com/_/postgres for available versions  
