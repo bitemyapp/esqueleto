@@ -29,14 +29,20 @@ jobs:
            postgresql user: esqutest
            postgresql password: esqutest
            postgresql db: esqutest
-      - name: Shutdown Ubuntu MySQL (SUDO)
-        run: sudo service mysql stop
-      - uses: mirromutth/mysql-action@v1.1
-        with:
-          mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
-          mysql database: 'esqutest' # Optional, default value is "test". The specified database which will be create
-          mysql user: 'travis' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
-          mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
+      - name: Create MySQL
+        run:
+          - mysql -uroot -proot -e "CREATE DATABASE esqutest;"
+          - mysql -uroot -proot -e "CREATE USER 'travis'@'localhost' IDENTIFIED BY 'esqutest';"
+          - mysql -uroot -proot -e "GRANT ALL PRIVILEGES ON *.* TO 'travis'@'localhost';"
+          - mysql -uroot -proot -e "FLUSH PRIVILEGES;"
+            # - name: Shutdown Ubuntu MySQL (SUDO)
+            #   run: sudo service mysql stop
+            # - uses: mirromutth/mysql-action@v1.1
+            #   with:
+            #     mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
+            #     mysql database: 'esqutest' # Optional, default value is "test". The specified database which will be create
+            #     mysql user: 'travis' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
+            #     mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
       - run: cabal v2-update
       - run: cabal v2-freeze $CONFIG
       - uses: actions/cache@v2
