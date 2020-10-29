@@ -1,3 +1,10 @@
+3.4.0.1
+=======
+- @arthurxavierx
+  - [#221](https://github.com/bitemyapp/esqueleto/pull/221)
+    - Make `ToAliasT` an associated type family of the `ToAlias` type class
+    - Make `ToAliasReferenceT` an associated type family of the `ToAliasReference` type class
+
 3.4.0.0
 =======
 - @belevy, @charukiewicz
