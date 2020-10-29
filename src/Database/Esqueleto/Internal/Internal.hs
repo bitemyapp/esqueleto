@@ -26,7 +26,7 @@ module Database.Esqueleto.Internal.Internal where
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
-import Control.Monad (MonadPlus(..), ap, guard, void)
+import Control.Monad (MonadPlus(..), guard, void)
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Resource (MonadResource, release)
@@ -2889,7 +2889,7 @@ makeFrom info mode fs = ret
 
     base ident@(I identText) def =
         let db@(DBName dbText) = entityDB def
-        in ( fromDBNameinfo db <>
+        in ( fromDBName info db <>
                  if dbText == identText
                  then mempty
                  else " AS " <> useIdent info ident
@@ -3073,7 +3073,7 @@ instance SqlSelect () () where
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
     (if hasCompositeKey ent then id else ( fieldDB (entityId ent) :))
-    <> map fieldDB (entityFields ent)
+    $ map fieldDB (entityFields ent)
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where

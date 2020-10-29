@@ -1189,20 +1189,20 @@ from parts = do
                     (o2', _  ) <- aliasQueries o2
                     pure (SqlSetIntersect o1' o2', ret)
 
-          operationToSql o info =
-              case o of
-                  SelectQueryP p q  ->
-                      let (builder, values) = toRawSql SELECT info q
-                      in (parensM p builder, values)
-                  SqlSetUnion     o1 o2 -> doSetOperation "UNION"     info o1 o2
-                  SqlSetUnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
-                  SqlSetExcept    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
-                  SqlSetIntersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
+        operationToSql o info =
+            case o of
+                SelectQueryP p q  ->
+                    let (builder, values) = toRawSql SELECT info q
+                    in (parensM p builder, values)
+                SqlSetUnion     o1 o2 -> doSetOperation "UNION"     info o1 o2
+                SqlSetUnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
+                SqlSetExcept    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
+                SqlSetIntersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
 
-          doSetOperation operationText info o1 o2 =
-              let (q1, v1) = operationToSql o1 info
-                  (q2, v2) = operationToSql o2 info
-              in (q1 <> " " <> operationText <> " " <> q2, v1 <> v2)
+        doSetOperation operationText info o1 o2 =
+            let (q1, v1) = operationToSql o1 info
+                (q2, v2) = operationToSql o2 info
+            in (q1 <> " " <> operationText <> " " <> q2, v1 <> v2)
 
     runFrom (InnerJoinFrom leftPart (rightPart, on')) = do
         (leftVal, leftFrom) <- runFrom leftPart
