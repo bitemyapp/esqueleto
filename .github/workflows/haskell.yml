@@ -32,7 +32,7 @@ jobs:
       - uses: mirromutth/mysql-action@v1.1
         with:
           mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
-          mysql database: 'travis' # Optional, default value is "test". The specified database which will be create
+          mysql database: 'esqutest' # Optional, default value is "test". The specified database which will be create
           mysql user: 'travis' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
           mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
       - run: cabal v2-update
