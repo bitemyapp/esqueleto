@@ -16,6 +16,7 @@ import Database.Persist.MySQL ( withMySQLConn
                               , connectDatabase
                               , connectUser
                               , connectPassword
+                              , connectPort
                               , defaultConnectInfo)
 import Database.Esqueleto
 import Database.Esqueleto.Experimental hiding (from, on)
@@ -239,8 +240,9 @@ withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
   R.runResourceT .
   withMySQLConn defaultConnectInfo
-    { connectHost     = "localhost"
+    { connectHost     = "127.0.0.1"
     , connectUser     = "travis"
-    , connectPassword = ""
+    , connectPassword = "esqutest"
     , connectDatabase = "esqutest"
+    , connectPort     = 33306
     }

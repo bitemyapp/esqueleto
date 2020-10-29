@@ -1,0 +1,75 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types:
+      - opened
+      - synchronize
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      # mysql-service Label used to access the service container
+      mysql-service:
+        # Docker Hub image (also with version)
+        image: mysql:8.0
+        env:
+          ## Accessing to Github secrets, where you can store your configuration
+          MYSQL_USER: travis
+          MYSQL_PASSWORD: esqutest
+          MYSQL_ROOT_PASSWORD: esqutest
+          MYSQL_DATABASE: esqutest
+        ## map the "external" 33306 port with the "internal" 3306
+        ports:
+          - 33306:3306
+        # Set health checks to wait until mysql database has started (it takes some seconds to start)
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+    strategy:
+      matrix:
+        cabal: ["3.2"]
+        ghc: ["8.6.5", "8.8.3", "8.10.1"]
+    env:
+      CONFIG: "--enable-tests --enable-benchmarks"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-haskell@v1.1.2
+        id: setup-haskell-cabal
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+      - uses: harmon758/postgresql-action@v1
+        with:
+           postgresql version: '12'  # See https://hub.docker.com/_/postgres for available versions  
+           postgresql user: esqutest
+           postgresql password: esqutest
+           postgresql db: esqutest
+      - name: Create MySQL
+        run: mysql -utravis -pesqutest -h127.0.0.1 --port=33306 esqutest -e "SELECT 1;"
+            # - name: Shutdown Ubuntu MySQL (SUDO)
+            #   run: sudo service mysql stop
+            # - uses: mirromutth/mysql-action@v1.1
+            #   with:
+            #     mysql version: '8.0' # Optional, default value is "latest". The version of the MySQL
+            #     mysql database: 'esqutest' # Optional, default value is "test". The specified database which will be create
+            #     mysql user: 'travis' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
+            #     mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
+      - run: cabal v2-update
+      - run: cabal v2-freeze $CONFIG
+      - uses: actions/cache@v2
+        with:
+          path: |
+            ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.ghc }}-
+      - run: cabal v2-build $CONFIG
+      - run: cabal v2-test $CONFIG
+      - run: cabal v2-haddock $CONFIG
+      - run: cabal v2-sdist

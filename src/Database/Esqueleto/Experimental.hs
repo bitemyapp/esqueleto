@@ -1274,7 +1274,7 @@ fromSubQuery subqueryType subquery = do
 -- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
 -- CTEs are supported in most modern SQL engines and can be useful
 -- in performance tuning. In Esqueleto, CTEs should be used as a
--- subquery memoization tactic. While when writing plain SQL, CTEs
+-- subquery memoization tactic. When writing plain SQL, CTEs
 -- are sometimes used to organize the SQL code, in Esqueleto, this
 -- is better achieved through function that return 'SqlQuery' values.
 --
