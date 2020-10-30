@@ -1,0 +1,31 @@
+packages: .
+
+source-repository-package
+    type: git
+    location: https://github.com/yesodweb/persistent
+    tag: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+    subdir: persistent
+
+source-repository-package
+    type: git
+    location: https://github.com/yesodweb/persistent
+    tag: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+    subdir: persistent-postgresql
+
+source-repository-package
+    type: git
+    location: https://github.com/yesodweb/persistent
+    tag: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+    subdir: persistent-mysql
+
+source-repository-package
+    type: git
+    location: https://github.com/yesodweb/persistent
+    tag: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+    subdir: persistent-template
+
+source-repository-package
+    type: git
+    location: https://github.com/yesodweb/persistent
+    tag: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+    subdir: persistent-sqlite
