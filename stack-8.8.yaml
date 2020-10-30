@@ -3,3 +3,13 @@ resolver: lts-16.14
 packages:
   - '.'
   - 'examples'
+
+extra-deps:
+  - git: https://github.com/yesodweb/persistent
+    commit: '0b8f9f3305c9b60c947565de882abfbfd8cb5702'
+    subdirs:
+      - persistent
+      - persistent-template
+      - persistent-mysql
+      - persistent-postgresql
+      - persistent-sqlite

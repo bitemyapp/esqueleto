@@ -1346,39 +1346,38 @@ selectJSON f = select $ from $ \v -> do
 
 main :: IO ()
 main = do
-  hspec $ do
-    tests run
+    hspec $ do
+        tests run
 
-    describe "Test PostgreSQL locking" $ do
-      testLocking withConn
+        describe "Test PostgreSQL locking" $ do
+            testLocking withConn
 
-    describe "PostgreSQL specific tests" $ do
-      testAscRandom random_ run
-      testRandomMath run
-      testSelectDistinctOn
-      testPostgresModule
-      testPostgresqlOneAscOneDesc
-      testPostgresqlTwoAscFields
-      testPostgresqlSum
-      testPostgresqlRandom
-      testPostgresqlUpdate
-      testPostgresqlCoalesce
-      testPostgresqlTextFunctions
-      testInsertUniqueViolation
-      testUpsert
-      testInsertSelectWithConflict
-      testFilterWhere
-      testCommonTableExpressions
-      describe "PostgreSQL JSON tests" $ do
-        -- NOTE: We only clean the table once, so we
-        -- can use its contents across all JSON tests
-        it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
-          void $ runMigrationSilent migrateJSON
-          cleanJSON
-        testJSONInsertions
-        testJSONOperators
-      testLateralQuery
-
+        describe "PostgreSQL specific tests" $ do
+            testAscRandom random_ run
+            testRandomMath run
+            testSelectDistinctOn
+            testPostgresModule
+            testPostgresqlOneAscOneDesc
+            testPostgresqlTwoAscFields
+            testPostgresqlSum
+            testPostgresqlRandom
+            testPostgresqlUpdate
+            testPostgresqlCoalesce
+            testPostgresqlTextFunctions
+            testInsertUniqueViolation
+            testUpsert
+            testInsertSelectWithConflict
+            testFilterWhere
+            testCommonTableExpressions
+            describe "PostgreSQL JSON tests" $ do
+                -- NOTE: We only clean the table once, so we
+                -- can use its contents across all JSON tests
+                it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
+                    void $ runMigrationSilent migrateJSON
+                    cleanJSON
+                testJSONInsertions
+                testJSONOperators
+            testLateralQuery
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act

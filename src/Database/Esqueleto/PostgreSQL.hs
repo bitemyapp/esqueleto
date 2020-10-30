@@ -40,6 +40,7 @@ import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
 import Data.Int (Int64)
 import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import Data.Time.Clock (UTCTime)
@@ -205,17 +206,25 @@ upsertBy
     -- ^ the record in the database after the operation
 upsertBy uniqueKey record updates = do
     sqlB <- R.ask
-    maybe
-      (throw (UnexpectedCaseErr OperationNotSupported)) -- Postgres backend should have connUpsertSql, if this error is thrown, check changes on persistent
-      (handler sqlB)
-      (connUpsertSql sqlB)
+    case connUpsertSql sqlB of
+        Nothing ->
+            -- Postgres backend should have connUpsertSql, if this error is
+            -- thrown, check changes on persistent
+            throw (UnexpectedCaseErr OperationNotSupported)
+        Just upsertSql -> do
+            let (updateText, updateVals) =
+                    updatesText sqlB
+                queryText =
+                    upsertSql entDef uniqueFields updateText
+                queryVals =
+                    addVals updateVals
+            xs <- rawSql queryText queryVals
+            pure (head xs)
   where
     addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
     entDef = entityDef (Just record)
-    uDef = toUniqueDef uniqueKey
+    uniqueFields = NonEmpty.fromList (persistUniqueToFieldNames uniqueKey)
     updatesText conn = first builderToText $ renderUpdates conn updates
-    handler conn f = fmap head $ uncurry rawSql $
-        (***) (f entDef (uDef :| [])) addVals $ updatesText conn
 
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
