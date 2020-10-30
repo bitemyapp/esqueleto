@@ -5,5 +5,3 @@ stack.yaml.lock
 .cabal-sandbox/
 cabal.sandbox.config
 .hspec-failures
-*.swp
-*.swo
