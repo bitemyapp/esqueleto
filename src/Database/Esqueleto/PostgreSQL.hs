@@ -211,20 +211,28 @@ upsertBy uniqueKey record updates = do
             -- Postgres backend should have connUpsertSql, if this error is
             -- thrown, check changes on persistent
             throw (UnexpectedCaseErr OperationNotSupported)
-        Just upsertSql -> do
-            let (updateText, updateVals) =
-                    updatesText sqlB
-                queryText =
-                    upsertSql entDef uniqueFields updateText
-                queryVals =
-                    addVals updateVals
-            xs <- rawSql queryText queryVals
-            pure (head xs)
+        Just upsertSql ->
+            handler sqlB upsertSql
   where
     addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
     entDef = entityDef (Just record)
-    uniqueFields = NonEmpty.fromList (persistUniqueToFieldNames uniqueKey)
     updatesText conn = first builderToText $ renderUpdates conn updates
+#if MIN_VERSION_persistent(2,11,0)
+    uniqueFields = NonEmpty.fromList (persistUniqueToFieldNames uniqueKey)
+    handler sqlB upsertSql = do
+        let (updateText, updateVals) =
+                updatesText sqlB
+            queryText =
+                upsertSql entDef uniqueFields updateText
+            queryVals =
+                addVals updateVals
+        xs <- rawSql queryText queryVals
+        pure (head xs)
+#else
+    uDef = toUniqueDef uniqueKey
+    handler conn f = fmap head $ uncurry rawSql $
+        (***) (f entDef (uDef :| [])) addVals $ updatesText conn
+#endif
 
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
