@@ -753,6 +753,7 @@ class ToFrom a where
     type ToFromT a
     toFrom :: a -> From (ToFromT a)
 
+-- @since 3.4.0.1
 type family FromOnClause a where
     FromOnClause (a, b -> SqlExpr (Value Bool)) = b
     FromOnClause a = TypeError ('Text "Missing ON clause")
@@ -870,6 +871,7 @@ instance (ToInnerJoin (IsLateral b) a b b') => ToFrom (InnerJoin a (b, b' -> Sql
             toProxy :: b -> Proxy (IsLateral b)
             toProxy _ = Proxy
 
+-- @since 3.4.0.1
 type family FromCrossJoin a b where
     FromCrossJoin a (b -> SqlQuery c) = ToFromT a :& c
     FromCrossJoin a b = ToFromT a :& ToFromT b
