@@ -52,11 +52,11 @@ module Database.Esqueleto.Experimental
 
       -- * Internals
     , ToFrom(..)
-    , ToFromT
     , ToMaybe(..)
-    , ToMaybeT
     , ToAlias(..)
+    , ToAliasT
     , ToAliasReference(..)
+    , ToAliasReferenceT
     -- * The Normal Stuff
 
     , where_
@@ -220,6 +220,7 @@ import qualified Control.Monad.Trans.Writer as W
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
+import Data.Kind (Constraint)
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
@@ -608,33 +609,26 @@ intersect_ :: a -> b -> Intersect a b
 intersect_ = Intersect
 
 class SetOperationT a ~ b => ToSetOperation a b | a -> b where
+    type SetOperationT a
     toSetOperation :: a -> SqlSetOperation b
-
 instance ToSetOperation (SqlSetOperation a) a where
+    type SetOperationT (SqlSetOperation a) = a
     toSetOperation = id
-
 instance ToSetOperation (SqlQuery a) a where
+    type SetOperationT (SqlQuery a) = a
     toSetOperation = SelectQueryP Never
-
 instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Union a b) c where
+    type SetOperationT (Union a b) = SetOperationT a
     toSetOperation (Union a b) = SqlSetUnion (toSetOperation a) (toSetOperation b)
-
 instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (UnionAll a b) c where
+    type SetOperationT (UnionAll a b) = SetOperationT a
     toSetOperation (UnionAll a b) = SqlSetUnionAll (toSetOperation a) (toSetOperation b)
-
 instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Except a b) c where
+    type SetOperationT (Except a b) = SetOperationT a
     toSetOperation (Except a b) = SqlSetExcept (toSetOperation a) (toSetOperation b)
-
 instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Intersect a b) c where
+    type SetOperationT (Intersect a b) = SetOperationT a
     toSetOperation (Intersect a b) = SqlSetIntersect (toSetOperation a) (toSetOperation b)
-
-type family SetOperationT a where
-    SetOperationT (Union a b) = SetOperationT a
-    SetOperationT (UnionAll a b) = SetOperationT a
-    SetOperationT (Except a b) = SetOperationT a
-    SetOperationT (Intersect a b) = SetOperationT a
-    SetOperationT (SqlQuery a) = a
-    SetOperationT (SqlSetOperation a) = a
 
 {-# DEPRECATED SelectQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SelectQuery@" #-}
 pattern SelectQuery :: SqlQuery a -> SqlSetOperation a
@@ -647,87 +641,87 @@ pattern SelectQuery q = SelectQueryP Never q
 -- select $ from $ Table \@People
 -- @
 data From a where
-  Table
-    :: PersistEntity ent
-    => From (SqlExpr (Entity ent))
-  SubQuery
-    :: ( SqlSelect a r
-       , ToAlias a
-       , ToAliasReference a
-       )
-    => SqlQuery a
-    -> From a
-  FromCte
-    :: Ident
-    -> a
-    -> From a
-  SqlSetOperation
-    :: ( SqlSelect a r
-       , ToAlias a
-       , ToAliasReference a
-       )
-    => SqlSetOperation a
-    -> From a
-  InnerJoinFrom
-    :: From a
-    -> (From b, (a :& b) -> SqlExpr (Value Bool))
-    -> From (a :& b)
-  InnerJoinFromLateral
-    :: ( SqlSelect b r
-       , ToAlias b
-       , ToAliasReference b
-       )
-    => From a
-    -> ((a -> SqlQuery b), (a :& b) -> SqlExpr (Value Bool))
-    -> From (a :& b)
-  CrossJoinFrom
-    :: From a
-    -> From b
-    -> From (a :& b)
-  CrossJoinFromLateral
-    :: ( SqlSelect b r
-       , ToAlias b
-       , ToAliasReference b
-       )
-    => From a
-    -> (a -> SqlQuery b)
-    -> From (a :& b)
-  LeftJoinFrom
-    :: ToMaybe b
-    => From a
-    -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
-    -> From (a :& ToMaybeT b)
-  LeftJoinFromLateral
-    :: ( SqlSelect b r
-       , ToAlias b
-       , ToAliasReference b
-       , ToMaybe b
-       )
-    => From a
-    -> ((a -> SqlQuery b), (a :& ToMaybeT b) -> SqlExpr (Value Bool))
-    -> From (a :& ToMaybeT b)
-  RightJoinFrom
-    :: ToMaybe a
-    => From a
-    -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
-    -> From (ToMaybeT a :& b)
-  FullJoinFrom
-    :: (ToMaybe a, ToMaybe b )
-    => From a
-    -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
-    -> From (ToMaybeT a :& ToMaybeT b)
+    Table
+        :: PersistEntity ent
+        => From (SqlExpr (Entity ent))
+    SubQuery
+        :: ( SqlSelect a r
+           , ToAlias a
+           , ToAliasReference a
+           )
+        => SqlQuery a
+        -> From a
+    FromCte
+        :: Ident
+        -> a
+        -> From a
+    SqlSetOperation
+        :: ( SqlSelect a r
+           , ToAlias a
+           , ToAliasReference a
+           )
+        => SqlSetOperation a
+        -> From a
+    InnerJoinFrom
+        :: From a
+        -> (From b, (a :& b) -> SqlExpr (Value Bool))
+        -> From (a :& b)
+    InnerJoinFromLateral
+        :: ( SqlSelect b r
+           , ToAlias b
+           , ToAliasReference b
+           )
+        => From a
+        -> ((a -> SqlQuery b), (a :& b) -> SqlExpr (Value Bool))
+        -> From (a :& b)
+    CrossJoinFrom
+        :: From a
+        -> From b
+        -> From (a :& b)
+    CrossJoinFromLateral
+        :: ( SqlSelect b r
+           , ToAlias b
+           , ToAliasReference b
+           )
+        => From a
+        -> (a -> SqlQuery b)
+        -> From (a :& b)
+    LeftJoinFrom
+        :: ToMaybe b
+        => From a
+        -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
+        -> From (a :& ToMaybeT b)
+    LeftJoinFromLateral
+        :: ( SqlSelect b r
+           , ToAlias b
+           , ToAliasReference b
+           , ToMaybe b
+           )
+        => From a
+        -> ((a -> SqlQuery b), (a :& ToMaybeT b) -> SqlExpr (Value Bool))
+        -> From (a :& ToMaybeT b)
+    RightJoinFrom
+        :: ToMaybe a
+        => From a
+        -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
+        -> From (ToMaybeT a :& b)
+    FullJoinFrom
+        :: (ToMaybe a, ToMaybe b )
+        => From a
+        -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
+        -> From (ToMaybeT a :& ToMaybeT b)
 
 -- | Constraint for `on`. Ensures that only types that require an `on` can be used on
 -- the left hand side. This was previously reusing the ToFrom class which was actually
--- a bit too lenient as it allowed to much. Expanding this class should not be needed.
+-- a bit too lenient as it allowed to much.
 --
 -- @since 3.4.0.0
-class ValidOnClauseValue a where
-instance ValidOnClauseValue (From a) where
-instance ValidOnClauseValue (SqlQuery a) where
-instance ValidOnClauseValue (SqlSetOperation a) where
-instance ValidOnClauseValue (a -> SqlQuery b) where
-instance {-# OVERLAPPABLE #-} (TypeError ('Text "Illegal use of ON")) => ValidOnClauseValue a where
+type family ValidOnClauseValue a :: Constraint where
+  ValidOnClauseValue (From a) = ()
+  ValidOnClauseValue (SqlQuery a) = ()
+  ValidOnClauseValue (SqlSetOperation a) = ()
+  ValidOnClauseValue (a -> SqlQuery b) = ()
+  ValidOnClauseValue _ = TypeError ('Text "Illegal use of ON")
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -743,28 +737,6 @@ on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlEx
 on = (,)
 infix 9 `on`
 
-type JoinErrorMsg jk = 'Text "Missing on statement for " ':<>: 'Text jk
-
-type family ToFromT a where
-    ToFromT (From a) = a
-    ToFromT (SqlQuery a) = a
-    ToFromT (Union a b) = SetOperationT a
-    ToFromT (UnionAll a b) = SetOperationT a
-    ToFromT (Except a b) = SetOperationT a
-    ToFromT (Intersect a b) = SetOperationT a
-    ToFromT (SqlSetOperation a) = a
-    ToFromT (InnerJoin a (b, c -> SqlExpr (Value Bool))) = c
-    ToFromT (LeftOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-    ToFromT (RightOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-    ToFromT (FullOuterJoin a (b, c -> SqlExpr (Value Bool))) = c
-    ToFromT (CrossJoin a (c -> SqlQuery b)) = ToFromT a :& b
-    ToFromT (CrossJoin a b) = ToFromT a :& ToFromT b
-    ToFromT (InnerJoin a b) = TypeError (JoinErrorMsg "InnerJoin")
-    ToFromT (LeftOuterJoin a b) = TypeError (JoinErrorMsg "LeftOuterJoin")
-    ToFromT (RightOuterJoin a b) = TypeError (JoinErrorMsg "RightOuterJoin")
-    ToFromT (FullOuterJoin a b) = TypeError (JoinErrorMsg "FullOuterJoin")
-
-
 data Lateral
 data NotLateral
 
@@ -772,59 +744,113 @@ type family IsLateral a where
     IsLateral (a -> SqlQuery b) = Lateral
     IsLateral a = NotLateral
 
-class ErrorOnLateral a where
-instance (TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")) => ErrorOnLateral (a -> SqlQuery b) where
-instance {-# OVERLAPPABLE #-} ErrorOnLateral a where
+type family ErrorOnLateral a :: Constraint where
+  ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
+  ErrorOnLateral _ = ()
 
 {-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
 class ToFrom a where
+    type ToFromT a
     toFrom :: a -> From (ToFromT a)
 
-instance ToFrom (From a) where
-    toFrom = id
+-- @since 3.4.0.1
+type family FromOnClause a where
+    FromOnClause (a, b -> SqlExpr (Value Bool)) = b
+    FromOnClause a = TypeError ('Text "Missing ON clause")
 
 instance {-# OVERLAPPABLE #-} ToFrom (InnerJoin a b) where
+    type ToFromT (InnerJoin a b) = FromOnClause b
     toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
+    type ToFromT (LeftOuterJoin a b) = FromOnClause b
+    toFrom = undefined
+instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
+    type ToFromT (FullOuterJoin a b) = FromOnClause b
     toFrom = undefined
 instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
-   toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
+    type ToFromT (RightOuterJoin a b) = FromOnClause b
+    toFrom = undefined
 
-  toFrom = undefined
+instance ToFrom (From a) where
+    type ToFromT (From a) = a
+    toFrom = id
 
-instance ( ToAlias a
-         , ToAliasReference a
-         , SqlSelect a r
-         ) => ToFrom (SqlQuery a) where
-  toFrom = SubQuery
+instance
+    ( ToAlias a
+    , ToAliasReference a
+    , SqlSelect a r
+    )
+  =>
+    ToFrom (SqlQuery a)
+  where
+    type ToFromT (SqlQuery a) = a
+    toFrom = SubQuery
 
-instance ( SqlSelect c r
-         , ToAlias c
-         , ToAliasReference c
-         , ToSetOperation a c
-         , ToSetOperation b c
-         , c ~ SetOperationT a
-         )  => ToFrom (Union a b) where
-  toFrom u = SqlSetOperation $ toSetOperation u
+instance
+    ( SqlSelect c r
+    , ToAlias c
+    , ToAliasReference c
+    , ToSetOperation a c
+    , ToSetOperation b c
+    , c ~ SetOperationT a
+    )
+  =>
+    ToFrom (Union a b)
+  where
+    type ToFromT (Union a b) = SetOperationT a
+    toFrom u = SqlSetOperation $ toSetOperation u
 
-instance ( SqlSelect c r
-         , ToAlias c
-         , ToAliasReference c
-         , ToSetOperation a c
-         , ToSetOperation b c
-         , c ~ SetOperationT a
-         )  => ToFrom (UnionAll a b) where
-  toFrom u = SqlSetOperation $ toSetOperation u
+instance
+    ( SqlSelect c r
+    , ToAlias c
+    , ToAliasReference c
+    , ToSetOperation a c
+    , ToSetOperation b c
+    , c ~ SetOperationT a
+    )
+  =>
+    ToFrom (UnionAll a b)
+  where
+    type ToFromT (UnionAll a b) = SetOperationT a
+    toFrom u = SqlSetOperation $ toSetOperation u
+
+instance
+    ( SqlSelect c r
+    , ToAlias c
+    , ToAliasReference c
+    , ToSetOperation a c
+    , ToSetOperation b c
+    , c ~ SetOperationT a
+    )
+  =>
+    ToFrom (Intersect a b)
+  where
+    type ToFromT (Intersect a b) = SetOperationT a
+    toFrom u = SqlSetOperation $ toSetOperation u
+
+instance
+    ( SqlSelect c r
+    , ToAlias c
+    , ToAliasReference c
+    , ToSetOperation a c
+    , ToSetOperation b c
+    , c ~ SetOperationT a
+    )
+  =>
+    ToFrom (Except a b)
+  where
+    type ToFromT (Except a b) = SetOperationT a
+    toFrom u = SqlSetOperation $ toSetOperation u
 
 instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlSetOperation a) where
-  -- If someone uses just a plain SelectQuery it should behave like a normal subquery
-  toFrom (SelectQueryP _ q) = SubQuery q
-  -- Otherwise use the SqlSetOperation
-  toFrom q = SqlSetOperation q
+    type ToFromT (SqlSetOperation a) = a
+    -- If someone uses just a plain SelectQuery it should behave like a normal subquery
+    toFrom (SelectQueryP _ q) = SubQuery q
+    -- Otherwise use the SqlSetOperation
+    toFrom q = SqlSetOperation q
 
 class ToInnerJoin lateral lhs rhs res where
-  toInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
+    toInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
 
 instance ( SqlSelect b r
          , ToAlias b
@@ -832,49 +858,43 @@ instance ( SqlSelect b r
          , ToFrom a
          , ToFromT a ~ a'
          ) => ToInnerJoin Lateral a (a' -> SqlQuery b) (a' :& b) where
-  toInnerJoin _ lhs q on' = InnerJoinFromLateral (toFrom lhs) (q, on')
+             toInnerJoin _ lhs q on' = InnerJoinFromLateral (toFrom lhs) (q, on')
 
 instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b')
-        => ToInnerJoin NotLateral a b (a' :& b') where
-  toInnerJoin _ lhs rhs on' = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
+  => ToInnerJoin NotLateral a b (a' :& b') where
+      toInnerJoin _ lhs rhs on' = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance
-    ( ToFrom a
-    , ToFromT a ~ a'
-    , ToInnerJoin (IsLateral b) a b b'
-    )
-  =>
-    ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool)))
-  where
-    toFrom (InnerJoin lhs (rhs, on')) =
-        let toProxy :: b -> Proxy (IsLateral b)
+instance (ToInnerJoin (IsLateral b) a b b') => ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
+    type ToFromT (InnerJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
+    toFrom (InnerJoin lhs (rhs, on')) = toInnerJoin (toProxy rhs) lhs rhs on'
+        where
+            toProxy :: b -> Proxy (IsLateral b)
             toProxy _ = Proxy
-        in
-            toInnerJoin (toProxy rhs) lhs rhs on'
 
-instance
-    ( ToFrom a
-    , ToFrom b
-    , ToFromT (CrossJoin a b) ~ (ToFromT a :& ToFromT b)
-    )
-  =>
-    ToFrom (CrossJoin a b)
-  where
+-- @since 3.4.0.1
+type family FromCrossJoin a b where
+    FromCrossJoin a (b -> SqlQuery c) = ToFromT a :& c
+    FromCrossJoin a b = ToFromT a :& ToFromT b
+
+instance ( ToFrom a
+         , ToFrom b
+         , ToFromT (CrossJoin a b) ~ (ToFromT a :& ToFromT b)
+         ) => ToFrom (CrossJoin a b) where
+    type ToFromT (CrossJoin a b) = FromCrossJoin a b
     toFrom (CrossJoin lhs rhs) = CrossJoinFrom (toFrom lhs) (toFrom rhs)
 
 instance {-# OVERLAPPING #-}
-
          ( ToFrom a
          , ToFromT a ~ a'
          , SqlSelect b r
          , ToAlias b
          , ToAliasReference b
-         )
-       => ToFrom (CrossJoin a (a' -> SqlQuery b)) where
-  toFrom (CrossJoin lhs q) = CrossJoinFromLateral (toFrom lhs) q
+         ) => ToFrom (CrossJoin a (a' -> SqlQuery b)) where
+    type ToFromT (CrossJoin a (a' -> SqlQuery b)) = FromCrossJoin a (a' -> SqlQuery b)
+    toFrom (CrossJoin lhs q) = CrossJoinFromLateral (toFrom lhs) q
 
 class ToLeftJoin lateral lhs rhs res where
-  toLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
+    toLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
 
 instance ( ToFrom a
          , ToFromT a ~ a'
@@ -884,7 +904,7 @@ instance ( ToFrom a
          , ToMaybe b
          , mb ~ ToMaybeT b
          ) => ToLeftJoin Lateral a (a' -> SqlQuery b) (a' :& mb) where
-  toLeftJoin _ lhs q on' = LeftJoinFromLateral (toFrom lhs) (q, on')
+            toLeftJoin _ lhs q on' = LeftJoinFromLateral (toFrom lhs) (q, on')
 
 instance ( ToFrom a
          , ToFromT a ~ a'
@@ -893,161 +913,113 @@ instance ( ToFrom a
          , ToMaybe b'
          , mb ~ ToMaybeT b'
          ) => ToLeftJoin NotLateral a b (a' :& mb) where
-  toLeftJoin _ lhs rhs on' = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
+            toLeftJoin _ lhs rhs on' = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance
-    ( ToLeftJoin (IsLateral b) a b b'
-    )
-  =>
-    ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool)))
-  where
-    toFrom (LeftOuterJoin lhs (rhs, on')) =
-        let toProxy :: b -> Proxy (IsLateral b)
-            toProxy _ = Proxy
-        in
-            toLeftJoin (toProxy rhs) lhs rhs on'
+instance ( ToLeftJoin (IsLateral b) a b b'
+         ) => ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
+            type ToFromT (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
+            toFrom (LeftOuterJoin lhs (rhs, on')) =
+                toLeftJoin (toProxy rhs) lhs rhs on'
+              where
+                toProxy :: b -> Proxy (IsLateral b)
+                toProxy _ = Proxy
 
-instance
-    ( ToFrom a
-    , ToFromT a ~ a'
-    , ToFrom b
-    , ToFromT b ~ b'
-    , ToMaybe a'
-    , ma ~ ToMaybeT a'
-    , ToMaybe b'
-    , mb ~ ToMaybeT b'
-    , ErrorOnLateral b
-    )
-  =>
-    ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool)))
-  where
-    toFrom (FullOuterJoin lhs (rhs, on')) =
-        FullJoinFrom (toFrom lhs) (toFrom rhs, on')
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , ToFrom b
+         , ToFromT b ~ b'
+         , ToMaybe a'
+         , ma ~ ToMaybeT a'
+         , ToMaybe b'
+         , mb ~ ToMaybeT b'
+         , ErrorOnLateral b
+         ) => ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
+            type ToFromT (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& mb) -> SqlExpr(Value Bool))
+            toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
 
-instance
-    ( ToFrom a
-    , ToFromT a ~ a'
-    , ToMaybe a'
-    , ma ~ ToMaybeT a'
-    , ToFrom b
-    , ToFromT b ~ b'
-    , ErrorOnLateral b
-    )
-  =>
-    ToFrom (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool)))
-  where
-    toFrom (RightOuterJoin lhs (rhs, on')) =
-        RightJoinFrom (toFrom lhs) (toFrom rhs,  on')
+instance ( ToFrom a
+         , ToFromT a ~ a'
+         , ToMaybe a'
+         , ma ~ ToMaybeT a'
+         , ToFrom b
+         , ToFromT b ~ b'
+         , ErrorOnLateral b
+         ) => ToFrom (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) where
+            type ToFromT (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& b') -> SqlExpr(Value Bool))
+            toFrom (RightOuterJoin lhs (rhs, on')) = RightJoinFrom (toFrom lhs) (toFrom rhs,  on')
 
 type family Nullable a where
     Nullable (Maybe a) = a
     Nullable a =  a
 
-type family ToMaybeT a where
-    ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
-    ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
-    ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))
-    ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
-    ToMaybeT (a, b) = (ToMaybeT a, ToMaybeT b)
-    ToMaybeT (a, b, c) = (ToMaybeT a, ToMaybeT b, ToMaybeT c)
-    ToMaybeT (a, b, c, d) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d)
-    ToMaybeT (a, b, c, d, e) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e)
-    ToMaybeT (a, b, c, d, e, f) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f)
-    ToMaybeT (a, b, c, d, e, f, g) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g)
-    ToMaybeT (a, b, c, d, e, f, g, h) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g, ToMaybeT h)
-
 class ToMaybe a where
+    type ToMaybeT a
     toMaybe :: a -> ToMaybeT a
 
 instance ToMaybe (SqlExpr (Maybe a)) where
+    type ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
     toMaybe = id
 
 instance ToMaybe (SqlExpr (Entity a)) where
+    type ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
     toMaybe = EMaybe
 
 instance ToMaybe (SqlExpr (Value a)) where
+    type ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))
     toMaybe = veryUnsafeCoerceSqlExprValue
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
+    type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
     toMaybe (a :& b) = (toMaybe a :& toMaybe b)
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a,b) where
+    type ToMaybeT (a, b) = (ToMaybeT a, ToMaybeT b)
     toMaybe (a, b) = (toMaybe a, toMaybe b)
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    )
-  =>
-    ToMaybe (a,b,c)
-  where
+instance ( ToMaybe a , ToMaybe b , ToMaybe c) => ToMaybe (a,b,c) where
+    type ToMaybeT (a, b, c) = (ToMaybeT a, ToMaybeT b, ToMaybeT c)
     toMaybe = to3 . toMaybe . from3
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    , ToMaybe d
-    )
-  =>
-    ToMaybe (a,b,c,d)
-  where
+instance ( ToMaybe a , ToMaybe b , ToMaybe c , ToMaybe d) => ToMaybe (a,b,c,d) where
+    type ToMaybeT (a, b, c, d) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d)
     toMaybe = to4 . toMaybe . from4
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    , ToMaybe d
-    , ToMaybe e
-    )
-  =>
-    ToMaybe (a,b,c,d,e)
-  where
+instance ( ToMaybe a , ToMaybe b , ToMaybe c , ToMaybe d , ToMaybe e) => ToMaybe (a,b,c,d,e) where
+    type ToMaybeT (a, b, c, d, e) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e)
     toMaybe = to5 . toMaybe . from5
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    , ToMaybe d
-    , ToMaybe e
-    , ToMaybe f
-    )
-  =>
-    ToMaybe (a,b,c,d,e,f)
-  where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         , ToMaybe f
+         ) => ToMaybe (a,b,c,d,e,f) where
+    type ToMaybeT (a, b, c, d, e, f) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f)
     toMaybe = to6 . toMaybe . from6
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    , ToMaybe d
-    , ToMaybe e
-    , ToMaybe f
-    , ToMaybe g
-    )
-  =>
-    ToMaybe (a,b,c,d,e,f,g)
-  where
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         , ToMaybe f
+         , ToMaybe g
+         ) => ToMaybe (a,b,c,d,e,f,g) where
+    type ToMaybeT (a, b, c, d, e, f, g) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g)
     toMaybe = to7 . toMaybe . from7
 
-instance
-    ( ToMaybe a
-    , ToMaybe b
-    , ToMaybe c
-    , ToMaybe d
-    , ToMaybe e
-    , ToMaybe f
-    , ToMaybe g
-    , ToMaybe h
-    )
-  =>
-    ToMaybe (a,b,c,d,e,f,g,h)
-  where
-    toMaybe = to8 . toMaybe . from8
+instance ( ToMaybe a
+         , ToMaybe b
+         , ToMaybe c
+         , ToMaybe d
+         , ToMaybe e
+         , ToMaybe f
+         , ToMaybe g
+         , ToMaybe h
+         ) => ToMaybe (a,b,c,d,e,f,g,h) where
+     type ToMaybeT (a, b, c, d, e, f, g, h) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g, ToMaybeT h)
+     toMaybe = to8 . toMaybe . from8
 
 -- | 'FROM' clause, used to bring entities into scope.
 --
@@ -1071,7 +1043,7 @@ from parts = do
         let entity = EEntity ident
         pure $ (entity, FromStart ident ed)
           where
-            getVal :: PersistEntity ent => From (SqlExpr (Entity ent)) -> Proxy ent
+            getVal :: From (SqlExpr (Entity ent)) -> Proxy ent
             getVal = const Proxy
     runFrom (SubQuery subquery) =
         fromSubQuery NormalSubQuery subquery
@@ -1319,14 +1291,14 @@ instance ( ToAlias a
          , ToAlias b
          , ToAlias c
          ) => ToAlias (a,b,c) where
-  toAlias x = to3 <$> (toAlias $ from3 x)
+    toAlias x = to3 <$> (toAlias $ from3 x)
 
 instance ( ToAlias a
          , ToAlias b
          , ToAlias c
          , ToAlias d
          ) => ToAlias (a,b,c,d) where
-  toAlias x = to4 <$> (toAlias $ from4 x)
+    toAlias x = to4 <$> (toAlias $ from4 x)
 
 instance ( ToAlias a
          , ToAlias b
@@ -1334,7 +1306,7 @@ instance ( ToAlias a
          , ToAlias d
          , ToAlias e
          ) => ToAlias (a,b,c,d,e) where
-  toAlias x = to5 <$> (toAlias $ from5 x)
+    toAlias x = to5 <$> (toAlias $ from5 x)
 
 instance ( ToAlias a
          , ToAlias b
@@ -1343,7 +1315,7 @@ instance ( ToAlias a
          , ToAlias e
          , ToAlias f
          ) => ToAlias (a,b,c,d,e,f) where
-  toAlias x = to6 <$> (toAlias $ from6 x)
+    toAlias x = to6 <$> (toAlias $ from6 x)
 
 instance ( ToAlias a
          , ToAlias b
@@ -1353,7 +1325,7 @@ instance ( ToAlias a
          , ToAlias f
          , ToAlias g
          ) => ToAlias (a,b,c,d,e,f,g) where
-  toAlias x = to7 <$> (toAlias $ from7 x)
+    toAlias x = to7 <$> (toAlias $ from7 x)
 
 instance ( ToAlias a
          , ToAlias b
@@ -1364,7 +1336,7 @@ instance ( ToAlias a
          , ToAlias g
          , ToAlias h
          ) => ToAlias (a,b,c,d,e,f,g,h) where
-  toAlias x = to8 <$> (toAlias $ from8 x)
+    toAlias x = to8 <$> (toAlias $ from8 x)
 
 {-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasReferenceT a = a
@@ -1395,14 +1367,14 @@ instance ( ToAliasReference a
          , ToAliasReference b
          , ToAliasReference c
          ) => ToAliasReference (a,b,c) where
-  toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
+    toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
 
 instance ( ToAliasReference a
          , ToAliasReference b
          , ToAliasReference c
          , ToAliasReference d
          ) => ToAliasReference (a,b,c,d) where
-  toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
+    toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
 
 instance ( ToAliasReference a
          , ToAliasReference b
@@ -1410,7 +1382,7 @@ instance ( ToAliasReference a
          , ToAliasReference d
          , ToAliasReference e
          ) => ToAliasReference (a,b,c,d,e) where
-  toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
+    toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
 instance ( ToAliasReference a
          , ToAliasReference b
@@ -1419,7 +1391,7 @@ instance ( ToAliasReference a
          , ToAliasReference e
          , ToAliasReference f
          ) => ToAliasReference (a,b,c,d,e,f) where
-  toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
+    toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
 
 instance ( ToAliasReference a
          , ToAliasReference b
@@ -1429,7 +1401,7 @@ instance ( ToAliasReference a
          , ToAliasReference f
          , ToAliasReference g
          ) => ToAliasReference (a,b,c,d,e,f,g) where
-  toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
+    toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
 
 instance ( ToAliasReference a
          , ToAliasReference b
@@ -1440,8 +1412,7 @@ instance ( ToAliasReference a
          , ToAliasReference g
          , ToAliasReference h
          ) => ToAliasReference (a,b,c,d,e,f,g,h) where
-  toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
-
+    toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
 
 class RecursiveCteUnion a where
     unionKeyword :: a -> TLB.Builder
