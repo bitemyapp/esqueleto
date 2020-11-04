@@ -6,6 +6,10 @@
 - @parsonsmatt
   - [#226](https://github.com/bitemyapp/esqueleto/pull/226)
     - Support `persistent-2.11`
+- @belevy
+  - [#225](https://github.com/bitemyapp/esqueleto/pull/225)
+    - Simplify `ToFromT` extracting the overlapping and type error instances
+    - Make `ToFromT` and associated type family of `ToFrom`
 
 3.4.0.0
 =======
