@@ -1,4 +1,4 @@
-3.4.0.1 (unreleased)
+3.4.0.1
 =======
 - @arthurxavierx
   - [#221](https://github.com/bitemyapp/esqueleto/pull/221)
