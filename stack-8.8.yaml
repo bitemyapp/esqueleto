@@ -6,7 +6,7 @@ packages:
 
 extra-deps:
   - git: https://github.com/yesodweb/persistent
-    commit: '0b8f9f3305c9b60c947565de882abfbfd8cb5702'
+    commit: 'a9d94286f692b38e3280d48e49d1877db92abc5d'
     subdirs:
       - persistent
       - persistent-template
