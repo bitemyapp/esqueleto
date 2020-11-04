@@ -41,6 +41,14 @@ library
     other-modules:
         Database.Esqueleto.Internal.PersistentImport
         Database.Esqueleto.PostgreSQL.JSON.Instances
+        Database.Esqueleto.Experimental.CommonTableExpression
+        Database.Esqueleto.Experimental.Internal
+        Database.Esqueleto.Experimental.Join
+        Database.Esqueleto.Experimental.SqlSetOperation
+        Database.Esqueleto.Experimental.SubQuery
+        Database.Esqueleto.Experimental.ToAlias
+        Database.Esqueleto.Experimental.ToAliasReference
+        Database.Esqueleto.Experimental.ToMaybe
         Paths_esqueleto
     hs-source-dirs:
         src/
