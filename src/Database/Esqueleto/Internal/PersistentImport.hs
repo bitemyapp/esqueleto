@@ -174,4 +174,5 @@ import Database.Persist.Sql hiding
        , (>.)
        , (>=.)
        , (||.)
+       , exists
        )

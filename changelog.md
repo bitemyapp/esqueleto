@@ -1,8 +1,11 @@
-3.4.0.1
+3.4.0.1 (unreleased)
 =======
 - @arthurxavierx
   - [#221](https://github.com/bitemyapp/esqueleto/pull/221)
     - Deprecate `ToAliasT` and `ToAliasReferenceT`
+- @parsonsmatt
+  - [#226](https://github.com/bitemyapp/esqueleto/pull/226)
+    - Support `persistent-2.11`
 - @belevy
   - [#225](https://github.com/bitemyapp/esqueleto/pull/225)
     - Simplify `ToFromT` extracting the overlapping and type error instances

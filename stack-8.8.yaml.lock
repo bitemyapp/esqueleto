@@ -3,7 +3,72 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    subdir: persistent
+    name: persistent
+    version: 2.11.0.0
+    git: https://github.com/yesodweb/persistent
+    pantry-tree:
+      size: 2099
+      sha256: cd4d895557a60b40543c4a6804d32346a1c14c39e28658bb6852d8f4904ef1de
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+  original:
+    subdir: persistent
+    git: https://github.com/yesodweb/persistent
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+- completed:
+    subdir: persistent-template
+    name: persistent-template
+    version: '2.9'
+    git: https://github.com/yesodweb/persistent
+    pantry-tree:
+      size: 620
+      sha256: 0602872c9c38ccc6966b4a1fd1d102a345f94ad855077157d588536ee6803343
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+  original:
+    subdir: persistent-template
+    git: https://github.com/yesodweb/persistent
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+- completed:
+    subdir: persistent-mysql
+    name: persistent-mysql
+    version: 2.10.3
+    git: https://github.com/yesodweb/persistent
+    pantry-tree:
+      size: 577
+      sha256: a3b9d2ef77af25dca203a4dbe2857b6a1d4e421bbe376f261288e9a8ebfda28f
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+  original:
+    subdir: persistent-mysql
+    git: https://github.com/yesodweb/persistent
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+- completed:
+    subdir: persistent-postgresql
+    name: persistent-postgresql
+    version: 2.11.0.0
+    git: https://github.com/yesodweb/persistent
+    pantry-tree:
+      size: 907
+      sha256: 6f1ad1c5b0b22cf455c6b1b4551a749d21bb72042597450c8ef9ff1eb5a74782
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+  original:
+    subdir: persistent-postgresql
+    git: https://github.com/yesodweb/persistent
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+- completed:
+    subdir: persistent-sqlite
+    name: persistent-sqlite
+    version: 2.11.0.0
+    git: https://github.com/yesodweb/persistent
+    pantry-tree:
+      size: 891
+      sha256: fc9106077e16b406a5a823c732e3b543822a530f2befc446e49acf68797f6d42
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
+  original:
+    subdir: persistent-sqlite
+    git: https://github.com/yesodweb/persistent
+    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
 snapshots:
 - completed:
     size: 532382
