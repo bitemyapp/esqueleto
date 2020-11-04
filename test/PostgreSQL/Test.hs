@@ -559,7 +559,7 @@ testPostgresModule = do
       run $ do
         nowDb <- select $ return EP.now_
         nowUtc <- liftIO getCurrentTime
-        let halfSecond = realToFrac (0.5 :: Double)
+        let oneSecond = realToFrac (1 :: Double)
 
         -- | Check the result is not null
         liftIO $ nowDb `shouldSatisfy` (not . null)
@@ -567,8 +567,8 @@ testPostgresModule = do
         -- | Unpack the now value
         let (Value now: _) = nowDb
 
-        -- | Get the time diff and check it's less than half a second
-        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
+        -- | Get the time diff and check it's less than a second
+        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< oneSecond)
 
 
 --------------- JSON --------------- JSON --------------- JSON ---------------
