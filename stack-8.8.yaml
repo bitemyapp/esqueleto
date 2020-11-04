@@ -5,11 +5,8 @@ packages:
   - 'examples'
 
 extra-deps:
-  - git: https://github.com/yesodweb/persistent
-    commit: 'a9d94286f692b38e3280d48e49d1877db92abc5d'
-    subdirs:
-      - persistent
-      - persistent-template
-      - persistent-mysql
-      - persistent-postgresql
-      - persistent-sqlite
+- persistent-2.11.0.0
+- persistent-template-2.9.1.0
+- persistent-mysql-2.10.3
+- persistent-postgresql-2.11.0.0
+- persistent-sqlite-2.11.0.0
