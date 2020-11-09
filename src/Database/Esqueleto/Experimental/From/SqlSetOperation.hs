@@ -7,14 +7,13 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Database.Esqueleto.Experimental.SqlSetOperation
+module Database.Esqueleto.Experimental.From.SqlSetOperation
         where
 
 import Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
-import Database.Esqueleto.Experimental.Internal
-import Database.Esqueleto.Experimental.SubQuery
+import Database.Esqueleto.Experimental.From
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)

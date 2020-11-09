@@ -2,13 +2,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Database.Esqueleto.Experimental.CommonTableExpression
+module Database.Esqueleto.Experimental.From.CommonTableExpression
     where
 
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.Text.Lazy.Builder as TLB
-import Database.Esqueleto.Experimental.Internal
-import Database.Esqueleto.Experimental.SqlSetOperation
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)

@@ -5,14 +5,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Database.Esqueleto.Experimental.Join
+module Database.Esqueleto.Experimental.From.Join
     where
 
 import Data.Kind (Constraint)
 import Data.Proxy
-import Database.Esqueleto.Experimental.Internal
-import Database.Esqueleto.Experimental.SqlSetOperation
-import Database.Esqueleto.Experimental.SubQuery
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe

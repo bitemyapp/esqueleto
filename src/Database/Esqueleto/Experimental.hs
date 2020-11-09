@@ -207,11 +207,10 @@ module Database.Esqueleto.Experimental
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-import Database.Esqueleto.Experimental.CommonTableExpression
-import Database.Esqueleto.Experimental.Internal
-import Database.Esqueleto.Experimental.Join
-import Database.Esqueleto.Experimental.SqlSetOperation
-import Database.Esqueleto.Experimental.SubQuery
+import Database.Esqueleto.Experimental.From.CommonTableExpression
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.Join
+import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
