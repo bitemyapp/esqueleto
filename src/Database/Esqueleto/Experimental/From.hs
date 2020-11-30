@@ -16,10 +16,10 @@ module Database.Esqueleto.Experimental.From
 
 import qualified Control.Monad.Trans.Writer as W
 import Data.Proxy
-import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
-import Database.Esqueleto.Internal.PersistentImport
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
+import Database.Esqueleto.Internal.PersistentImport
 
 -- | 'FROM' clause, used to bring entities into scope.
 --

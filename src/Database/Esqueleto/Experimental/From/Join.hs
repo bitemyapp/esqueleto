@@ -71,8 +71,7 @@ type family ErrorOnLateral a :: Constraint where
   ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
   ErrorOnLateral _ = ()
 
-{-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
-
+-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from
 type family FromOnClause a where
     FromOnClause (a, b -> SqlExpr (Value Bool)) = b
     FromOnClause a = TypeError ('Text "Missing ON clause")

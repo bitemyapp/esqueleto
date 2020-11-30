@@ -84,39 +84,6 @@ runSetOperation operation = do
             (q2, v2) = operationToSql o2 info
         in (q1 <> " " <> operationText <> " " <> q2, v1 <> v2)
 
--- $sql-set-operations
---
--- Data type that represents SQL set operations. This includes
--- 'UNION', 'UNION' 'ALL', 'EXCEPT', and 'INTERSECT'. These types form
--- a binary tree, with @SqlQuery@ values on the leaves.
---
--- Each function corresponding to the aforementioned set operations
--- can be used as an infix in a @from@ to help with readability
--- and lead to code that closely resembles the underlying SQL. For example,
---
--- @
--- select $ from $
---   (do
---      a <- from Table @A
---      pure $ a ^. ASomeCol
---   )
---   \`union_\`
---   (do
---      b <- from Table @B
---      pure $ b ^. BSomeCol
---   )
--- @
---
--- is translated into
---
--- @
--- SELECT * FROM (
---   (SELECT a.some_col FROM a)
---   UNION
---   (SELECT b.some_col FROM b)
--- )
--- @
---
 
 {-# DEPRECATED Union "/Since: 3.4.0.0/ - Use the 'union_' function instead of the 'Union' data constructor" #-}
 data Union a b = a `Union` b

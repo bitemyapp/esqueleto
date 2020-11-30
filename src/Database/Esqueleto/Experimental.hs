@@ -19,10 +19,10 @@ module Database.Esqueleto.Experimental
       -- * Documentation
 
       Table(..)
-    , on
     , from
     , SubQuery(..)
     , (:&)(..)
+    , on
 
       -- ** Set Operations
       -- $sql-set-operations
@@ -47,6 +47,7 @@ module Database.Esqueleto.Experimental
     , ToAliasT
     , ToAliasReference(..)
     , ToAliasReferenceT
+    , ToSetOperation(..)
     -- * The Normal Stuff
 
     , where_
@@ -207,8 +208,8 @@ module Database.Esqueleto.Experimental
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-import Database.Esqueleto.Experimental.From.CommonTableExpression
 import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.CommonTableExpression
 import Database.Esqueleto.Experimental.From.Join
 import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
@@ -511,3 +512,37 @@ import Database.Esqueleto.Experimental.ToMaybe
 --         max_sale.amount)
 --   AS max_sale_customer;
 -- @
+
+-- $sql-set-operations
+--
+-- Data type that represents SQL set operations. This includes
+-- 'UNION', 'UNION' 'ALL', 'EXCEPT', and 'INTERSECT'. These types form
+-- a binary tree, with @SqlQuery@ values on the leaves.
+--
+-- Each function corresponding to the aforementioned set operations
+-- can be used as an infix in a @from@ to help with readability
+-- and lead to code that closely resembles the underlying SQL. For example,
+--
+-- @
+-- select $ from $
+--   (do
+--      a <- from Table @A
+--      pure $ a ^. ASomeCol
+--   )
+--   \`union_\`
+--   (do
+--      b <- from Table @B
+--      pure $ b ^. BSomeCol
+--   )
+-- @
+--
+-- is translated into
+--
+-- @
+-- SELECT * FROM (
+--   (SELECT a.some_col FROM a)
+--   UNION
+--   (SELECT b.some_col FROM b)
+-- )
+-- @
+--

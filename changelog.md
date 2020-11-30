@@ -1,3 +1,9 @@
+3.4.1.0
+=======
+- @belevy
+  - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
+        - Remove From GADT in favor of From typeclass.
+
 3.4.0.1
 =======
 - @arthurxavierx
