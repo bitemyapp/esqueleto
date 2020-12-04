@@ -1,42 +1,44 @@
-{-# LANGUAGE DerivingStrategies, FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE QuasiQuotes                #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
 
 module Main
     ( main
     ) where
 
-import           Blog
-import           Control.Monad               (void)
-import           Control.Monad               (forM_)
-import           Control.Monad.IO.Class      (MonadIO, liftIO)
-import           Control.Monad.IO.Unlift     (MonadUnliftIO)
-import           Control.Monad.Logger        (MonadLogger)
-import           Control.Monad.Reader        (MonadReader (..), runReaderT)
-import           Control.Monad.Trans.Control (MonadBaseControl)
-import           Data.Monoid                 ((<>))
-import           Database.Esqueleto
-import           Database.Persist.Postgresql (ConnectionString,
-                                              withPostgresqlConn)
-import           Database.Persist.TH         ( AtLeastOneUniqueKey(..)
-                                             , OnlyOneUniqueKey(..)
-                                             , mkDeleteCascade
-                                             , mkMigrate
-                                             , mkPersist
-                                             , persistLowerCase
-                                             , share
-                                             , sqlSettings
-                                             )
+import Blog
+import Control.Monad (void)
+import Control.Monad (forM_)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
+import Control.Monad.Logger (MonadLogger)
+import Control.Monad.Reader (MonadReader(..), runReaderT)
+import Control.Monad.Trans.Control (MonadBaseControl)
+import Data.Monoid ((<>))
+import Database.Esqueleto
+import Database.Persist.Postgresql (ConnectionString, withPostgresqlConn)
+import Database.Persist.TH
+       ( AtLeastOneUniqueKey(..)
+       , OnlyOneUniqueKey(..)
+       , mkDeleteCascade
+       , mkMigrate
+       , mkPersist
+       , persistLowerCase
+       , share
+       , sqlSettings
+       )
 
 
 share [ mkPersist sqlSettings

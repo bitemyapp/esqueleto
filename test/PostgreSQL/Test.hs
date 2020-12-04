@@ -559,7 +559,7 @@ testPostgresModule = do
       run $ do
         nowDb <- select $ return EP.now_
         nowUtc <- liftIO getCurrentTime
-        let halfSecond = realToFrac (0.5 :: Double)
+        let oneSecond = realToFrac (1 :: Double)
 
         -- | Check the result is not null
         liftIO $ nowDb `shouldSatisfy` (not . null)
@@ -567,8 +567,8 @@ testPostgresModule = do
         -- | Unpack the now value
         let (Value now: _) = nowDb
 
-        -- | Get the time diff and check it's less than half a second
-        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< halfSecond)
+        -- | Get the time diff and check it's less than a second
+        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< oneSecond)
 
 
 --------------- JSON --------------- JSON --------------- JSON ---------------
@@ -1346,39 +1346,38 @@ selectJSON f = select $ from $ \v -> do
 
 main :: IO ()
 main = do
-  hspec $ do
-    tests run
+    hspec $ do
+        tests run
 
-    describe "Test PostgreSQL locking" $ do
-      testLocking withConn
+        describe "Test PostgreSQL locking" $ do
+            testLocking withConn
 
-    describe "PostgreSQL specific tests" $ do
-      testAscRandom random_ run
-      testRandomMath run
-      testSelectDistinctOn
-      testPostgresModule
-      testPostgresqlOneAscOneDesc
-      testPostgresqlTwoAscFields
-      testPostgresqlSum
-      testPostgresqlRandom
-      testPostgresqlUpdate
-      testPostgresqlCoalesce
-      testPostgresqlTextFunctions
-      testInsertUniqueViolation
-      testUpsert
-      testInsertSelectWithConflict
-      testFilterWhere
-      testCommonTableExpressions
-      describe "PostgreSQL JSON tests" $ do
-        -- NOTE: We only clean the table once, so we
-        -- can use its contents across all JSON tests
-        it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
-          void $ runMigrationSilent migrateJSON
-          cleanJSON
-        testJSONInsertions
-        testJSONOperators
-      testLateralQuery
-
+        describe "PostgreSQL specific tests" $ do
+            testAscRandom random_ run
+            testRandomMath run
+            testSelectDistinctOn
+            testPostgresModule
+            testPostgresqlOneAscOneDesc
+            testPostgresqlTwoAscFields
+            testPostgresqlSum
+            testPostgresqlRandom
+            testPostgresqlUpdate
+            testPostgresqlCoalesce
+            testPostgresqlTextFunctions
+            testInsertUniqueViolation
+            testUpsert
+            testInsertSelectWithConflict
+            testFilterWhere
+            testCommonTableExpressions
+            describe "PostgreSQL JSON tests" $ do
+                -- NOTE: We only clean the table once, so we
+                -- can use its contents across all JSON tests
+                it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
+                    void $ runMigrationSilent migrateJSON
+                    cleanJSON
+                testJSONInsertions
+                testJSONOperators
+            testLateralQuery
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act

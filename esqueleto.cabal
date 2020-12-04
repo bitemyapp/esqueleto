@@ -60,7 +60,7 @@ library
       , conduit >=1.3
       , containers
       , monad-logger
-      , persistent >=2.10.0 && <2.11
+      , persistent >=2.10.0 && <2.12
       , resourcet >=1.2
       , tagged >=0.2
       , text >=0.11 && <1.3
@@ -68,16 +68,16 @@ library
       , transformers >=0.2
       , unliftio
       , unordered-containers >=0.2
-    ghc-options: 
-        -Wall 
-        -Wno-redundant-constraints 
+    ghc-options:
+        -Wall
+        -Wno-redundant-constraints
         -Wincomplete-uni-patterns
         -Wincomplete-record-updates
         -Wpartial-fields
         -Wmissing-home-modules
         -Widentities
         -Wredundant-constraints
-        -Wcpp-undef 
+        -Wcpp-undef
         -Wcpp-undef
         -Wmonomorphism-restriction
     default-language: Haskell2010
@@ -105,7 +105,7 @@ test-suite mysql
       , mtl
       , mysql
       , mysql-simple
-      , persistent >=2.8.0 && <2.11
+      , persistent
       , persistent-mysql
       , persistent-template
       , resourcet >=1.2
@@ -126,7 +126,7 @@ test-suite postgresql
         Paths_esqueleto
     hs-source-dirs:
         test
-    ghc-options: -Wall
+    ghc-options: -Wall -threaded
     build-depends:
         base >=4.8 && <5.0
       , aeson
@@ -140,8 +140,8 @@ test-suite postgresql
       , hspec
       , monad-logger
       , mtl
-      , persistent >=2.10.0 && <2.11
-      , persistent-postgresql >= 2.10.0 && <2.11
+      , persistent
+      , persistent-postgresql
       , persistent-template
       , postgresql-libpq
       , postgresql-simple
@@ -176,7 +176,7 @@ test-suite sqlite
       , hspec
       , monad-logger
       , mtl
-      , persistent >=2.8.0 && <2.11
+      , persistent
       , persistent-sqlite
       , persistent-template
       , resourcet >=1.2

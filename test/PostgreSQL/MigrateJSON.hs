@@ -1,17 +1,19 @@
-{-# LANGUAGE FlexibleContexts
-           , GADTs
-           , GeneralizedNewtypeDeriving
-           , DerivingStrategies
-           , StandaloneDeriving
-           , MultiParamTypeClasses
-           , OverloadedStrings
-           , QuasiQuotes
-           , RankNTypes
-           , ScopedTypeVariables
-           , TemplateHaskell
-           , TypeFamilies
-           , UndecidableInstances
- #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module PostgreSQL.MigrateJSON where
 
 import Control.Monad.Trans.Resource (ResourceT)
