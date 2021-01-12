@@ -2195,7 +2195,7 @@ unsafeSqlCase when v = ERaw Never buildCase
 -- In the example above, we constraint the arguments to be of the
 -- same type and constraint the result to be a boolean value.
 unsafeSqlBinOp :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
-unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
+unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Never f
   where
     f info =
         let (b1, vals1) = f1 info
@@ -2206,9 +2206,13 @@ unsafeSqlBinOp op (ERaw p1 f1) (ERaw p2 f2) = ERaw Parens f
             )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
   where
+    toggleParens :: NeedParens -> NeedParens
+    toggleParens Never = Parens
+    toggleParens Parens = Never
+
     construct :: SqlExpr (Value a) -> SqlExpr (Value a)
     construct (ERaw p f) =
-        ERaw (if p == Never then Parens else Never) $ \info ->
+        ERaw (toggleParens p) $ \info ->
             let (b1, vals) = f info
                 build ("?", [PersistList vals']) =
                     (uncommas $ replicate (length vals') "?", vals')
@@ -2943,7 +2947,7 @@ makeWhere info (Where v) = first ("\nWHERE " <>) $ x info
   where
     x =
         case v of
-            ERaw _ f             -> f
+            ERaw p f             -> fmap (first (parensM p)) f
             EAliasedValue i _    -> aliasedValueIdentToRawSql i
             EValueReference i i' -> valueReferenceToRawSql i i'
             ECompositeKey _      -> throw (CompositeKeyErr MakeWhereError)
