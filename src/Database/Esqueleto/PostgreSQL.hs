@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE Rank2Types          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | This module contain PostgreSQL-specific functions.
@@ -31,22 +31,23 @@ module Database.Esqueleto.PostgreSQL
     ) where
 
 #if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
+import           Data.Semigroup
 #endif
-import Control.Arrow (first, (***))
-import Control.Exception (throw)
-import Control.Monad (void)
-import Control.Monad.IO.Class (MonadIO(..))
-import qualified Control.Monad.Trans.Reader as R
-import Data.Int (Int64)
-import Data.List.NonEmpty (NonEmpty((:|)))
-import qualified Data.List.NonEmpty as NonEmpty
-import Data.Proxy (Proxy(..))
-import qualified Data.Text.Internal.Builder as TLB
-import Data.Time.Clock (UTCTime)
-import Database.Esqueleto.Internal.Internal hiding (random_)
-import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Persist.Class (OnlyOneUniqueKey)
+import           Control.Arrow                                (first, (***))
+import           Control.Exception                            (throw)
+import           Control.Monad                                (void)
+import           Control.Monad.IO.Class                       (MonadIO (..))
+import qualified Control.Monad.Trans.Reader                   as R
+import           Data.Int                                     (Int64)
+import           Data.List.NonEmpty                           (NonEmpty ((:|)))
+import qualified Data.List.NonEmpty                           as NonEmpty
+import           Data.Proxy                                   (Proxy (..))
+import qualified Data.Text.Internal.Builder                   as TLB
+import           Data.Time.Clock                              (UTCTime)
+import           Database.Esqueleto.Internal.Internal         hiding (random_)
+import           Database.Esqueleto.Internal.PersistentImport hiding (upsert,
+                                                               upsertBy)
+import           Database.Persist.Class                       (OnlyOneUniqueKey)
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -83,18 +84,18 @@ unsafeSqlAggregateFunction
     -> a
     -> [OrderByClause]
     -> SqlExpr (Value b)
-unsafeSqlAggregateFunction name mode args orderByClauses = ERaw Never $ \info ->
+unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
         orderTLBSpace =
             case orderByClauses of
-                [] -> ""
+                []    -> ""
                 (_:_) -> " "
         (argsTLB, argsVals) =
-            uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList args
+            uncommas' $ map (\(ERaw _ f) -> f Never info) $ toArgList args
         aggMode =
             case mode of
-                AggModeAll -> ""
+                AggModeAll      -> ""
                 -- ALL is the default, so we don't need to
                 -- specify it
                 AggModeDistinct -> "DISTINCT "
@@ -355,13 +356,11 @@ filterWhere
     -> SqlExpr (Value Bool)
     -- ^ Filter clause
     -> SqlExpr (Value a)
-filterWhere aggExpr clauseExpr = ERaw Never $ \info ->
+filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     let (aggBuilder, aggValues) = case aggExpr of
-            ERaw _ aggF     -> aggF info
-            ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereAggError
+            ERaw _ aggF     -> aggF Never info
         (clauseBuilder, clauseValues) = case clauseExpr of
-            ERaw _ clauseF  -> clauseF info
-            ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereClauseError
+            ERaw _ clauseF  -> clauseF Never info
     in ( aggBuilder <> " FILTER (WHERE " <> clauseBuilder <> ")"
        , aggValues <> clauseValues
        )

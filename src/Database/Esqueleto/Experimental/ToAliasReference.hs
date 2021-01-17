@@ -1,12 +1,13 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import Database.Esqueleto.Experimental.ToAlias
-import Database.Esqueleto.Internal.Internal hiding (From, from, on)
-import Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Experimental.ToAlias
+import           Database.Esqueleto.Internal.Internal         hiding (From,
+                                                               from, on)
+import           Database.Esqueleto.Internal.PersistentImport
 
 {-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasReferenceT a = a
@@ -18,7 +19,6 @@ class ToAliasReference a where
 instance ToAliasReference (SqlExpr (Value a)) where
     toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
     toAliasReference _           v@(ERaw _ _)                 = toAlias v
-    toAliasReference _           v@(ECompositeKey _)          = toAlias v
     toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
 
 instance ToAliasReference (SqlExpr (Entity a)) where

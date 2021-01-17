@@ -1,25 +1,25 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE EmptyDataDecls             #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PartialTypeSignatures      #-}
+{-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -62,37 +62,41 @@ module Common.Test
     , Key(..)
     ) where
 
-import Control.Monad (forM_, replicateM, replicateM_, void)
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Reader (ask)
-import Data.Either
-import Data.Time
+import           Control.Monad                          (forM_, replicateM,
+                                                         replicateM_, void)
+import           Control.Monad.Catch                    (MonadCatch)
+import           Control.Monad.Reader                   (ask)
+import           Data.Either
+import           Data.Time
 #if __GLASGOW_HASKELL__ >= 806
-import Control.Monad.Fail (MonadFail)
+import           Control.Monad.Fail                     (MonadFail)
 #endif
-import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger(..), NoLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
-import qualified Data.Attoparsec.Text as AP
-import Data.Char (toLower, toUpper)
-import Data.Monoid ((<>))
-import Database.Esqueleto
-import Database.Esqueleto.Experimental hiding (from, on)
-import qualified Database.Esqueleto.Experimental as Experimental
-import Database.Persist.TH
-import Test.Hspec
-import UnliftIO
+import           Control.Monad.IO.Class                 (MonadIO (liftIO))
+import           Control.Monad.Logger                   (MonadLogger (..),
+                                                         NoLoggingT,
+                                                         runNoLoggingT)
+import           Control.Monad.Trans.Reader             (ReaderT)
+import qualified Data.Attoparsec.Text                   as AP
+import           Data.Char                              (toLower, toUpper)
+import           Data.Monoid                            ((<>))
+import           Database.Esqueleto
+import           Database.Esqueleto.Experimental        hiding (from, on)
+import qualified Database.Esqueleto.Experimental        as Experimental
+import           Database.Persist.TH
+import           Test.Hspec
+import           UnliftIO
 
-import Data.Conduit (ConduitT, runConduit, (.|))
-import qualified Data.Conduit.List as CL
-import qualified Data.List as L
-import qualified Data.Set as S
-import qualified Data.Text as Text
-import qualified Data.Text.Internal.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
+import           Data.Conduit                           (ConduitT, runConduit,
+                                                         (.|))
+import qualified Data.Conduit.List                      as CL
+import qualified Data.List                              as L
+import qualified Data.Set                               as S
+import qualified Data.Text                              as Text
+import qualified Data.Text.Internal.Lazy                as TL
+import qualified Data.Text.Lazy.Builder                 as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql as EI
-import qualified UnliftIO.Resource as R
+import qualified Database.Esqueleto.Internal.Sql        as EI
+import qualified UnliftIO.Resource                      as R
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -1078,17 +1082,6 @@ testSelectWhere run = describe "select where_" $ do
                         ( val $ PointKey 1 2
                         , val $ PointKey 5 6 )
                 liftIO $ ret `shouldBe` [()]
-            it "works when using ECompositeKey constructor" $ run $ do
-                insert_ $ Point 1 2 ""
-                ret <-
-                  select $
-                  from $ \p -> do
-                  where_ $
-                    p ^. PointId
-                      `between`
-                        ( EI.ECompositeKey $ const ["3", "4"]
-                        , EI.ECompositeKey $ const ["5", "6"] )
-                liftIO $ ret `shouldBe` []
 
     it "works with avg_" $ run $ do
         _ <- insert' p1
