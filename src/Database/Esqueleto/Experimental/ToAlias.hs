@@ -1,12 +1,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Database.Esqueleto.Experimental.ToAlias
     where
 
-import Database.Esqueleto.Internal.Internal hiding (From, from, on)
-import Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Internal.Internal         hiding (From,
+                                                               from, on)
+import           Database.Esqueleto.Internal.PersistentImport
 
 {-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasT a = a
@@ -16,10 +17,12 @@ class ToAlias a where
     toAlias :: a -> SqlQuery a
 
 instance ToAlias (SqlExpr (Value a)) where
-    toAlias v@(EAliasedValue _ _) = pure v
-    toAlias v = do
+    toAlias (ERaw m f)
+      | Nothing <- sqlExprMetaAlias m = do
         ident <- newIdentFor (DBName "v")
-        pure $ EAliasedValue ident v
+        pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} $ \_ info ->
+            let (b, v) = f Never info
+            in (b <> " AS " <> useIdent info ident, [])
 
 instance ToAlias (SqlExpr (Entity a)) where
     toAlias v@(EAliasedEntityReference _ _) = pure v

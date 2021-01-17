@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies      #-}
 
 module Database.Esqueleto.Experimental.ToAliasReference
@@ -17,9 +18,9 @@ class ToAliasReference a where
     toAliasReference :: Ident -> a -> SqlQuery a
 
 instance ToAliasReference (SqlExpr (Value a)) where
-    toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
-    toAliasReference _           v@(ERaw _ _)                 = toAlias v
-    toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
+    toAliasReference aliasSource (ERaw m _)
+      | Just alias <- sqlExprMetaAlias m = pure $ ERaw noMeta $ \p info ->
+            (useIdent info aliasSource <> "." <> useIdent info alias, [])
 
 instance ToAliasReference (SqlExpr (Entity a)) where
     toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident

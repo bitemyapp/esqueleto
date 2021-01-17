@@ -527,7 +527,8 @@ subSelectUnsafe = sub SELECT
     -> EntityField val typ
     -> SqlExpr (Value typ)
 (EAliasedEntityReference source base) ^. field =
-    EValueReference source (\_ -> aliasedEntityColumnIdent base fieldDef)
+    ERaw noMeta $ \_ info -> 
+        (useIdent info source <> "." <> useIdent info (aliasedEntityColumnIdent base fieldDef), [])
   where
     fieldDef =
         if isIdField field then
@@ -634,12 +635,6 @@ isNothing v =
                 Nothing ->
                     ERaw noMeta $ \p info ->
                         first (parensM p) . isNullExpr $ f Never info
-        EAliasedValue i _ ->
-            ERaw noMeta $ \p info ->
-                first (parensM p) . isNullExpr $ aliasedValueIdentToRawSql i info
-        EValueReference i i' ->
-            ERaw noMeta $ \p info ->
-                first (parensM p) . isNullExpr $ valueReferenceToRawSql i i' info
   where
     isNullExpr = first ((<> " IS NULL"))
 
@@ -667,8 +662,6 @@ countHelper open close v =
                 countRows
             else 
                 countRawSql (f Never)
-        EAliasedValue i _ -> countRawSql $ aliasedValueIdentToRawSql i
-        EValueReference i i' -> countRawSql $ valueReferenceToRawSql i i'
   where
     countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
     countRawSql x = ERaw noMeta $ \_ -> first (\b -> "COUNT" <> open <> parens b <> close) . x
@@ -698,10 +691,6 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
                 else 
                     let (b, vals) = f Never info
                     in (parensM p b, vals)
-            EAliasedValue i _    ->
-                aliasedValueIdentToRawSql i info
-            EValueReference i i' ->
-                valueReferenceToRawSql i i' info
 
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
@@ -989,9 +978,6 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 -- | Apply a 'PersistField' constructor to @SqlExpr Value@ arguments.
 (<#) :: (a -> b) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
 (<#) _ (ERaw _ f)        = EInsert Proxy (f Never)
-(<#) _ (EAliasedValue i _) = EInsert Proxy $ aliasedValueIdentToRawSql i
-(<#) _ (EValueReference i i') = EInsert Proxy $ valueReferenceToRawSql i i'
-
 
 -- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
 (<&>) :: SqlExpr (Insertion (a -> b)) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
@@ -1005,8 +991,6 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
     g =
         case v of
             ERaw _ f' -> f' Never
-            EAliasedValue i _ -> aliasedValueIdentToRawSql i
-            EValueReference i i' -> valueReferenceToRawSql i i'
 
 -- | @CASE@ statement.  For example:
 --
@@ -1302,8 +1286,6 @@ renderUpdates conn = uncommas' . concatMap renderUpdate
   where
     mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
     mk (ERaw _ f)             = [f Never info]
-    mk (EAliasedValue i _)    = [aliasedValueIdentToRawSql i info]
-    mk (EValueReference i i') = [valueReferenceToRawSql i i' info]
 
     renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
     renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
@@ -2020,11 +2002,13 @@ useIdent info (I ident) = fromDBName info $ DBName ident
 
 data SqlExprMeta = SqlExprMeta
     { sqlExprMetaCompositeFields :: Maybe (IdentInfo -> [TLB.Builder])
+    , sqlExprMetaAlias :: Maybe Ident
     } 
 
 noMeta :: SqlExprMeta
 noMeta = SqlExprMeta 
     { sqlExprMetaCompositeFields = Nothing
+    , sqlExprMetaAlias = Nothing
     }
 
 hasCompositeKeyMeta :: SqlExprMeta -> Bool
@@ -2051,13 +2035,6 @@ data SqlExpr a where
     -- string ('TLB.Builder') and a list of values to be
     -- interpolated by the SQL backend.
     ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
-
-
-    -- A raw expression with an alias
-    EAliasedValue :: Ident -> SqlExpr (Value a) -> SqlExpr (Value a)
-
-    -- A reference to an aliased field in a table or subquery
-    EValueReference :: Ident -> (IdentInfo -> Ident) -> SqlExpr (Value a)
 
     -- A composite key.
     --
@@ -2192,8 +2169,6 @@ unsafeSqlCase when v = ERaw noMeta buildCase
 
     valueToSql :: SqlExpr (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     valueToSql (ERaw _ f) p = f p
-    valueToSql (EAliasedValue i _) _ = aliasedValueIdentToRawSql i
-    valueToSql (EValueReference i i') _ = valueReferenceToRawSql i i'
 
 -- | (Internal) Create a custom binary operator.  You /should/
 -- /not/ use this function directly since its type is very
@@ -2233,10 +2208,6 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
                         build expr = expr
                      in
                         first (parensM p) $ build (b1, vals)
-    construct (EAliasedValue i _) =
-        ERaw noMeta $ const $ aliasedValueIdentToRawSql i
-    construct (EValueReference i i') =
-        ERaw noMeta $ const $ valueReferenceToRawSql i i'
 {-# INLINE unsafeSqlBinOp #-}
 
 -- | Similar to 'unsafeSqlBinOp', but may also be applied to
@@ -2275,8 +2246,6 @@ unsafeSqlBinOpComposite op sep a b
     listify v 
         | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = flip (,) [] . f
         | ERaw _ f <- v = deconstruct . f Parens
-        | EAliasedValue i _ <- v = deconstruct . (aliasedValueIdentToRawSql i)
-        | EValueReference i i' <- v = deconstruct . (valueReferenceToRawSql i i')
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
@@ -2304,8 +2273,6 @@ valueToFunctionArg :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistVa
 valueToFunctionArg info v =
     case v of
         ERaw _ f               -> f Never info
-        EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-        EValueReference i i' -> valueReferenceToRawSql i i' info
 
 -- | (Internal) A raw SQL function.  Once again, the same warning
 -- from 'unsafeSqlBinOp' applies to this function as well.
@@ -2343,8 +2310,6 @@ unsafeSqlFunctionParens name arg =
         let valueToFunctionArgParens v =
                 case v of
                     ERaw _ f               -> f p info
-                    EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-                    EValueReference i i' -> valueReferenceToRawSql i i' info
             (argsTLB, argsVals) =
                 uncommas' $ map valueToFunctionArgParens $ toArgList arg
         in
@@ -2358,8 +2323,6 @@ unsafeSqlCastAs t v = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (v
     valueToText info =
         case v of
             ERaw _ f -> f Never info
-            EAliasedValue i _ -> aliasedValueIdentToRawSql i info
-            EValueReference i i' -> valueReferenceToRawSql i i' info
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
 -- numbers of arguments; specifically it allows providing arguments to a sql
@@ -2491,8 +2454,6 @@ instance ( UnsafeSqlFunctionArgument a
 -- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
 veryUnsafeCoerceSqlExprValue (ERaw m f)             = ERaw m f
-veryUnsafeCoerceSqlExprValue (EAliasedValue i v)    = EAliasedValue i (veryUnsafeCoerceSqlExprValue v)
-veryUnsafeCoerceSqlExprValue (EValueReference i i') = EValueReference i i'
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
@@ -2928,33 +2889,21 @@ makeFrom info mode fs = ret
     fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
 
     makeOnClause (ERaw _ f)        = first (" ON " <>) (f Never info)
-    makeOnClause (EAliasedValue _ _) = throw (AliasedValueErr MakeOnClauseError)
-    makeOnClause (EValueReference _ _) = throw (AliasedValueErr MakeOnClauseError)
 
     mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
         OnClauseWithoutMatchingJoinException $
             TL.unpack $ TLB.toLazyText $ fst (f Never info)
-    mkExc (EAliasedValue _ _) = throw (AliasedValueErr MakeExcError)
-    mkExc (EValueReference _ _) = throw (AliasedValueErr MakeExcError)
 
 makeSet :: IdentInfo -> [SetClause] -> (TLB.Builder, [PersistValue])
 makeSet _    [] = mempty
 makeSet info os = first ("\nSET " <>) . uncommas' $ concatMap mk os
   where
     mk (SetClause (ERaw _ f))             = [f Never info]
-    mk (SetClause (EAliasedValue i _))    = [aliasedValueIdentToRawSql i info]
-    mk (SetClause (EValueReference i i')) = [valueReferenceToRawSql i i' info]
 
 makeWhere :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
-makeWhere _    NoWhere                       = mempty
-makeWhere info (Where v) = first ("\nWHERE " <>) $ x info
-  where
-    x =
-        case v of
-            ERaw _ f               -> f Never
-            EAliasedValue i _    -> aliasedValueIdentToRawSql i
-            EValueReference i i' -> valueReferenceToRawSql i i'
+makeWhere _    NoWhere            = mempty
+makeWhere info (Where (ERaw _ f)) = first ("\nWHERE " <>) $ f Never info
 
 makeGroupBy :: IdentInfo -> GroupByClause -> (TLB.Builder, [PersistValue])
 makeGroupBy _ (GroupBy []) = (mempty, [])
@@ -2965,18 +2914,10 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
 
     match :: SomeValue -> (TLB.Builder, [PersistValue])
     match (SomeValue (ERaw _ f)) = f Never info
-    match (SomeValue (EAliasedValue i _)) = aliasedValueIdentToRawSql i info
-    match (SomeValue (EValueReference i i')) = valueReferenceToRawSql i i' info
 
 makeHaving :: IdentInfo -> WhereClause -> (TLB.Builder, [PersistValue])
 makeHaving _    NoWhere   = mempty
-makeHaving info (Where v) = first ("\nHAVING " <>) $ x info
-  where
-    x =
-        case v of
-            ERaw _ f             -> f Never
-            EAliasedValue i _    -> aliasedValueIdentToRawSql i
-            EValueReference i i' -> valueReferenceToRawSql i i'
+makeHaving info (Where (ERaw _ f)) = first ("\nHAVING " <>) $ f Never info
 
 -- makeHaving, makeWhere and makeOrderBy
 makeOrderByNoNewline
@@ -2994,8 +2935,6 @@ makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk
         let x =
                 case v of
                     ERaw _ f -> f Never
-                    EAliasedValue i _ -> aliasedValueIdentToRawSql i
-                    EValueReference i i' -> valueReferenceToRawSql i i'
         in [ first (<> orderByType t) $ x info ]
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
 
@@ -3161,12 +3100,8 @@ materializeExpr info v
     | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = 
         let bs = f info
         in (uncommas $ map (parensM Parens) bs, [])
-    | ERaw _ f <- v = f Parens info
-materializeExpr info (EAliasedValue ident x) =
-    let (b, vals) = materializeExpr info x
-    in (b <> " AS " <> (useIdent info ident), vals)
-materializeExpr info (EValueReference sourceIdent columnIdent) =
-    valueReferenceToRawSql sourceIdent columnIdent info
+    | ERaw m f <- v = f Never info
+
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
 -- from a 'select' query.
@@ -3691,11 +3626,6 @@ renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
 renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues ->
          let (builder, _) = mkBuilderValues Never (sqlBackend, initialIdentState)
-         in (builderToText builder)
-    EAliasedValue i _   ->
-        builderToText $ useIdent (sqlBackend, initialIdentState) i
-    EValueReference i i' ->
-        let (builder, _) = valueReferenceToRawSql i i' (sqlBackend, initialIdentState)
          in (builderToText builder)
 
 -- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
