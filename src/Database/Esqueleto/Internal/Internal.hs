@@ -24,6 +24,7 @@
 module Database.Esqueleto.Internal.Internal where
 
 import Control.Applicative ((<|>))
+import Data.Coerce (coerce)
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
 import Control.Monad (MonadPlus(..), guard, void)
@@ -887,12 +888,13 @@ castString = veryUnsafeCoerceSqlExprValue
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- list of values.
 subList_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (ValueList a)
-subList_select         = EList . sub_select
+subList_select query = ERaw noMeta $ \_ info -> first parens $ toRawSql SELECT info query
+
 
 -- | Lift a list of constant value from Haskell-land to the query.
 valList :: PersistField typ => [typ] -> SqlExpr (ValueList typ)
-valList []   = EEmptyList
-valList vals = EList $ ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), map toPersistValue vals )
+valList []   = ERaw noMeta $ \_ _ -> ("()", [])
+valList vals = ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), map toPersistValue vals )
 
 -- | Same as 'just' but for 'ValueList'.  Most of the time you
 -- won't need it, though, because you can use 'just' from
@@ -900,8 +902,7 @@ valList vals = EList $ ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ va
 --
 -- @since 2.2.12
 justList :: SqlExpr (ValueList typ) -> SqlExpr (ValueList (Maybe typ))
-justList EEmptyList = EEmptyList
-justList (EList v)  = EList (just v)
+justList (ERaw m f) = ERaw m f
 
 -- | @IN@ operator. For example if you want to select all @Person@s by a list
 -- of IDs:
@@ -923,11 +924,19 @@ justList (EList v)  = EList (just v)
 --
 -- Where @personIds@ is of type @[Key Person]@.
 in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
-v `in_`   e = ifNotEmptyList e False $ unsafeSqlBinOp     " IN " v (veryUnsafeCoerceSqlExprValueList e)
+(ERaw _ v) `in_` (ERaw _ list) = 
+    ERaw noMeta $ \p info ->
+        let (b1, vals1) = v Parens info 
+            (b2, vals2) = list Parens info 
+        in (b1 <> " IN " <> b2, vals1 <> vals2)
 
 -- | @NOT IN@ operator.
 notIn :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
-v `notIn` e = ifNotEmptyList e True  $ unsafeSqlBinOp " NOT IN " v (veryUnsafeCoerceSqlExprValueList e)
+(ERaw _ v) `notIn` (ERaw _ list) = 
+    ERaw noMeta $ \p info ->
+        let (b1, vals1) = v Parens info 
+            (b2, vals2) = list Parens info 
+        in (b1 <> " NOT IN " <> b2, vals1 <> vals2)
 
 -- | @EXISTS@ operator.  For example:
 --
@@ -2034,7 +2043,7 @@ data SqlExpr a where
     -- connection (mainly for escaping names) and returns both an
     -- string ('TLB.Builder') and a list of values to be
     -- interpolated by the SQL backend.
-    ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
+    ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr a 
 
     -- A composite key.
     --
@@ -2076,10 +2085,6 @@ data SqlExpr a where
     -- used in the context of a composite key.  That's because it's
     -- impossible, e.g., for 'val' to disambiguate between these
     -- uses.
-
-    -- 'EList' and 'EEmptyList' are used by list operators.
-    EList      :: SqlExpr (Value a) -> SqlExpr (ValueList a)
-    EEmptyList :: SqlExpr (ValueList a)
 
     -- A 'SqlExpr' accepted only by 'orderBy'.
     EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
@@ -2140,10 +2145,6 @@ existsHelper = sub SELECT . (>> return true)
   where
     true :: SqlExpr (Value Bool)
     true = val True
-
-ifNotEmptyList :: SqlExpr (ValueList a) -> Bool -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
-ifNotEmptyList EEmptyList b _ = val b
-ifNotEmptyList (EList _)  _ x = x
 
 -- | (Internal) Create a case statement.
 --
@@ -2459,8 +2460,7 @@ veryUnsafeCoerceSqlExprValue (ERaw m f)             = ERaw m f
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList (EList v)  = v
-veryUnsafeCoerceSqlExprValueList EEmptyList = throw (UnexpectedCaseErr EmptySqlExprValueList)
+veryUnsafeCoerceSqlExprValueList (ERaw m f) = ERaw m f
 
 
 ----------------------------------------------------------------------

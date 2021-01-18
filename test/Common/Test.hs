@@ -389,7 +389,8 @@ testSubSelect run = do
                     v `shouldBe` [Value 1]
 
     describe "subSelectList" $ do
-        it "is safe on empty databases as well as good databases" $ do
+        it "is safe on empty databases as well as good databases" $ run $ do
+            liftIO $ putStrLn "hello"
             let query =
                     from $ \n -> do
                     where_ $ n ^. NumbersInt `in_` do
@@ -398,16 +399,18 @@ testSubSelect run = do
                             where_ $ n' ^. NumbersInt >=. val 3
                             pure (n' ^. NumbersInt)
                     pure n
-
-            empty <- run $ do
+            empty <- do
+                liftIO . print =<<  renderQuerySelect query
                 select query
+            liftIO $ putStrLn "goodbye"
 
-            full <- run $ do
+            full <- do
                 setup
                 select query
 
-            empty `shouldBe` []
-            full `shouldSatisfy` (not . null)
+            liftIO $ do
+                empty `shouldBe` []
+                full `shouldSatisfy` (not . null)
 
     describe "subSelectMaybe" $ do
         it "is equivalent to joinV . subSelect" $ do
