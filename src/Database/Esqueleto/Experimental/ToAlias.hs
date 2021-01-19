@@ -23,7 +23,7 @@ instance ToAlias (SqlExpr (Value a)) where
                 ident <- newIdentFor (DBName "v")
                 pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} $ \_ info ->
                     let (b, v) = f Never info
-                    in (b <> " AS " <> useIdent info ident, [])
+                    in (b <> " AS " <> useIdent info ident, v)
 
 
 instance ToAlias (SqlExpr (Entity a)) where

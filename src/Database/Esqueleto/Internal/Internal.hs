@@ -363,7 +363,9 @@ distinctOnOrderBy exprs act =
         act
   where
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
-    toDistinctOn = coerce
+    toDistinctOn (ERaw m f) = ERaw m $ \p info ->
+        let (b, vals) = f p info
+        in (TLB.fromLazyText $ head $ TL.splitOn " " $ TLB.toLazyText b, vals)
 
 -- | @ORDER BY random()@ clause.
 --
@@ -918,7 +920,11 @@ in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> Sql
     ERaw noMeta $ \p info ->
         let (b1, vals1) = v Parens info 
             (b2, vals2) = list Parens info 
-        in (b1 <> " IN " <> b2, vals1 <> vals2)
+        in 
+        if b2 == "()" then
+            ("FALSE", [])
+        else 
+            (b1 <> " IN " <> b2, vals1 <> vals2)
 
 -- | @NOT IN@ operator.
 notIn :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
@@ -3042,7 +3048,7 @@ materializeExpr info v
     | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = 
         let bs = f info
         in (uncommas $ map (parensM Parens) bs, [])
-    | ERaw _ f <- v = f Never info
+    | ERaw _ f <- v = f Parens info
 
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples

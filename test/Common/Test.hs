@@ -894,7 +894,6 @@ testSelectSubQuery run = describe "select subquery" $ do
                       `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
                   pure (lords, deeds)
 
-        liftIO . print =<< renderQuerySelect q
         ret <- select q
         liftIO $ ret `shouldMatchList` ((l3e, Nothing) : l1WithDeeds)
 
