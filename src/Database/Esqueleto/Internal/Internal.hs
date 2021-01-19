@@ -84,35 +84,35 @@ fromStart
     ( PersistEntity a
     , BackendCompatible SqlBackend (PersistEntityBackend a)
     )
-    => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a))))
+    => SqlQuery (PreprocessedFrom (SqlExpr (Entity a)))
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
     ident <- newIdentFor (entityDB ed)
     let ret = unsafeSqlEntity ident 
         f' = FromStart ident ed
-    return (EPreprocessedFrom ret f')
+    return (PreprocessedFrom ret f')
 
 -- | (Internal) Same as 'fromStart', but entity may be missing.
 fromStartMaybe
     :: ( PersistEntity a
        , BackendCompatible SqlBackend (PersistEntityBackend a)
        )
-    => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a)))))
+    => SqlQuery (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
 fromStartMaybe = maybelize <$> fromStart
   where
     maybelize
-        :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
-        -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
-    maybelize (EPreprocessedFrom (ERaw m f) f') = EPreprocessedFrom (ERaw m f) f'
+        :: PreprocessedFrom (SqlExpr (Entity a))
+        -> PreprocessedFrom (SqlExpr (Maybe (Entity a)))
+    maybelize (PreprocessedFrom (ERaw m f) f') = PreprocessedFrom (ERaw m f) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
     :: IsJoinKind join
-    => SqlExpr (PreprocessedFrom a)
-    -> SqlExpr (PreprocessedFrom b)
-    -> SqlQuery (SqlExpr (PreprocessedFrom (join a b)))
-fromJoin (EPreprocessedFrom lhsRet lhsFrom)
-         (EPreprocessedFrom rhsRet rhsFrom) = Q $ do
+    => PreprocessedFrom a
+    -> PreprocessedFrom b
+    -> SqlQuery (PreprocessedFrom (join a b))
+fromJoin (PreprocessedFrom lhsRet lhsFrom)
+         (PreprocessedFrom rhsRet rhsFrom) = Q $ do
     let ret = smartJoin lhsRet rhsRet
         from' =
             FromJoin
@@ -120,13 +120,13 @@ fromJoin (EPreprocessedFrom lhsRet lhsFrom)
                 (reifyJoinKind ret) -- JOIN
                 rhsFrom             -- RHS
                 Nothing             -- ON
-    return (EPreprocessedFrom ret from')
+    return (PreprocessedFrom ret from')
 
 -- | (Internal) Finish a @JOIN@.
 fromFinish
-  :: SqlExpr (PreprocessedFrom a)
+  :: PreprocessedFrom a
   -> SqlQuery a
-fromFinish (EPreprocessedFrom ret f') = Q $ do
+fromFinish (PreprocessedFrom ret f') = Q $ do
     W.tell mempty { sdFromClause = [f'] }
     return ret
 
@@ -250,11 +250,22 @@ orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
 
 -- | Ascending order of this field or SqlExpression.
 asc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-asc = EOrderBy ASC 
+asc = orderByExpr " ASC"
 
 -- | Descending order of this field or SqlExpression.
 desc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-desc = EOrderBy DESC
+desc = orderByExpr " DESC" 
+
+orderByExpr :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr OrderBy
+orderByExpr orderByType (ERaw m f)
+  | Just fields <- sqlExprMetaCompositeFields m =
+        ERaw noMeta $ \_ info ->
+            let fs = fields info
+                vals = repeat []
+            in uncommas' $ zip (map (<> orderByType) fs) vals
+  | otherwise =
+      ERaw noMeta $ \_ info ->
+          first (<> orderByType) $ f Never info
 
 -- | @LIMIT@.  Limit the number of returned rows.
 limit :: Int64 -> SqlQuery ()
@@ -326,7 +337,7 @@ distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
-don = EDistinctOn
+don (ERaw m f) = ERaw m f
 
 -- | A convenience function that calls both 'distinctOn' and
 -- 'orderBy'.  In other words,
@@ -352,7 +363,7 @@ distinctOnOrderBy exprs act =
         act
   where
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
-    toDistinctOn (EOrderBy _ f) = EDistinctOn f
+    toDistinctOn (ERaw m f) = ERaw m f
     toDistinctOn EOrderRandom =
         error "We can't select distinct by a random order!"
 
@@ -1362,9 +1373,6 @@ data OnClauseWithoutMatchingJoinException =
 
 instance Exception OnClauseWithoutMatchingJoinException
 
--- | (Internal) Phantom type used to process 'from' (see 'fromStart').
-data PreprocessedFrom a
-
 -- | Phantom type used by 'orderBy', 'asc' and 'desc'.
 data OrderBy
 
@@ -1606,7 +1614,7 @@ instance
 -- | (Internal) Class that implements the @JOIN@ 'from' magic
 -- (see 'fromStart').
 class FromPreprocess a where
-    fromPreprocess :: SqlQuery (SqlExpr (PreprocessedFrom a))
+    fromPreprocess :: SqlQuery (PreprocessedFrom a)
 
 instance
     (PersistEntity val, BackendCompatible SqlBackend (PersistEntityBackend val))
@@ -1996,7 +2004,47 @@ useIdent :: IdentInfo -> Ident -> TLB.Builder
 useIdent info (I ident) = fromDBName info $ DBName ident
 
 data SqlExprMeta = SqlExprMeta
-    { sqlExprMetaCompositeFields :: Maybe (IdentInfo -> [TLB.Builder])
+    { -- A composite key.
+      --
+      -- Persistent uses the same 'PersistList' constructor for both
+      -- fields which are (homogeneous) lists of values and the
+      -- (probably heterogeneous) values of a composite primary key.
+      --
+      -- We need to treat composite keys as fields.  For example, we
+      -- have to support using ==., otherwise you wouldn't be able to
+      -- join.  OTOH, lists of values should be treated exactly the
+      -- same as any other scalar value.
+      --
+      -- In particular, this is valid for persistent via rawSql for
+      -- an F field that is a list:
+      --
+      --   A.F in ?    -- [PersistList [foo, bar]]
+      --
+      -- However, this is not for a composite key entity:
+      --
+      --   A.ID = ?    -- [PersistList [foo, bar]]
+      --
+      -- The ID field doesn't exist on the DB for a composite key
+      -- table, it exists only on the Haskell side.  Those variations
+      -- also don't work:
+      --
+      --   (A.KeyA, A.KeyB) = ?    -- [PersistList [foo, bar]]
+      --   [A.KeyA, A.KeyB] = ?    -- [PersistList [foo, bar]]
+      --
+      -- We have to generate:
+      --
+      --   A.KeyA = ? AND A.KeyB = ?      -- [foo, bar]
+      --
+      -- Note that the PersistList had to be deconstructed into its
+      -- components.
+      --
+      -- In order to disambiguate behaviors, this constructor is used
+      -- /only/ to represent a composite field access.  It does not
+      -- represent a 'PersistList', not even if the 'PersistList' is
+      -- used in the context of a composite key.  That's because it's
+      -- impossible, e.g., for 'val' to disambiguate between these
+      -- uses.
+      sqlExprMetaCompositeFields :: Maybe (IdentInfo -> [TLB.Builder])
     , sqlExprMetaAlias :: Maybe Ident
     , sqlExprMetaIsReference :: Bool
     } 
@@ -2023,64 +2071,16 @@ data SqlExpr a where
     -- interpolated by the SQL backend.
     ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr a 
 
-    -- A composite key.
-    --
-    -- Persistent uses the same 'PersistList' constructor for both
-    -- fields which are (homogeneous) lists of values and the
-    -- (probably heterogeneous) values of a composite primary key.
-    --
-    -- We need to treat composite keys as fields.  For example, we
-    -- have to support using ==., otherwise you wouldn't be able to
-    -- join.  OTOH, lists of values should be treated exactly the
-    -- same as any other scalar value.
-    --
-    -- In particular, this is valid for persistent via rawSql for
-    -- an F field that is a list:
-    --
-    --   A.F in ?    -- [PersistList [foo, bar]]
-    --
-    -- However, this is not for a composite key entity:
-    --
-    --   A.ID = ?    -- [PersistList [foo, bar]]
-    --
-    -- The ID field doesn't exist on the DB for a composite key
-    -- table, it exists only on the Haskell side.  Those variations
-    -- also don't work:
-    --
-    --   (A.KeyA, A.KeyB) = ?    -- [PersistList [foo, bar]]
-    --   [A.KeyA, A.KeyB] = ?    -- [PersistList [foo, bar]]
-    --
-    -- We have to generate:
-    --
-    --   A.KeyA = ? AND A.KeyB = ?      -- [foo, bar]
-    --
-    -- Note that the PersistList had to be deconstructed into its
-    -- components.
-    --
-    -- In order to disambiguate behaviors, this constructor is used
-    -- /only/ to represent a composite field access.  It does not
-    -- represent a 'PersistList', not even if the 'PersistList' is
-    -- used in the context of a composite key.  That's because it's
-    -- impossible, e.g., for 'val' to disambiguate between these
-    -- uses.
-
-    -- A 'SqlExpr' accepted only by 'orderBy'.
-    EOrderBy :: OrderByType -> SqlExpr (Value a) -> SqlExpr OrderBy
-
     EOrderRandom :: SqlExpr OrderBy
-
-    -- A 'SqlExpr' accepted only by 'distinctOn'.
-    EDistinctOn :: SqlExpr (Value a) -> SqlExpr DistinctOn
 
     -- A 'SqlExpr' accepted only by 'set'.
     ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
 
-    -- An internal 'SqlExpr' used by the 'from' hack.
-    EPreprocessedFrom :: a -> FromClause -> SqlExpr (PreprocessedFrom a)
-
     -- Used by 'insertSelect'.
     EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
     EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
+
+data PreprocessedFrom a = PreprocessedFrom a FromClause
 
 -- | Phantom type used to mark a @INSERT INTO@ query.
 data InsertFinal
@@ -2812,7 +2812,7 @@ makeSelect info mode_ distinctClause ret = process mode_
                 first (("SELECT DISTINCT ON (" <>) . (<> ") "))
                 $ uncommas' (processExpr <$> exprs)
       where
-        processExpr (EDistinctOn f) = materializeExpr info f
+        processExpr (ERaw m f) = materializeExpr info (ERaw m f :: SqlExpr (Value a))
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
@@ -2908,16 +2908,7 @@ makeOrderByNoNewline _    [] = mempty
 makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk os
   where
     mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
-    mk (EOrderBy t v) 
-      | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m =
-            let fs = f info
-                vals = repeat []
-            in zip (map (<> orderByType t) fs) vals
-      | otherwise =
-        let x =
-                case v of
-                    ERaw _ f -> f Never
-        in [ first (<> orderByType t) $ x info ]
+    mk (ERaw _ f) = [f Never info]
     mk EOrderRandom = [first (<> "RANDOM()") mempty]
 
     orderByType ASC  = " ASC"
