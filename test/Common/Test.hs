@@ -1,25 +1,25 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE EmptyDataDecls             #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PartialTypeSignatures      #-}
-{-# LANGUAGE QuasiQuotes                #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -62,41 +62,37 @@ module Common.Test
     , Key(..)
     ) where
 
-import           Control.Monad                          (forM_, replicateM,
-                                                         replicateM_, void)
-import           Control.Monad.Catch                    (MonadCatch)
-import           Control.Monad.Reader                   (ask)
-import           Data.Either
-import           Data.Time
+import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Catch (MonadCatch)
+import Control.Monad.Reader (ask)
+import Data.Either
+import Data.Time
 #if __GLASGOW_HASKELL__ >= 806
-import           Control.Monad.Fail                     (MonadFail)
+import Control.Monad.Fail (MonadFail)
 #endif
-import           Control.Monad.IO.Class                 (MonadIO (liftIO))
-import           Control.Monad.Logger                   (MonadLogger (..),
-                                                         NoLoggingT,
-                                                         runNoLoggingT)
-import           Control.Monad.Trans.Reader             (ReaderT)
-import qualified Data.Attoparsec.Text                   as AP
-import           Data.Char                              (toLower, toUpper)
-import           Data.Monoid                            ((<>))
-import           Database.Esqueleto
-import           Database.Esqueleto.Experimental        hiding (from, on)
-import qualified Database.Esqueleto.Experimental        as Experimental
-import           Database.Persist.TH
-import           Test.Hspec
-import           UnliftIO
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Logger (MonadLogger(..), NoLoggingT, runNoLoggingT)
+import Control.Monad.Trans.Reader (ReaderT)
+import qualified Data.Attoparsec.Text as AP
+import Data.Char (toLower, toUpper)
+import Data.Monoid ((<>))
+import Database.Esqueleto
+import Database.Esqueleto.Experimental hiding (from, on)
+import qualified Database.Esqueleto.Experimental as Experimental
+import Database.Persist.TH
+import Test.Hspec
+import UnliftIO
 
-import           Data.Conduit                           (ConduitT, runConduit,
-                                                         (.|))
-import qualified Data.Conduit.List                      as CL
-import qualified Data.List                              as L
-import qualified Data.Set                               as S
-import qualified Data.Text                              as Text
-import qualified Data.Text.Internal.Lazy                as TL
-import qualified Data.Text.Lazy.Builder                 as TLB
+import Data.Conduit (ConduitT, runConduit, (.|))
+import qualified Data.Conduit.List as CL
+import qualified Data.List as L
+import qualified Data.Set as S
+import qualified Data.Text as Text
+import qualified Data.Text.Internal.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql        as EI
-import qualified UnliftIO.Resource                      as R
+import qualified Database.Esqueleto.Internal.Sql as EI
+import qualified UnliftIO.Resource as R
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -390,7 +386,6 @@ testSubSelect run = do
 
     describe "subSelectList" $ do
         it "is safe on empty databases as well as good databases" $ run $ do
-            liftIO $ putStrLn "hello"
             let query =
                     from $ \n -> do
                     where_ $ n ^. NumbersInt `in_` do
@@ -399,10 +394,7 @@ testSubSelect run = do
                             where_ $ n' ^. NumbersInt >=. val 3
                             pure (n' ^. NumbersInt)
                     pure n
-            empty <- do
-                liftIO . print =<<  renderQuerySelect query
-                select query
-            liftIO $ putStrLn "goodbye"
+            empty <- select query
 
             full <- do
                 setup
@@ -895,12 +887,15 @@ testSelectSubQuery run = describe "select subquery" $ do
         l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
         let l1WithDeeds = do d <- l1Deeds
                              pure (l1e, Just d)
-        ret <- select $ Experimental.from $ do
-          (lords :& deeds) <-
-              Experimental.from $ Table @Lord
-              `LeftOuterJoin` Table @Deed
-              `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
-          pure (lords, deeds)
+        let q = Experimental.from $ do
+                  (lords :& deeds) <-
+                      Experimental.from $ Table @Lord
+                      `LeftOuterJoin` Table @Deed
+                      `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                  pure (lords, deeds)
+
+        liftIO . print =<< renderQuerySelect q
+        ret <- select q
         liftIO $ ret `shouldMatchList` ((l3e, Nothing) : l1WithDeeds)
 
     it "lets you order by alias" $ run $ do
@@ -1847,9 +1842,10 @@ testRenderSql run = do
       (c, expr) <- run $ do
         conn <- ask
         let Right c = P.mkEscapeChar conn
+        let user = EI.unsafeSqlEntity (EI.I "user")
+            blogPost = EI.unsafeSqlEntity (EI.I "blog_post")
         pure $ (,) c $ EI.renderExpr conn $
-          EI.EEntity (EI.I "user") ^. PersonId
-          ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
+          user ^. PersonId ==. blogPost ^. BlogPostAuthorId
       expr
         `shouldBe`
           Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
@@ -1860,23 +1856,6 @@ testRenderSql run = do
     it "renders ? for a val" $ do
       expr <- run $ ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
       expr `shouldBe` "? = ?"
-
-  describe "EEntity Ident behavior" $ do
-      let render :: SqlExpr (Entity val) -> Text.Text
-          render (EI.EEntity (EI.I ident)) = ident
-          render _ = error "guess we gotta handle this in the test suite now"
-      it "renders sensibly" $ run $ do
-          _ <- insert $ Foo 2
-          _ <- insert $ Foo 3
-          _ <- insert $ Person "hello" Nothing Nothing 3
-          results <- select $
-              from $ \(a `LeftOuterJoin` b) -> do
-              on $ a ^. FooName ==. b ^. PersonFavNum
-              pure (val (render a), val (render b))
-          liftIO $
-              head results
-              `shouldBe`
-              (Value "Foo", Value "Person")
 
   describe "ExprParser" $ do
     let parse parser = AP.parseOnly (parser '#')

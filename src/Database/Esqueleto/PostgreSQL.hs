@@ -1,8 +1,8 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE GADTs               #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE Rank2Types          #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- | This module contain PostgreSQL-specific functions.
@@ -31,23 +31,22 @@ module Database.Esqueleto.PostgreSQL
     ) where
 
 #if __GLASGOW_HASKELL__ < 804
-import           Data.Semigroup
+import Data.Semigroup
 #endif
-import           Control.Arrow                                (first, (***))
-import           Control.Exception                            (throw)
-import           Control.Monad                                (void)
-import           Control.Monad.IO.Class                       (MonadIO (..))
-import qualified Control.Monad.Trans.Reader                   as R
-import           Data.Int                                     (Int64)
-import           Data.List.NonEmpty                           (NonEmpty ((:|)))
-import qualified Data.List.NonEmpty                           as NonEmpty
-import           Data.Proxy                                   (Proxy (..))
-import qualified Data.Text.Internal.Builder                   as TLB
-import           Data.Time.Clock                              (UTCTime)
-import           Database.Esqueleto.Internal.Internal         hiding (random_)
-import           Database.Esqueleto.Internal.PersistentImport hiding (upsert,
-                                                               upsertBy)
-import           Database.Persist.Class                       (OnlyOneUniqueKey)
+import Control.Arrow (first, (***))
+import Control.Exception (throw)
+import Control.Monad (void)
+import Control.Monad.IO.Class (MonadIO(..))
+import qualified Control.Monad.Trans.Reader as R
+import Data.Int (Int64)
+import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.List.NonEmpty as NonEmpty
+import Data.Proxy (Proxy(..))
+import qualified Data.Text.Internal.Builder as TLB
+import Data.Time.Clock (UTCTime)
+import Database.Esqueleto.Internal.Internal hiding (random_)
+import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
+import Database.Persist.Class (OnlyOneUniqueKey)
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -306,9 +305,9 @@ insertSelectWithConflictCount unique query conflictQuery = do
     proxy = Proxy
     updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
-    entExcluded = EEntity $ I "excluded"
+    entExcluded = unsafeSqlEntity (I "excluded")
     tableName = unDBName . entityDB . entityDef
-    entCurrent = EEntity $ I (tableName proxy)
+    entCurrent = unsafeSqlEntity (I (tableName proxy))
     uniqueDef = toUniqueDef unique
     constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])

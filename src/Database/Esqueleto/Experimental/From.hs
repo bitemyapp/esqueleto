@@ -52,7 +52,7 @@ instance PersistEntity a => From (Table a) where
     runFrom e@Table = do
         let ed = entityDef $ getVal e
         ident <- newIdentFor (entityDB ed)
-        let entity = EEntity ident
+        let entity = unsafeSqlEntity ident
         pure $ (entity, FromStart ident ed)
           where
             getVal ::  Table ent -> Proxy ent

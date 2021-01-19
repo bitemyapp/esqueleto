@@ -1,14 +1,13 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Internal.Internal         hiding (From,
-                                                               from, on)
-import           Database.Esqueleto.Internal.PersistentImport
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Internal.Internal hiding (From, from, on)
+import Database.Esqueleto.Internal.PersistentImport
 
 {-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasReferenceT a = a
@@ -19,16 +18,24 @@ class ToAliasReference a where
 
 instance ToAliasReference (SqlExpr (Value a)) where
     toAliasReference aliasSource (ERaw m _)
-      | Just alias <- sqlExprMetaAlias m = pure $ ERaw noMeta $ \p info ->
+      | Just alias <- sqlExprMetaAlias m = pure $ ERaw m $ \_ info ->
             (useIdent info aliasSource <> "." <> useIdent info alias, [])
+    toAliasReference _ e = pure e
 
 instance ToAliasReference (SqlExpr (Entity a)) where
-    toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
-    toAliasReference _ e@(EEntity _) = toAlias e
-    toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
+    toAliasReference aliasSource (ERaw m _)
+      | Just _ <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m =
+          pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
+              (useIdent info aliasSource, [])
+    toAliasReference _ e = pure e
 
 instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
-    toAliasReference s (EMaybe e) = EMaybe <$> toAliasReference s e
+    -- FIXME: Code duplication because the compiler doesnt like half final encoding
+    toAliasReference aliasSource (ERaw m f)
+      | Just _ <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m =
+          pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
+              (useIdent info aliasSource, [])
+    toAliasReference s e = pure e
 
 
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where

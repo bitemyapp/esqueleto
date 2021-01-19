@@ -88,7 +88,7 @@ fromStart
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
     ident <- newIdentFor (entityDB ed)
-    let ret = EEntity ident
+    let ret = unsafeSqlEntity ident 
         f' = FromStart ident ed
     return (EPreprocessedFrom ret f')
 
@@ -103,7 +103,7 @@ fromStartMaybe = maybelize <$> fromStart
     maybelize
         :: SqlExpr (PreprocessedFrom (SqlExpr (Entity a)))
         -> SqlExpr (PreprocessedFrom (SqlExpr (Maybe (Entity a))))
-    maybelize (EPreprocessedFrom ret f') = EPreprocessedFrom (EMaybe ret) f'
+    maybelize (EPreprocessedFrom (ERaw m f) f') = EPreprocessedFrom (ERaw m f) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -527,9 +527,12 @@ subSelectUnsafe = sub SELECT
     => SqlExpr (Entity val)
     -> EntityField val typ
     -> SqlExpr (Value typ)
-(EAliasedEntityReference source base) ^. field =
-    ERaw noMeta $ \_ info -> 
-        (useIdent info source <> "." <> useIdent info (aliasedEntityColumnIdent base fieldDef), [])
+e ^. field
+    | isIdField field = idFieldValue
+    | ERaw m f <- e, Just alias <- sqlExprMetaAlias m =
+        ERaw noMeta $ \_ info -> 
+            f Never info <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef), [])
+    | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
   where
     fieldDef =
         if isIdField field then
@@ -537,13 +540,6 @@ subSelectUnsafe = sub SELECT
             head $ entityKeyFields ed
         else
             persistFieldDef field
-
-    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
-
-e ^. field
-    | isIdField field = idFieldValue
-    | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
-  where
     idFieldValue =
         case entityKeyFields ed of
             idField:[] ->
@@ -558,29 +554,19 @@ e ^. field
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
     dot info fieldDef =
-        useIdent info sourceIdent <> "." <> fieldIdent
+        sourceIdent info <> "." <> fieldIdent
       where
         sourceIdent =
             case e of
-                EEntity ident -> ident
-                EAliasedEntity baseI _ -> baseI
-                EAliasedEntityReference a b ->
-                    error $ unwords
-                        [ "Used (^.) with an EAliasedEntityReference."
-                        , "Please file this as an Esqueleto bug."
-                        , "EAliasedEntityReference", show a, show b
-                        ]
+                ERaw _ f -> fmap fst $ f Never
         fieldIdent =
             case e of
-                EEntity _ -> fromDBName info (fieldDB fieldDef)
-                EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
-                EAliasedEntityReference a b ->
-                    error $ unwords
-                        [ "Used (^.) with an EAliasedEntityReference."
-                        , "Please file this as an Esqueleto bug."
-                        , "EAliasedEntityReference", show a, show b
-                        ]
-
+                ERaw m f -> 
+                    case sqlExprMetaAlias m of
+                      Just baseI -> 
+                          useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+                      Nothing ->
+                         fromDBName info (fieldDB fieldDef)
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
@@ -598,7 +584,7 @@ withNonNull field f = do
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
     -> SqlExpr (Value (Maybe typ))
-EMaybe r ?. field = just (r ^. field)
+ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -2012,12 +1998,14 @@ useIdent info (I ident) = fromDBName info $ DBName ident
 data SqlExprMeta = SqlExprMeta
     { sqlExprMetaCompositeFields :: Maybe (IdentInfo -> [TLB.Builder])
     , sqlExprMetaAlias :: Maybe Ident
+    , sqlExprMetaIsReference :: Bool
     } 
 
 noMeta :: SqlExprMeta
 noMeta = SqlExprMeta 
     { sqlExprMetaCompositeFields = Nothing
     , sqlExprMetaAlias = Nothing
+    , sqlExprMetaIsReference = False
     }
 
 hasCompositeKeyMeta :: SqlExprMeta -> Bool
@@ -2028,16 +2016,6 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 -- There are many comments describing the constructors of this
 -- data type.  However, Haddock doesn't like GADTs, so you'll have to read them by hitting \"Source\".
 data SqlExpr a where
-    -- An entity, created by 'from' (cf. 'fromStart').
-    EEntity  :: Ident -> SqlExpr (Entity val)
-    --                Base     Table
-    EAliasedEntity :: Ident -> Ident -> SqlExpr (Entity val)
-    --                         Source   Base
-    EAliasedEntityReference :: Ident -> Ident -> SqlExpr (Entity val)
-
-    -- Just a tag stating that something is nullable.
-    EMaybe   :: SqlExpr a -> SqlExpr (Maybe a)
-
     -- Raw expression: states whether parenthesis are needed
     -- around this expression, and takes information about the SQL
     -- connection (mainly for escaping names) and returns both an
@@ -2269,6 +2247,10 @@ unsafeSqlBinOpComposite op sep a b
 unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
 unsafeSqlValue v = ERaw noMeta $ \_ _ -> (v, mempty)
 {-# INLINE unsafeSqlValue #-}
+
+unsafeSqlEntity :: PersistEntity ent => Ident -> SqlExpr (Entity ent)
+unsafeSqlEntity ident = ERaw noMeta $ \_ info ->
+    (useIdent info ident, [])
 
 valueToFunctionArg :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
 valueToFunctionArg info v =
@@ -3035,37 +3017,36 @@ unescapedColumnNames ent =
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
-    sqlSelectCols info expr@(EEntity ident) = ret
-      where
-        process ed = uncommas $
-                     map ((name <>) . TLB.fromText) $
-                     entityColumnNames ed (fst info)
-        -- 'name' is the biggest difference between 'RawSql' and
-        -- 'SqlSelect'.  We automatically create names for tables
-        -- (since it's not the user who's writing the FROM
-        -- clause), while 'rawSql' assumes that it's just the
-        -- name of the table (which doesn't allow self-joins, for
-        -- example).
-        name = useIdent info ident <> "."
-        ret = let ed = entityDef $ getEntityVal $ return expr
-              in (process ed, mempty)
-    sqlSelectCols info expr@(EAliasedEntity aliasIdent tableIdent) = ret
-      where
-        process ed = uncommas $
-                     map ((name <>) . aliasName) $
-                     unescapedColumnNames ed
-        aliasName columnName = (fromDBName info columnName) <> " AS " <> aliasedColumnName aliasIdent info (unDBName columnName)
-        name = useIdent info tableIdent <> "."
-        ret = let ed = entityDef $ getEntityVal $ return expr
-              in (process ed, mempty)
-    sqlSelectCols info expr@(EAliasedEntityReference sourceIdent baseIdent) = ret
-      where
-        process ed = uncommas $
-                     map ((name <>) . aliasedColumnName baseIdent info . unDBName) $
-                     unescapedColumnNames ed
-        name = useIdent info sourceIdent <> "."
-        ret = let ed = entityDef $ getEntityVal $ return expr
-              in (process ed, mempty)
+    sqlSelectCols info expr@(ERaw m f) 
+      | Just baseIdent <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m = 
+          let process ed = uncommas $
+                           map ((name <>) . aliasName) $
+                           unescapedColumnNames ed
+              aliasName columnName = (fromDBName info columnName) <> " AS " <> aliasedColumnName baseIdent info (unDBName columnName)
+              name = fst (f Never info) <> "."
+              ed = entityDef $ getEntityVal $ return expr
+          in (process ed, mempty)
+      | Just baseIdent <- sqlExprMetaAlias m, True <- sqlExprMetaIsReference m = 
+          let process ed = uncommas $
+                           map ((name <>) . aliasedColumnName baseIdent info . unDBName) $
+                           unescapedColumnNames ed
+              name = fst (f Never info) <> "."
+              ed = entityDef $ getEntityVal $ return expr
+          in (process ed, mempty)
+      | otherwise =
+          let process ed = uncommas $
+                         map ((name <>) . TLB.fromText) $
+                         entityColumnNames ed (fst info)
+              -- 'name' is the biggest difference between 'RawSql' and
+              -- 'SqlSelect'.  We automatically create names for tables
+              -- (since it's not the user who's writing the FROM
+              -- clause), while 'rawSql' assumes that it's just the
+              -- name of the table (which doesn't allow self-joins, for
+              -- example).
+              name = fst (f Never info) <> "."
+              ed = entityDef $ getEntityVal $ return expr
+          in (process ed, mempty)
+
     sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
     sqlSelectProcessRow = parseEntityValues ed
       where
@@ -3076,7 +3057,7 @@ getEntityVal = const Proxy
 
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
-    sqlSelectCols info (EMaybe ent) = sqlSelectCols info ent
+    sqlSelectCols info (ERaw m f) = sqlSelectCols info (ERaw m f :: SqlExpr (Entity a)) 
     sqlSelectColCount = sqlSelectColCount . fromEMaybe
       where
         fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
