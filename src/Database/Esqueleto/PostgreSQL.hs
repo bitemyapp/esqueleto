@@ -182,7 +182,7 @@ upsert
     )
     => record
     -- ^ new record to insert
-    -> [SqlExpr (Update record)]
+    -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -200,7 +200,7 @@ upsertBy
     -- ^ uniqueness constraint to find by
     -> record
     -- ^ new record to insert
-    -> [SqlExpr (Update record)]
+    -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -276,7 +276,7 @@ insertSelectWithConflict
     -- a unique "MyUnique 0", "MyUnique undefined" would work as well.
     -> SqlQuery (SqlExpr (Insertion val))
     -- ^ Insert query.
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
     -- ^ A list of updates to be applied in case of the constraint being
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
@@ -292,7 +292,7 @@ insertSelectWithConflictCount
      . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
     => a
     -> SqlQuery (SqlExpr (Insertion val))
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
     -> SqlWriteT m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask

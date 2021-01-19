@@ -959,24 +959,24 @@ notExists q = ERaw noMeta $ \p info ->
 -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
 -- a type error to use this function on a @SELECT@, it will
 -- most certainly result in a runtime error.
-set :: PersistEntity val => SqlExpr (Entity val) -> [SqlExpr (Update val)] -> SqlQuery ()
+set :: PersistEntity val => SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update] -> SqlQuery ()
 set ent upds = Q $ W.tell mempty { sdSetClause = map apply upds }
   where
-    apply (ESet f) = SetClause (f ent)
+    apply f = SetClause (f ent)
 
-(=.)  :: (PersistEntity val, PersistField typ) => EntityField val typ -> SqlExpr (Value typ) -> SqlExpr (Update val)
+(=.)  :: (PersistEntity val, PersistField typ) => EntityField val typ -> SqlExpr (Value typ) -> (SqlExpr (Entity val) -> SqlExpr Update )
 field  =. expr = setAux field (const expr)
 
-(+=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> SqlExpr (Update val)
+(+=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> (SqlExpr (Entity val) -> SqlExpr Update)
 field +=. expr = setAux field (\ent -> ent ^. field +. expr)
 
-(-=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> SqlExpr (Update val)
+(-=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> (SqlExpr (Entity val) -> SqlExpr Update)
 field -=. expr = setAux field (\ent -> ent ^. field -. expr)
 
-(*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> SqlExpr (Update val)
+(*=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> (SqlExpr (Entity val) -> SqlExpr Update)
 field *=. expr = setAux field (\ent -> ent ^. field *. expr)
 
-(/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> SqlExpr (Update val)
+(/=.) :: (PersistEntity val, PersistField a) => EntityField val a -> SqlExpr (Value a) -> (SqlExpr (Entity val) -> SqlExpr Update)
 field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
 -- | Apply a 'PersistField' constructor to @SqlExpr Value@ arguments.
@@ -1284,15 +1284,15 @@ toUniqueDef uniqueConstructor = uniqueDef
 renderUpdates
     :: (BackendCompatible SqlBackend backend)
     => backend
-    -> [SqlExpr (Update val)]
+    -> [SqlExpr (Entity val) -> SqlExpr Update]
     -> (TLB.Builder, [PersistValue])
 renderUpdates conn = uncommas' . concatMap renderUpdate
   where
-    mk :: SqlExpr (Value ()) -> [(TLB.Builder, [PersistValue])]
+    mk :: SqlExpr Update -> [(TLB.Builder, [PersistValue])]
     mk (ERaw _ f)             = [f Never info]
 
-    renderUpdate :: SqlExpr (Update val) -> [(TLB.Builder, [PersistValue])]
-    renderUpdate (ESet f) = mk (f undefined) -- second parameter of f is always unused
+    renderUpdate :: (SqlExpr (Entity val) -> SqlExpr Update) -> [(TLB.Builder, [PersistValue])]
+    renderUpdate f = mk (f undefined) -- second parameter of f is always unused
     info = (projectBackend conn, initialIdentState)
 
 -- | Data type that represents an @INNER JOIN@ (see 'LeftOuterJoin' for an example).
@@ -1379,7 +1379,7 @@ data DistinctOn
 
 -- | Phantom type for a @SET@ operation on an entity of the given
 -- type (see 'set' and '(=.)').
-data Update typ
+data Update
 
 -- | Phantom type used by 'insertSelect'.
 data Insertion a
@@ -1798,7 +1798,7 @@ instance Show FromClause where
         render' = T.unpack . renderExpr dummy
 
 -- | A part of a @SET@ clause.
-newtype SetClause = SetClause (SqlExpr (Value ()))
+newtype SetClause = SetClause (SqlExpr Update)
 
 -- | Collect 'OnClause's on 'FromJoin's.  Returns the first
 -- unmatched 'OnClause's data on error.  Returns a list without
@@ -2069,9 +2069,6 @@ data SqlExpr a where
     -- interpolated by the SQL backend.
     ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr a 
 
-    -- A 'SqlExpr' accepted only by 'set'.
-    ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
-
     -- Used by 'insertSelect'.
     EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
     EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
@@ -2103,10 +2100,12 @@ setAux
     :: (PersistEntity val, PersistField typ)
     => EntityField val typ
     -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
-    -> SqlExpr (Update val)
-setAux field mkVal = ESet $ \ent -> unsafeSqlBinOp " = " name (mkVal ent)
-  where
-    name = ERaw noMeta $ \_ info -> (fieldName info field, mempty)
+    -> (SqlExpr (Entity val) -> SqlExpr Update)
+setAux field value = \ent -> ERaw noMeta $ \_ info ->
+    let (valueToSet, valueVals) = 
+            case value ent of 
+              ERaw _ valueF -> valueF Parens info
+    in (fieldName info field <> " = " <> valueToSet, valueVals)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
 sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info query
