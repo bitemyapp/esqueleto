@@ -364,14 +364,12 @@ distinctOnOrderBy exprs act =
   where
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
     toDistinctOn (ERaw m f) = ERaw m f
-    toDistinctOn EOrderRandom =
-        error "We can't select distinct by a random order!"
 
 -- | @ORDER BY random()@ clause.
 --
 -- @since 1.3.10
 rand :: SqlExpr OrderBy
-rand = EOrderRandom
+rand = ERaw noMeta $ \_ _ -> ("RANDOM()", []) 
 
 -- | @HAVING@.
 --
@@ -2071,8 +2069,6 @@ data SqlExpr a where
     -- interpolated by the SQL backend.
     ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr a 
 
-    EOrderRandom :: SqlExpr OrderBy
-
     -- A 'SqlExpr' accepted only by 'set'.
     ESet :: (SqlExpr (Entity val) -> SqlExpr (Value ())) -> SqlExpr (Update val)
 
@@ -2909,7 +2905,6 @@ makeOrderByNoNewline info os = first ("ORDER BY " <>) . uncommas' $ concatMap mk
   where
     mk :: OrderByClause -> [(TLB.Builder, [PersistValue])]
     mk (ERaw _ f) = [f Never info]
-    mk EOrderRandom = [first (<> "RANDOM()") mempty]
 
     orderByType ASC  = " ASC"
     orderByType DESC = " DESC"
@@ -2919,8 +2914,6 @@ makeOrderBy _ [] = mempty
 makeOrderBy info is =
     let (tlb, vals) = makeOrderByNoNewline info is
     in ("\n" <> tlb, vals)
-
-{-# DEPRECATED EOrderRandom "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 
 makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) orderByClauses =
