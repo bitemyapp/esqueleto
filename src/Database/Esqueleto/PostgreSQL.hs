@@ -298,7 +298,7 @@ insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask
     uncurry rawExecuteCount $
         combine
-            (toRawSql INSERT_INTO (conn, initialIdentState) (fmap EInsertFinal query))
+            (toRawSql INSERT_INTO (conn, initialIdentState) query)
             (conflict conn)
   where
     proxy :: Proxy val

@@ -103,7 +103,7 @@ fromStartMaybe = maybelize <$> fromStart
     maybelize
         :: PreprocessedFrom (SqlExpr (Entity a))
         -> PreprocessedFrom (SqlExpr (Maybe (Entity a)))
-    maybelize (PreprocessedFrom (ERaw m f) f') = PreprocessedFrom (ERaw m f) f'
+    maybelize (PreprocessedFrom e f') = PreprocessedFrom (coerce e) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -337,7 +337,7 @@ distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
-don (ERaw m f) = ERaw m f
+don = coerce
 
 -- | A convenience function that calls both 'distinctOn' and
 -- 'orderBy'.  In other words,
@@ -363,7 +363,7 @@ distinctOnOrderBy exprs act =
         act
   where
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
-    toDistinctOn (ERaw m f) = ERaw m f
+    toDistinctOn = coerce
 
 -- | @ORDER BY random()@ clause.
 --
@@ -536,9 +536,9 @@ subSelectUnsafe = sub SELECT
     => SqlExpr (Entity val)
     -> EntityField val typ
     -> SqlExpr (Value typ)
-e ^. field
+ERaw m f ^. field
     | isIdField field = idFieldValue
-    | ERaw m f <- e, Just alias <- sqlExprMetaAlias m =
+    | Just alias <- sqlExprMetaAlias m =
         ERaw noMeta $ \_ info -> 
             f Never info <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef), [])
     | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
@@ -565,17 +565,12 @@ e ^. field
     dot info fieldDef =
         sourceIdent info <> "." <> fieldIdent
       where
-        sourceIdent =
-            case e of
-                ERaw _ f -> fmap fst $ f Never
-        fieldIdent =
-            case e of
-                ERaw m f -> 
-                    case sqlExprMetaAlias m of
-                      Just baseI -> 
-                          useIdent info $ aliasedEntityColumnIdent baseI fieldDef
-                      Nothing ->
-                         fromDBName info (fieldDB fieldDef)
+        sourceIdent = fmap fst $ f Never
+        fieldIdent 
+            | Just baseI <- sqlExprMetaAlias m = 
+                useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+            | otherwise = 
+                fromDBName info (fieldDB fieldDef)
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
@@ -981,20 +976,15 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 
 -- | Apply a 'PersistField' constructor to @SqlExpr Value@ arguments.
 (<#) :: (a -> b) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(<#) _ (ERaw _ f)        = EInsert Proxy (f Never)
+(<#) _ (ERaw _ f)        = ERaw noMeta f 
 
 -- | Apply extra @SqlExpr Value@ arguments to a 'PersistField' constructor
 (<&>) :: SqlExpr (Insertion (a -> b)) -> SqlExpr (Value a) -> SqlExpr (Insertion b)
-(EInsert _ f) <&> v =
-    EInsert Proxy $ \x ->
-        let (fb, fv) = f x
-            (gb, gv) = g x
-        in
-            (fb <> ", " <> gb, fv ++ gv)
-  where
-    g =
-        case v of
-            ERaw _ f' -> f' Never
+(ERaw _ f) <&> (ERaw _ g) =
+    ERaw noMeta $ \_ info ->
+        let (fb, fv) = f Never info 
+            (gb, gv) = g Never info 
+        in (fb <> ", " <> gb, fv ++ gv)
 
 -- | @CASE@ statement.  For example:
 --
@@ -2043,8 +2033,8 @@ data SqlExprMeta = SqlExprMeta
       -- impossible, e.g., for 'val' to disambiguate between these
       -- uses.
       sqlExprMetaCompositeFields :: Maybe (IdentInfo -> [TLB.Builder])
-    , sqlExprMetaAlias :: Maybe Ident
-    , sqlExprMetaIsReference :: Bool
+    , sqlExprMetaAlias :: Maybe Ident -- Alias ident if this is an aliased value/entity
+    , sqlExprMetaIsReference :: Bool -- Is this SqlExpr a reference to the selected value/entity (supports subqueries)
     } 
 
 noMeta :: SqlExprMeta
@@ -2061,18 +2051,14 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 --
 -- There are many comments describing the constructors of this
 -- data type.  However, Haddock doesn't like GADTs, so you'll have to read them by hitting \"Source\".
-data SqlExpr a where
     -- Raw expression: states whether parenthesis are needed
     -- around this expression, and takes information about the SQL
     -- connection (mainly for escaping names) and returns both an
     -- string ('TLB.Builder') and a list of values to be
     -- interpolated by the SQL backend.
-    ERaw     :: SqlExprMeta -> (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr a 
+data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
-    -- Used by 'insertSelect'.
-    EInsert  :: Proxy a -> (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Insertion a)
-    EInsertFinal :: PersistEntity a => SqlExpr (Insertion a) -> SqlExpr InsertFinal
-
+-- | Data type to support from hack 
 data PreprocessedFrom a = PreprocessedFrom a FromClause
 
 -- | Phantom type used to mark a @INSERT INTO@ query.
@@ -2102,9 +2088,8 @@ setAux
     -> (SqlExpr (Entity val) -> SqlExpr (Value typ))
     -> (SqlExpr (Entity val) -> SqlExpr Update)
 setAux field value = \ent -> ERaw noMeta $ \_ info ->
-    let (valueToSet, valueVals) = 
-            case value ent of 
-              ERaw _ valueF -> valueF Parens info
+    let ERaw _ valueF = value ent
+        (valueToSet, valueVals) = valueF Parens info
     in (fieldName info field <> " = " <> valueToSet, valueVals)
 
 sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
@@ -2214,12 +2199,11 @@ unsafeSqlBinOpComposite op sep a b
   where
     isCompositeKey :: SqlExpr (Value x) -> Bool
     isCompositeKey (ERaw m _) = hasCompositeKeyMeta m
-    isCompositeKey _ = False
 
     listify :: SqlExpr (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
-    listify v 
-        | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = flip (,) [] . f
-        | ERaw _ f <- v = deconstruct . f Parens
+    listify (ERaw m f)
+        | Just f <- sqlExprMetaCompositeFields m = flip (,) [] . f
+        | otherwise = deconstruct . f Parens
 
     deconstruct :: (TLB.Builder, [PersistValue]) -> ([TLB.Builder], [PersistValue])
     deconstruct ("?", [PersistList vals]) = (replicate (length vals) "?", vals)
@@ -2248,9 +2232,7 @@ unsafeSqlEntity ident = ERaw noMeta $ \_ info ->
     (useIdent info ident, [])
 
 valueToFunctionArg :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
-valueToFunctionArg info v =
-    case v of
-        ERaw _ f               -> f Never info
+valueToFunctionArg info (ERaw _ f) = f Never info
 
 -- | (Internal) A raw SQL function.  Once again, the same warning
 -- from 'unsafeSqlBinOp' applies to this function as well.
@@ -2285,9 +2267,7 @@ unsafeSqlFunctionParens
     => TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunctionParens name arg =
     ERaw noMeta $ \p info ->
-        let valueToFunctionArgParens v =
-                case v of
-                    ERaw _ f               -> f p info
+        let valueToFunctionArgParens (ERaw _ f) = f Never info
             (argsTLB, argsVals) =
                 uncommas' $ map valueToFunctionArgParens $ toArgList arg
         in
@@ -2296,11 +2276,7 @@ unsafeSqlFunctionParens name arg =
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
 unsafeSqlCastAs :: T.Text -> SqlExpr (Value a) -> SqlExpr (Value b)
-unsafeSqlCastAs t v = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . valueToText)
-  where
-    valueToText info =
-        case v of
-            ERaw _ f -> f Never info
+unsafeSqlCastAs t (ERaw _ f) = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . f Never)
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
 -- numbers of arguments; specifically it allows providing arguments to a sql
@@ -2431,13 +2407,13 @@ instance ( UnsafeSqlFunctionArgument a
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue (ERaw m f)             = ERaw m f
+veryUnsafeCoerceSqlExprValue = coerce
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList (ERaw m f) = ERaw m f
+veryUnsafeCoerceSqlExprValueList = coerce 
 
 
 ----------------------------------------------------------------------
@@ -2807,7 +2783,7 @@ makeSelect info mode_ distinctClause ret = process mode_
                 first (("SELECT DISTINCT ON (" <>) . (<> ") "))
                 $ uncommas' (processExpr <$> exprs)
       where
-        processExpr (ERaw m f) = materializeExpr info (ERaw m f :: SqlExpr (Value a))
+        processExpr e = materializeExpr info (coerce e :: SqlExpr (Value a))
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
@@ -2971,18 +2947,20 @@ class SqlSelect a r | a -> r, r -> a where
 
 
 -- | @INSERT INTO@ hack.
-instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
-    sqlInsertInto info (EInsertFinal (EInsert p _)) =
+instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) where
+    sqlInsertInto info e =
         let fields =
                 uncommas $
                 map (fromDBName info . fieldDB) $
                 entityFields $
-                entityDef p
+                entityDef (proxy e)
+            proxy :: SqlExpr (Insertion a) -> Proxy a
+            proxy = const Proxy
             table  =
-                fromDBName info . entityDB . entityDef $ p
+                fromDBName info . entityDB . entityDef . proxy
         in
-            ("INSERT INTO " <> table <> parens fields <> "\n", [])
-    sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
+            ("INSERT INTO " <> table e <> parens fields <> "\n", [])
+    sqlSelectCols info (ERaw _ f) = f Never info
     sqlSelectColCount   = const 0
     sqlSelectProcessRow =
       const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
@@ -3040,7 +3018,7 @@ getEntityVal = const Proxy
 
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
-    sqlSelectCols info (ERaw m f) = sqlSelectCols info (ERaw m f :: SqlExpr (Entity a)) 
+    sqlSelectCols info e = sqlSelectCols info (coerce e :: SqlExpr (Entity a)) 
     sqlSelectColCount = sqlSelectColCount . fromEMaybe
       where
         fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
@@ -3064,7 +3042,7 @@ materializeExpr info v
     | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = 
         let bs = f info
         in (uncommas $ map (parensM Parens) bs, [])
-    | ERaw m f <- v = f Never info
+    | ERaw _ f <- v = f Never info
 
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
@@ -3580,7 +3558,7 @@ insertSelectCount
     :: (MonadIO m, PersistEntity a)
     => SqlQuery (SqlExpr (Insertion a))
     -> SqlWriteT m Int64
-insertSelectCount = rawEsqueleto INSERT_INTO . fmap EInsertFinal
+insertSelectCount = rawEsqueleto INSERT_INTO 
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
