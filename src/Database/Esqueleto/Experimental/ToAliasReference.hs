@@ -5,7 +5,7 @@
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import Database.Esqueleto.Experimental.ToAlias
+import Data.Coerce
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
@@ -18,7 +18,7 @@ class ToAliasReference a where
 
 instance ToAliasReference (SqlExpr (Value a)) where
     toAliasReference aliasSource (ERaw m _)
-      | Just alias <- sqlExprMetaAlias m = pure $ ERaw m $ \_ info ->
+      | Just alias <- sqlExprMetaAlias m = pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
           (useIdent info aliasSource <> "." <> useIdent info alias, [])
     toAliasReference _ e = pure e
 
@@ -30,12 +30,8 @@ instance ToAliasReference (SqlExpr (Entity a)) where
     toAliasReference _ e = pure e
 
 instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
-    -- FIXME: Code duplication because the compiler doesnt like half final encoding
-    toAliasReference aliasSource (ERaw m _)
-      | Just _ <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m =
-          pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
-            (useIdent info aliasSource, [])
-    toAliasReference s e = pure e
+    toAliasReference aliasSource e =
+        coerce <$> toAliasReference aliasSource (coerce e :: SqlExpr (Entity a))
 
 
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
