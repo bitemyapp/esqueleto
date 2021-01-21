@@ -3044,11 +3044,11 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
 
 -- | Materialize a @SqlExpr (Value a)@.
 materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
-materializeExpr info v
-    | ERaw m _ <- v, Just f <- sqlExprMetaCompositeFields m = 
-        let bs = f info
-        in (uncommas $ map (parensM Parens) bs, [])
-    | ERaw _ f <- v = f Parens info
+materializeExpr info (ERaw m f)
+    | Just fields <- sqlExprMetaCompositeFields m = (uncommas $ fmap parens $ fields info, [])
+    | Just alias <- sqlExprMetaAlias m
+    , not (sqlExprMetaIsReference m) = first (<> " AS " <> useIdent info alias) (f Parens info)
+    | otherwise = f Parens info
 
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples

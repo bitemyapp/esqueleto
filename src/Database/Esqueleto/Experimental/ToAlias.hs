@@ -16,15 +16,11 @@ class ToAlias a where
     toAlias :: a -> SqlQuery a
 
 instance ToAlias (SqlExpr (Value a)) where
-    toAlias (ERaw m f) =
-        case sqlExprMetaAlias m of
-            Just _ -> pure $ ERaw m f
-            Nothing -> do
-                ident <- newIdentFor (DBName "v")
-                pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} $ \_ info ->
-                    let (b, v) = f Never info
-                    in (b <> " AS " <> useIdent info ident, v)
-
+    toAlias e@(ERaw m f)
+      | Just _ <- sqlExprMetaAlias m, not (sqlExprMetaIsReference m) = pure e
+      | otherwise = do
+            ident <- newIdentFor (DBName "v")
+            pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} f
 
 instance ToAlias (SqlExpr (Entity a)) where
     toAlias (ERaw m f) = do
