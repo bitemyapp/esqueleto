@@ -1138,6 +1138,9 @@ data SomeValue where
 class ToSomeValues a where
     toSomeValues :: a -> [SomeValue]
 
+instance PersistEntity ent => ToSomeValues (SqlExpr (Entity ent)) where
+    toSomeValues ent = [SomeValue $ ent ^. persistIdField]
+
 instance
     ( ToSomeValues a
     , ToSomeValues b
