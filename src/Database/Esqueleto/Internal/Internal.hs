@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -14,6 +15,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -23,6 +25,7 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Kind (Constraint)
 import Control.Applicative ((<|>))
 import Data.Coerce (coerce)
 import Control.Arrow (first, (***))
@@ -532,15 +535,31 @@ subSelectForeign expr foreignKey k =
 subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
 subSelectUnsafe = sub SELECT
 
--- | Project a field of an entity.
-(^.)
-    :: forall typ val. (PersistEntity val, PersistField typ)
-    => SqlExpr (Entity val)
-    -> EntityField val typ
-    -> SqlExpr (Value typ)
-ERaw m f ^. field
+type family EntityTy entity ent
+type family ValueTy value val
+type family EntityTyToValueTy entity val
+type family ValueTyToEntityTy value ent
+
+type instance EntityTy (Entity ent) ent = Entity ent
+type instance ValueTy (Value val) val = Value val
+type instance EntityTyToValueTy (Entity ent) val = Value val
+type instance ValueTyToEntityTy (Value val) ent = Entity ent
+
+type EntityValuePair entity ent value val = 
+                    ( EntityTyToValueTy entity val ~ value 
+                    , ValueTyToEntityTy value ent ~ entity 
+                    , EntityTy entity ent ~ Entity ent
+                    , ValueTy value val ~ Value val
+                    ) 
+
+(^.) :: forall ent typ entity value. 
+        (PersistEntity ent, PersistField typ, EntityValuePair entity ent value typ) 
+     => SqlExpr entity 
+     -> EntityField ent typ 
+     -> SqlExpr value 
+(ERaw m f) ^. field
     | isIdField field = idFieldValue
-    | Just alias <- sqlExprMetaAlias m =
+    | Just alias <- sqlExprMetaAlias m = 
         ERaw noMeta $ \_ info -> 
             f Never info <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef), [])
     | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
@@ -562,7 +581,7 @@ ERaw m f ^. field
                     \p info -> (parensM p $ uncommas $ dot info <$> idFields, [])
 
 
-    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
+    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity ent)))
 
     dot info fieldDef =
         sourceIdent info <> "." <> fieldIdent
@@ -584,13 +603,39 @@ withNonNull field f = do
     where_ $ not_ $ isNothing field
     f $ veryUnsafeCoerceSqlExprValue field
 
+type family MaybeEntityTy mEntity ent
+type family MaybeValueTy mValue val
+type family MaybeEntityTyToMaybeValueTy mEntity val
+type family MaybeValueTyToMaybeEntityTy mValue ent
+type family UnMaybeTy mValue
+type MaybeEntityValuePair mEntity ent mValue val = 
+                    ( MaybeEntityTyToMaybeValueTy mEntity val ~ mValue 
+                    , MaybeValueTyToMaybeEntityTy mValue ent ~ mEntity 
+                    , MaybeEntityTy mEntity ent ~ Maybe (Entity ent)
+                    , MaybeValueTy mValue val ~ Value (Maybe val)
+                    ) 
+
+type instance MaybeEntityTy (Maybe (Entity ent)) ent = Maybe (Entity ent)
+type instance MaybeValueTy (Value (Maybe val)) val = Value (Maybe val)
+type instance MaybeEntityTyToMaybeValueTy (Maybe (Entity ent)) val = Value (Maybe val)
+type instance MaybeValueTyToMaybeEntityTy (Value (Maybe val)) ent = Maybe (Entity ent)
+type instance UnMaybeTy (Value (Maybe val)) = Value val
+type instance UnMaybeTy (Maybe (Entity ent)) = Entity ent
+
 -- | Project a field of an entity that may be null.
 (?.)
-    :: (PersistEntity val, PersistField typ)
-    => SqlExpr (Maybe (Entity val))
-    -> EntityField val typ
-    -> SqlExpr (Value (Maybe typ))
-ERaw m f ?. field = just (ERaw m f ^. field)
+    :: forall ent typ entity mEntity value mValue.
+       ( PersistEntity ent
+       , PersistField typ
+       , UnMaybeTy mEntity ~ entity
+       , UnMaybeTy mValue ~ value
+       , MaybeEntityValuePair mEntity ent mValue typ
+       , EntityValuePair entity ent value typ
+       )
+    => SqlExpr mEntity
+    -> EntityField ent typ
+    -> SqlExpr mValue
+e ?. field = coerce $ (coerce e :: SqlExpr entity) ^. field
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -1138,8 +1183,10 @@ data SomeValue where
 class ToSomeValues a where
     toSomeValues :: a -> [SomeValue]
 
-instance PersistEntity ent => ToSomeValues (SqlExpr (Entity ent)) where
-    toSomeValues ent = [SomeValue $ ent ^. persistIdField]
+instance (PersistEntity ent) => ToSomeValues (SqlExpr (Entity ent)) where
+    toSomeValues ent = [SomeValue $ ent ^. persistIdField] 
+instance (PersistEntity ent) => ToSomeValues (SqlExpr (Maybe (Entity ent))) where
+    toSomeValues ent = [SomeValue $ ent ?. persistIdField] 
 
 instance
     ( ToSomeValues a
