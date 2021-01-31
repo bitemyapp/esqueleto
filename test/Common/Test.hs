@@ -454,10 +454,10 @@ testSubSelect run = do
             eres <- try $ run $ do
                 setup
                 bad <- select $
-                    from $ \n -> do
+                    from $ \(n :: SqlExpr (Entity Numbers)) -> do
                     pure $ (,) (n ^. NumbersInt) $
                         subSelectUnsafe $
-                        from $ \n' -> do
+                        from $ \(n' :: SqlExpr (Entity Numbers)) -> do
                         pure (just (n' ^. NumbersDouble))
                 good <- select $
                     from $ \n -> do
@@ -480,10 +480,10 @@ testSubSelect run = do
             eres <- try $ run $ do
                 setup
                 select $
-                    from $ \n -> do
+                    from $ \(n :: SqlExpr (Entity Numbers)) -> do
                     pure $ (,) (n ^. NumbersInt) $
                         subSelectUnsafe $
-                        from $ \n' -> do
+                        from $ \(n' :: SqlExpr (Entity Numbers)) -> do
                         where_ $ val False
                         pure (n' ^. NumbersDouble)
             case eres of

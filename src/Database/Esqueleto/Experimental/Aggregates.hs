@@ -55,6 +55,12 @@ type instance MaybeValueTyToMaybeEntityTy (Aggregate (Value (Maybe val))) ent = 
 type instance UnMaybeTy (Aggregate (Value (Maybe val))) = Aggregate (Value val)
 type instance UnMaybeTy (Aggregate (Maybe (Entity ent))) = Aggregate (Entity ent)
 
+test :: (PersistEntity ent, PersistField a, Integral n)
+     => SqlExpr (Maybe (Entity ent))
+     -> EntityField ent a
+     -> SqlExpr (Value b)
+     -> SqlExpr (Value c)
+     -> SqlQuery (SqlExpr (Value (Maybe a)), SqlExpr (Value b), SqlExpr (Value n), SqlExpr (Value Int))
 test ent field y other = do
     groupBy (ent, y) $ \(ent', y') ->
         pure (ent' ?. field, y', sum_ other, countRows_)
