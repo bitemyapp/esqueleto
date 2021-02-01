@@ -2312,7 +2312,10 @@ instance UnsafeSqlFunctionArgument () where
     toArgList _ = []
 
 instance UnsafeSqlFunctionArgument (SqlExpr a) where
-    toArgList = (:[]) . veryUnsafeCoerceSqlExpr
+    toArgList = (:[]) . coerce 
+
+instance UnsafeSqlFunctionArgument (Maybe (SqlExpr a)) where
+    toArgList = maybe [] ((:[]) . coerce)
 
 instance UnsafeSqlFunctionArgument a => UnsafeSqlFunctionArgument [a] where
   toArgList = concatMap toArgList
