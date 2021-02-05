@@ -1,5 +1,5 @@
 3.4.1.0
-=======
+=======- 
 - @belevy
   - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
         - Destroy all GADTs; Removes the From GADT and SqlExpr GADT 
@@ -9,6 +9,10 @@
           that may be needed
         - Experimental top level is now strictly for documentation and all the 
           implementation details are in Experimental.* modules
+- @Vlix
+  - [#232](https://github.com/bitemyapp/esqueleto/pull/232)
+    - Export the `ValidOnClauseValue` type family
+
 
 3.4.0.1
 =======
