@@ -1,8 +1,11 @@
-3.4.0.2
+3.4.1.0
 =======
 - @arthurxavierx
   - [#238](https://github.com/bitemyapp/esqueleto/pull/238)
     - Fix non-exhaustive patterns in `unsafeSqlAggregateFunction`
+- @Vlix
+  - [#232](https://github.com/bitemyapp/esqueleto/pull/232)
+    - Export the `ValidOnClauseValue` type family
 
 3.4.0.1
 =======
