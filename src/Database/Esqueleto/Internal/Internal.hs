@@ -2160,7 +2160,7 @@ unsafeSqlCase when v = ERaw Never buildCase
   where
     buildCase :: IdentInfo -> (TLB.Builder, [PersistValue])
     buildCase info =
-        let (elseText, elseVals) = valueToSql v info
+        let (elseText, elseVals) = valueToRawSqlParens v info
             (whenText, whenVals) = mapWhen when info
         in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
@@ -2172,15 +2172,20 @@ unsafeSqlCase when v = ERaw Never buildCase
     foldHelp _ _ (ECompositeKey _, _) = throw (CompositeKeyErr FoldHelpError)
     foldHelp _ _ (_, ECompositeKey _) = throw (CompositeKeyErr FoldHelpError)
     foldHelp info (b0, vals0) (v1, v2) =
-        let (b1, vals1) = valueToSql v1 info
-            (b2, vals2) = valueToSql v2 info
+        let (b1, vals1) = valueToRawSqlParens v1 info
+            (b2, vals2) = valueToRawSqlParens v2 info
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
-    valueToSql :: SqlExpr (Value a) -> IdentInfo -> (TLB.Builder, [PersistValue])
-    valueToSql (ERaw p f) = (first (parensM p)) . f
-    valueToSql (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
-    valueToSql (EAliasedValue i _) = aliasedValueIdentToRawSql i
-    valueToSql (EValueReference i i') = valueReferenceToRawSql i i'
+-- | (Internal) Convert a value to a raw SQL builder, preserving parens around
+-- 'ERaw' SQL expressions. This is useful for turning values into function or
+-- operator arguments.
+--
+-- Since: 3.4.0.2
+valueToRawSqlParens :: SqlExpr (Value a) -> IdentInfo -> (TLB.Builder, [PersistValue])
+valueToRawSqlParens (ERaw p f) = (first (parensM p)) . f
+valueToRawSqlParens (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
+valueToRawSqlParens (EAliasedValue i _) = aliasedValueIdentToRawSql i
+valueToRawSqlParens (EValueReference i i') = valueReferenceToRawSql i i'
 
 -- | (Internal) Create a custom binary operator.  You /should/
 -- /not/ use this function directly since its type is very
@@ -2323,14 +2328,8 @@ unsafeSqlFunctionParens
     => TLB.Builder -> a -> SqlExpr (Value b)
 unsafeSqlFunctionParens name arg =
     ERaw Never $ \info ->
-        let valueToFunctionArgParens v =
-                case v of
-                    ERaw p f             -> first (parensM p) (f info)
-                    EAliasedValue i _    -> aliasedValueIdentToRawSql i info
-                    EValueReference i i' -> valueReferenceToRawSql i i' info
-                    ECompositeKey _      -> throw (CompositeKeyErr SqlFunctionError)
-            (argsTLB, argsVals) =
-                uncommas' $ map valueToFunctionArgParens $ toArgList arg
+        let (argsTLB, argsVals) =
+                uncommas' $ map (\v -> valueToRawSqlParens v info) $ toArgList arg
         in
             (name <> parens argsTLB, argsVals)
 
