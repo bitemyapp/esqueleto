@@ -38,9 +38,6 @@ library
         Database.Esqueleto.PostgreSQL
         Database.Esqueleto.PostgreSQL.JSON
         Database.Esqueleto.SQLite
-    other-modules:
-        Database.Esqueleto.Internal.PersistentImport
-        Database.Esqueleto.PostgreSQL.JSON.Instances
         Database.Esqueleto.Experimental.From
         Database.Esqueleto.Experimental.From.CommonTableExpression
         Database.Esqueleto.Experimental.From.Join
@@ -48,6 +45,9 @@ library
         Database.Esqueleto.Experimental.ToAlias
         Database.Esqueleto.Experimental.ToAliasReference
         Database.Esqueleto.Experimental.ToMaybe
+    other-modules:
+        Database.Esqueleto.PostgreSQL.JSON.Instances
+        Database.Esqueleto.Internal.PersistentImport
         Paths_esqueleto
     hs-source-dirs:
         src/
