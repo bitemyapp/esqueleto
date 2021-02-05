@@ -16,20 +16,22 @@ class ToAlias a where
     toAlias :: a -> SqlQuery a
 
 instance ToAlias (SqlExpr (Value a)) where
-    toAlias v@(EAliasedValue _ _) = pure v
-    toAlias v = do
-        ident <- newIdentFor (DBName "v")
-        pure $ EAliasedValue ident v
+    toAlias e@(ERaw m f)
+      | Just _ <- sqlExprMetaAlias m, not (sqlExprMetaIsReference m) = pure e
+      | otherwise = do
+            ident <- newIdentFor (DBName "v")
+            pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} f
 
 instance ToAlias (SqlExpr (Entity a)) where
-    toAlias v@(EAliasedEntityReference _ _) = pure v
-    toAlias v@(EAliasedEntity _ _) = pure v
-    toAlias (EEntity tableIdent) = do
+    toAlias (ERaw m f) = do
        ident <- newIdentFor (DBName "v")
-       pure $ EAliasedEntity ident tableIdent
+       pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
 
 instance ToAlias (SqlExpr (Maybe (Entity a))) where
-    toAlias (EMaybe e) = EMaybe <$> toAlias e
+    -- FIXME: Code duplication because the compiler doesnt like half final encoding
+    toAlias (ERaw m f) = do
+       ident <- newIdentFor (DBName "v")
+       pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
 
 instance (ToAlias a, ToAlias b) => ToAlias (a,b) where
     toAlias (a,b) = (,) <$> toAlias a <*> toAlias b

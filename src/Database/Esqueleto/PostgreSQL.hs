@@ -83,18 +83,18 @@ unsafeSqlAggregateFunction
     -> a
     -> [OrderByClause]
     -> SqlExpr (Value b)
-unsafeSqlAggregateFunction name mode args orderByClauses = ERaw Never $ \info ->
+unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
         orderTLBSpace =
             case orderByClauses of
-                [] -> ""
+                []    -> ""
                 (_:_) -> " "
         (argsTLB, argsVals) =
-            uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList args
+            uncommas' $ map (\(ERaw _ f) -> f Never info) $ toArgList args
         aggMode =
             case mode of
-                AggModeAll -> ""
+                AggModeAll      -> ""
                 -- ALL is the default, so we don't need to
                 -- specify it
                 AggModeDistinct -> "DISTINCT "
@@ -182,7 +182,7 @@ upsert
     )
     => record
     -- ^ new record to insert
-    -> [SqlExpr (Update record)]
+    -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -200,7 +200,7 @@ upsertBy
     -- ^ uniqueness constraint to find by
     -> record
     -- ^ new record to insert
-    -> [SqlExpr (Update record)]
+    -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -276,7 +276,7 @@ insertSelectWithConflict
     -- a unique "MyUnique 0", "MyUnique undefined" would work as well.
     -> SqlQuery (SqlExpr (Insertion val))
     -- ^ Insert query.
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
     -- ^ A list of updates to be applied in case of the constraint being
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
@@ -292,22 +292,22 @@ insertSelectWithConflictCount
      . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
     => a
     -> SqlQuery (SqlExpr (Insertion val))
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Update val)])
+    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
     -> SqlWriteT m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask
     uncurry rawExecuteCount $
         combine
-            (toRawSql INSERT_INTO (conn, initialIdentState) (fmap EInsertFinal query))
+            (toRawSql INSERT_INTO (conn, initialIdentState) query)
             (conflict conn)
   where
     proxy :: Proxy val
     proxy = Proxy
     updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
-    entExcluded = EEntity $ I "excluded"
+    entExcluded = unsafeSqlEntity (I "excluded")
     tableName = unDBName . entityDB . entityDef
-    entCurrent = EEntity $ I (tableName proxy)
+    entCurrent = unsafeSqlEntity (I (tableName proxy))
     uniqueDef = toUniqueDef unique
     constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
@@ -355,13 +355,11 @@ filterWhere
     -> SqlExpr (Value Bool)
     -- ^ Filter clause
     -> SqlExpr (Value a)
-filterWhere aggExpr clauseExpr = ERaw Never $ \info ->
+filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     let (aggBuilder, aggValues) = case aggExpr of
-            ERaw _ aggF     -> aggF info
-            ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereAggError
+            ERaw _ aggF     -> aggF Never info
         (clauseBuilder, clauseValues) = case clauseExpr of
-            ERaw _ clauseF  -> clauseF info
-            ECompositeKey _ -> throw $ CompositeKeyErr FilterWhereClauseError
+            ERaw _ clauseF  -> clauseF Never info
     in ( aggBuilder <> " FILTER (WHERE " <> clauseBuilder <> ")"
        , aggValues <> clauseValues
        )

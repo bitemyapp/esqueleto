@@ -37,8 +37,8 @@ module Database.Esqueleto.Internal.Sql
       -- * The guts
     , unsafeSqlCase
     , unsafeSqlBinOp
-    , unsafeSqlBinOpComposite
     , unsafeSqlValue
+    , unsafeSqlEntity
     , unsafeSqlCastAs
     , unsafeSqlFunction
     , unsafeSqlExtractSubField

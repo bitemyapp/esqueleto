@@ -21,7 +21,7 @@ instance ToMaybe (SqlExpr (Maybe a)) where
 
 instance ToMaybe (SqlExpr (Entity a)) where
     type ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
-    toMaybe = EMaybe
+    toMaybe (ERaw f m) = (ERaw f m)
 
 instance ToMaybe (SqlExpr (Value a)) where
     type ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))

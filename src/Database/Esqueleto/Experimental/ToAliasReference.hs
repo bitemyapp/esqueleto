@@ -1,10 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import Database.Esqueleto.Experimental.ToAlias
+import Data.Coerce
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
@@ -16,18 +17,21 @@ class ToAliasReference a where
     toAliasReference :: Ident -> a -> SqlQuery a
 
 instance ToAliasReference (SqlExpr (Value a)) where
-    toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
-    toAliasReference _           v@(ERaw _ _)                 = toAlias v
-    toAliasReference _           v@(ECompositeKey _)          = toAlias v
-    toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
+    toAliasReference aliasSource (ERaw m _)
+      | Just alias <- sqlExprMetaAlias m = pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
+          (useIdent info aliasSource <> "." <> useIdent info alias, [])
+    toAliasReference _ e = pure e
 
 instance ToAliasReference (SqlExpr (Entity a)) where
-    toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
-    toAliasReference _ e@(EEntity _) = toAlias e
-    toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
+    toAliasReference aliasSource (ERaw m _)
+      | Just _ <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m =
+          pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
+            (useIdent info aliasSource, [])
+    toAliasReference _ e = pure e
 
 instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
-    toAliasReference s (EMaybe e) = EMaybe <$> toAliasReference s e
+    toAliasReference aliasSource e =
+        coerce <$> toAliasReference aliasSource (coerce e :: SqlExpr (Entity a))
 
 
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
