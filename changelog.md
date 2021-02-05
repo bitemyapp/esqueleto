@@ -1,3 +1,9 @@
+3.4.0.2
+=======
+- @arthurxavierx
+  - [#238](https://github.com/bitemyapp/esqueleto/pull/238)
+    - Fix non-exhaustive patterns in `unsafeSqlAggregateFunction`
+
 3.4.0.1
 =======
 - @arthurxavierx
