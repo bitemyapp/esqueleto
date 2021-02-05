@@ -2,7 +2,13 @@
 =======
 - @belevy
   - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
-        - Remove From GADT in favor of From typeclass.
+        - Destroy all GADTs; Removes the From GADT and SqlExpr GADT 
+        - From GADT is replaced with a From typeclass
+        - SqlExpr is now all defined in terms of ERaw
+        - Modified ERaw to contain a SqlExprMeta with any extra information 
+          that may be needed
+        - Experimental top level is now strictly for documentation and all the 
+          implementation details are in Experimental.* modules
 
 3.4.0.1
 =======
