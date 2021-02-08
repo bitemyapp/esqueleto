@@ -2160,7 +2160,7 @@ unsafeSqlCase when v = ERaw Never buildCase
   where
     buildCase :: IdentInfo -> (TLB.Builder, [PersistValue])
     buildCase info =
-        let (elseText, elseVals) = valueToRawSqlParens v info
+        let (elseText, elseVals) = valueToRawSqlParens SqlCaseError v info
             (whenText, whenVals) = mapWhen when info
         in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
@@ -2172,8 +2172,8 @@ unsafeSqlCase when v = ERaw Never buildCase
     foldHelp _ _ (ECompositeKey _, _) = throw (CompositeKeyErr FoldHelpError)
     foldHelp _ _ (_, ECompositeKey _) = throw (CompositeKeyErr FoldHelpError)
     foldHelp info (b0, vals0) (v1, v2) =
-        let (b1, vals1) = valueToRawSqlParens v1 info
-            (b2, vals2) = valueToRawSqlParens v2 info
+        let (b1, vals1) = valueToRawSqlParens SqlCaseError v1 info
+            (b2, vals2) = valueToRawSqlParens SqlCaseError v2 info
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
 -- | (Internal) Convert a value to a raw SQL builder, preserving parens around
@@ -2181,11 +2181,11 @@ unsafeSqlCase when v = ERaw Never buildCase
 -- operator arguments.
 --
 -- Since: 3.4.0.2
-valueToRawSqlParens :: SqlExpr (Value a) -> IdentInfo -> (TLB.Builder, [PersistValue])
-valueToRawSqlParens (ERaw p f) = (first (parensM p)) . f
-valueToRawSqlParens (ECompositeKey _) = throw (CompositeKeyErr SqlCaseError)
-valueToRawSqlParens (EAliasedValue i _) = aliasedValueIdentToRawSql i
-valueToRawSqlParens (EValueReference i i') = valueReferenceToRawSql i i'
+valueToRawSqlParens :: UnexpectedValueError -> SqlExpr (Value a) -> IdentInfo -> (TLB.Builder, [PersistValue])
+valueToRawSqlParens _ (ERaw p f) = (first (parensM p)) . f
+valueToRawSqlParens e (ECompositeKey _) = throw (CompositeKeyErr e)
+valueToRawSqlParens _ (EAliasedValue i _) = aliasedValueIdentToRawSql i
+valueToRawSqlParens _ (EValueReference i i') = valueReferenceToRawSql i i'
 
 -- | (Internal) Create a custom binary operator.  You /should/
 -- /not/ use this function directly since its type is very
@@ -2329,7 +2329,7 @@ unsafeSqlFunctionParens
 unsafeSqlFunctionParens name arg =
     ERaw Never $ \info ->
         let (argsTLB, argsVals) =
-                uncommas' $ map (\v -> valueToRawSqlParens v info) $ toArgList arg
+                uncommas' $ map (\v -> valueToRawSqlParens SqlFunctionError v info) $ toArgList arg
         in
             (name <> parens argsTLB, argsVals)
 
