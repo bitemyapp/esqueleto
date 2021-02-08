@@ -1,23 +1,27 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module Database.Esqueleto.Experimental.From.SqlSetOperation
         where
 
-import Control.Monad.Trans.Class (lift)
-import qualified Control.Monad.Trans.State as S
-import qualified Control.Monad.Trans.Writer as W
-import Database.Esqueleto.Experimental.From
-import Database.Esqueleto.Experimental.ToAlias
-import Database.Esqueleto.Experimental.ToAliasReference
-import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
-import Database.Esqueleto.Internal.PersistentImport (DBName(..))
+import           Control.Monad.Trans.Class                        (lift)
+import qualified Control.Monad.Trans.State                        as S
+import qualified Control.Monad.Trans.Writer                       as W
+import qualified Data.Text.Lazy.Builder                           as TLB
+import           Database.Esqueleto.Experimental.From
+import           Database.Esqueleto.Experimental.ToAlias
+import           Database.Esqueleto.Experimental.ToAliasReference
+import           Database.Esqueleto.Internal.Internal             hiding
+                                                                  (From (..),
+                                                                   from, on)
+import           Database.Esqueleto.Internal.PersistentImport     (DBName (..),
+                                                                   PersistValue)
 
 data SqlSetOperation a
     = SqlSetUnion (SqlSetOperation a) (SqlSetOperation a)
@@ -27,12 +31,16 @@ data SqlSetOperation a
     | SelectQueryP NeedParens (SqlQuery a)
 
 runSetOperation :: (SqlSelect a r, ToAlias a, ToAliasReference a)
-                => SqlSetOperation a -> SqlQuery (a, FromClause)
+                => SqlSetOperation a -> SqlQuery (a, NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 runSetOperation operation = do
     (aliasedOperation, ret) <- aliasQueries operation
     ident <- newIdentFor (DBName "u")
     ref <- toAliasReference ident ret
-    pure (ref, FromQuery ident (operationToSql aliasedOperation) NormalSubQuery)
+    pure ( ref
+         , \_ info ->
+            let (queryText, queryVals) = operationToSql aliasedOperation info
+            in (parens queryText <> " AS " <> useIdent info ident, queryVals)
+         )
 
   where
     aliasQueries o =
@@ -200,4 +208,4 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => From (SqlSetOperation
     -- If someone uses just a plain SelectQuery it should behave like a normal subquery
     runFrom (SelectQueryP _ subquery) = fromSubQuery NormalSubQuery subquery
     -- Otherwise use the SqlSetOperation
-    runFrom u = runSetOperation $ toSetOperation u
+    runFrom u                         = runSetOperation $ toSetOperation u

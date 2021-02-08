@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -8,6 +9,7 @@
 module Database.Esqueleto.Experimental.From.Join
     where
 
+import Data.Bifunctor (first)
 import Data.Kind (Constraint)
 import Data.Proxy
 import Database.Esqueleto.Experimental.From
@@ -90,7 +92,25 @@ instance {-# OVERLAPPABLE #-} From (FullOuterJoin a b) where
     runFrom = undefined
 
 class FromInnerJoin lateral lhs rhs res where
-    runFromInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, FromClause)
+    runFromInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, RawFn)
+
+fromJoin_ :: RawFn -> JoinKind -> RawFn -> Maybe (SqlExpr (Value Bool)) -> RawFn
+fromJoin_ lhs kind rhs monClause =
+    \paren info ->
+        first (parensM paren) $
+        mconcat [ lhs Never info
+                , (fromKind kind, mempty)
+                , rhs Parens info
+                , maybe mempty (makeOnClause info) monClause
+                ]
+    where
+        fromKind InnerJoinKind      = " INNER JOIN "
+        fromKind CrossJoinKind      = " CROSS JOIN "
+        fromKind LeftOuterJoinKind  = " LEFT OUTER JOIN "
+        fromKind RightOuterJoinKind = " RIGHT OUTER JOIN "
+        fromKind FullOuterJoinKind  = " FULL OUTER JOIN "
+
+        makeOnClause info (ERaw _ f)        = first (" ON " <>) (f Never info)
 
 instance ( SqlSelect b r
          , ToAlias b
@@ -102,7 +122,7 @@ instance ( SqlSelect b r
                  (leftVal, leftFrom) <- runFrom leftPart
                  (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
                  let ret = leftVal :& rightVal
-                 pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
+                 pure $ (ret, fromJoin_ leftFrom InnerJoinKind rightFrom (Just (on' ret)))
 
 instance (From a, FromT a ~ a', From b, FromT b ~ b')
   => FromInnerJoin NotLateral a b (a' :& b') where
@@ -110,7 +130,7 @@ instance (From a, FromT a ~ a', From b, FromT b ~ b')
           (leftVal, leftFrom) <- runFrom leftPart
           (rightVal, rightFrom) <- runFrom rightPart
           let ret = leftVal :& rightVal
-          pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
+          pure $ (ret, fromJoin_ leftFrom InnerJoinKind rightFrom (Just (on' ret)))
 
 instance (FromInnerJoin (IsLateral b) a b b') => From (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
     type FromT (InnerJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
@@ -132,7 +152,7 @@ instance ( From a
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- runFrom rightPart
         let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
+        pure $ (ret, fromJoin_ leftFrom CrossJoinKind rightFrom Nothing)
 
 instance {-# OVERLAPPING #-}
          ( From a
@@ -146,10 +166,10 @@ instance {-# OVERLAPPING #-}
         (leftVal, leftFrom) <- runFrom leftPart
         (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
         let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
+        pure $ (ret, fromJoin_ leftFrom CrossJoinKind rightFrom Nothing)
 
 class FromLeftJoin lateral lhs rhs res where
-    runFromLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, FromClause)
+    runFromLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, RawFn)
 
 instance ( From a
          , FromT a ~ a'
@@ -163,7 +183,7 @@ instance ( From a
                 (leftVal, leftFrom) <- runFrom leftPart
                 (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
                 let ret = leftVal :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
+                pure $ (ret, fromJoin_ leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
 
 instance ( From a
          , FromT a ~ a'
@@ -176,7 +196,7 @@ instance ( From a
                 (leftVal, leftFrom) <- runFrom leftPart
                 (rightVal, rightFrom) <- runFrom rightPart
                 let ret = leftVal :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
+                pure $ (ret, fromJoin_ leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
 
 instance ( FromLeftJoin (IsLateral b) a b b'
          ) => From (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
@@ -202,7 +222,7 @@ instance ( From a
                 (leftVal, leftFrom) <- runFrom leftPart
                 (rightVal, rightFrom) <- runFrom rightPart
                 let ret = (toMaybe leftVal) :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
+                pure $ (ret, fromJoin_ leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
 
 instance ( From a
          , FromT a ~ a'
@@ -217,7 +237,7 @@ instance ( From a
                 (leftVal, leftFrom) <- runFrom leftPart
                 (rightVal, rightFrom) <- runFrom rightPart
                 let ret = (toMaybe leftVal) :& rightVal
-                pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
+                pure $ (ret, fromJoin_ leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)

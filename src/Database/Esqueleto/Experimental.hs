@@ -216,6 +216,7 @@ import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
+
 -- $setup
 --
 -- If you're already using "Database.Esqueleto", then you can get

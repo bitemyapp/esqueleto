@@ -1,24 +1,26 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Database.Esqueleto.Experimental.From.CommonTableExpression
     where
 
-import qualified Control.Monad.Trans.Writer as W
-import qualified Data.Text.Lazy.Builder as TLB
-import Database.Esqueleto.Experimental.From
-import Database.Esqueleto.Experimental.From.SqlSetOperation
-import Database.Esqueleto.Experimental.ToAlias
-import Database.Esqueleto.Experimental.ToAliasReference
-import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
-import Database.Esqueleto.Internal.PersistentImport (DBName(..))
+import qualified Control.Monad.Trans.Writer                           as W
+import qualified Data.Text.Lazy.Builder                               as TLB
+import           Database.Esqueleto.Experimental.From
+import           Database.Esqueleto.Experimental.From.SqlSetOperation
+import           Database.Esqueleto.Experimental.ToAlias
+import           Database.Esqueleto.Experimental.ToAliasReference
+import           Database.Esqueleto.Internal.Internal                 hiding
+                                                                      (From (..),
+                                                                       from, on)
+import           Database.Esqueleto.Internal.PersistentImport         (DBName (..))
 
 data CommonTableExpression ref = CommonTableExpression Ident ref
 instance From (CommonTableExpression ref) where
     type FromT (CommonTableExpression ref) = ref
     runFrom (CommonTableExpression ident ref) =
-        pure (ref, FromIdent ident)
+        pure (ref, (\_ info -> (useIdent info ident, mempty)))
 
 -- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
 -- CTEs are supported in most modern SQL engines and can be useful
