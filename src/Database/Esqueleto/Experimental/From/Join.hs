@@ -1,6 +1,11 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -8,15 +13,19 @@
 module Database.Esqueleto.Experimental.From.Join
     where
 
+import Data.Bifunctor (first)
 import Data.Kind (Constraint)
 import Data.Proxy
+import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Experimental.From
 import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
-import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
-import Database.Esqueleto.Internal.PersistentImport (Entity(..))
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), from, fromJoin, on)
+import Database.Esqueleto.Internal.PersistentImport
+       (Entity(..), EntityField, PersistEntity, PersistField)
 import GHC.TypeLits
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
@@ -33,6 +42,10 @@ import GHC.TypeLits
 data (:&) a b = a :& b
 infixl 2 :&
 
+instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
+    type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
+    toMaybe (a :& b) = (toMaybe a :& toMaybe b)
+
 -- | Constraint for `on`. Ensures that only types that require an `on` can be used on
 -- the left hand side. This was previously reusing the From class which was actually
 -- a bit too lenient as it allowed to much.
@@ -44,6 +57,7 @@ type family ValidOnClauseValue a :: Constraint where
   ValidOnClauseValue (SqlQuery a) = ()
   ValidOnClauseValue (SqlSetOperation a) = ()
   ValidOnClauseValue (a -> SqlQuery b) = ()
+  ValidOnClauseValue (From a) = ()
   ValidOnClauseValue _ = TypeError ('Text "Illegal use of ON")
 
 -- | An @ON@ clause that describes how two tables are related. This should be
@@ -60,165 +74,233 @@ on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlEx
 on = (,)
 infix 9 `on`
 
-data Lateral
-data NotLateral
-
-type family IsLateral a where
-    IsLateral (a -> SqlQuery b) = Lateral
-    IsLateral a = NotLateral
-
 type family ErrorOnLateral a :: Constraint where
   ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
   ErrorOnLateral _ = ()
 
--- Type class magic to allow the use of the `InnerJoin` family of data constructors in from
-type family FromOnClause a where
-    FromOnClause (a, b -> SqlExpr (Value Bool)) = b
-    FromOnClause a = TypeError ('Text "Missing ON clause")
+fromJoin :: TLB.Builder -> RawFn -> RawFn -> Maybe (SqlExpr (Value Bool)) -> RawFn
+fromJoin joinKind lhs rhs monClause =
+    \paren info ->
+        first (parensM paren) $
+        mconcat [ lhs Never info
+                , (joinKind, mempty)
+                , rhs Parens info
+                , maybe mempty (makeOnClause info) monClause
+                ]
+    where
+        makeOnClause info (ERaw _ f)        = first (" ON " <>) (f Never info)
 
-instance {-# OVERLAPPABLE #-} From (InnerJoin a b) where
-    type FromT (InnerJoin a b) = FromOnClause b
-    runFrom = undefined
-instance {-# OVERLAPPABLE #-} From (LeftOuterJoin a b) where
-    type FromT (LeftOuterJoin a b) = FromOnClause b
-    runFrom = undefined
-instance {-# OVERLAPPABLE #-} From (RightOuterJoin a b) where
-    type FromT (RightOuterJoin a b) = FromOnClause b
-    runFrom = undefined
-instance {-# OVERLAPPABLE #-} From (FullOuterJoin a b) where
-    type FromT (FullOuterJoin a b) = FromOnClause b
-    runFrom = undefined
+type family HasOnClause actual expected :: Constraint where
+    HasOnClause (a, b -> SqlExpr (Value Bool)) c = () -- Let the compiler handle the type mismatch
+    HasOnClause a expected =
+        TypeError ( 'Text "Missing ON clause for join with"
+                    ':$$: 'ShowType a
+                    ':$$: 'Text ""
+                    ':$$: 'Text "Expected: "
+                    ':$$: 'ShowType a
+                    ':$$: 'Text "`on` " ':<>: 'ShowType (expected -> SqlExpr (Value Bool))
+                    ':$$: 'Text ""
+                  )
 
-class FromInnerJoin lateral lhs rhs res where
-    runFromInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, FromClause)
 
-instance ( SqlSelect b r
-         , ToAlias b
-         , ToAliasReference b
-         , From a
-         , FromT a ~ a'
-         ) => FromInnerJoin Lateral a (a' -> SqlQuery b) (a' :& b) where
-             runFromInnerJoin _ leftPart q on' = do
-                 (leftVal, leftFrom) <- runFrom leftPart
-                 (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-                 let ret = leftVal :& rightVal
-                 pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
+innerJoin :: ( ToFrom a a'
+             , ToFrom b b'
+             , HasOnClause rhs (a' :& b')
+             , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+             ) => a -> rhs -> From (a' :& b')
+innerJoin lhs (rhs, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (toFrom rhs)
+     let ret = leftVal :& rightVal
+     pure $ (ret, fromJoin " INNER JOIN " leftFrom rightFrom (Just $ on' ret))
 
-instance (From a, FromT a ~ a', From b, FromT b ~ b')
-  => FromInnerJoin NotLateral a b (a' :& b') where
-      runFromInnerJoin _ leftPart rightPart on' = do
-          (leftVal, leftFrom) <- runFrom leftPart
-          (rightVal, rightFrom) <- runFrom rightPart
-          let ret = leftVal :& rightVal
-          pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
 
-instance (FromInnerJoin (IsLateral b) a b b') => From (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
-    type FromT (InnerJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
-    runFrom (InnerJoin lhs (rhs, on')) = runFromInnerJoin (toProxy rhs) lhs rhs on'
-        where
-            toProxy :: b -> Proxy (IsLateral b)
-            toProxy _ = Proxy
+innerJoinLateral :: ( ToFrom a a'
+                    , HasOnClause rhs (a' :& b)
+                    , SqlSelect b r
+                    , ToAlias b
+                    , ToAliasReference b
+                    , rhs ~ (a' -> SqlQuery b, (a' :& b) -> SqlExpr (Value Bool))
+                    )
+                 => a -> rhs -> From (a' :& b)
+innerJoinLateral lhs (rhsFn, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
+     let ret = leftVal :& rightVal
+     pure $ (ret, fromJoin " INNER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
 
-type family FromCrossJoin a b where
-    FromCrossJoin a (b -> SqlQuery c) = FromT a :& c
-    FromCrossJoin a b = FromT a :& FromT b
+crossJoin :: ( ToFrom a a'
+             , ToFrom b b'
+             ) => a -> b -> From (a' :& b')
+crossJoin lhs rhs = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (toFrom rhs)
+     let ret = leftVal :& rightVal
+     pure $ (ret, fromJoin " CROSS JOIN " leftFrom rightFrom Nothing)
 
-instance ( From a
-         , From b
-         , FromT (CrossJoin a b) ~ (FromT a :& FromT b)
-         ) => From (CrossJoin a b) where
-    type FromT (CrossJoin a b) = FromCrossJoin a b
-    runFrom (CrossJoin leftPart rightPart) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
+crossJoinLateral :: ( ToFrom a a'
+                    , SqlSelect b r
+                    , ToAlias b
+                    , ToAliasReference b
+                    )
+                 => a -> (a' -> SqlQuery b) -> From (a' :& b)
+crossJoinLateral lhs rhsFn = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
+     let ret = leftVal :& rightVal
+     pure $ (ret, fromJoin " CROSS JOIN LATERAL " leftFrom rightFrom Nothing)
 
-instance {-# OVERLAPPING #-}
-         ( From a
-         , FromT a ~ a'
+leftJoin :: ( ToFrom a a'
+            , ToFrom b b'
+            , ToMaybe b'
+            , HasOnClause rhs (a' :& ToMaybeT b')
+            , rhs ~ (b, (a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+            ) => a -> rhs -> From (a' :& ToMaybeT b')
+leftJoin lhs (rhs, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (toFrom rhs)
+     let ret = leftVal :& toMaybe rightVal
+     pure $ (ret, fromJoin " LEFT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
+
+leftJoinLateral :: ( ToFrom a a'
+                   , SqlSelect b r
+                   , HasOnClause rhs (a' :& ToMaybeT b)
+                   , ToAlias b
+                   , ToAliasReference b
+                   , ToMaybe b
+                   , rhs ~ (a' -> SqlQuery b, (a' :& ToMaybeT b) -> SqlExpr (Value Bool))
+                   )
+                 => a -> rhs -> From (a' :& ToMaybeT b)
+leftJoinLateral lhs (rhsFn, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
+     let ret = leftVal :& toMaybe rightVal
+     pure $ (ret, fromJoin " LEFT OUTER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
+
+rightJoin :: ( ToFrom a a'
+             , ToFrom b b'
+             , ToMaybe a'
+             , HasOnClause rhs (ToMaybeT a' :& b')
+             , rhs ~ (b, (ToMaybeT a' :& b') -> SqlExpr (Value Bool))
+             ) => a -> rhs -> From (ToMaybeT a' :& b')
+rightJoin lhs (rhs, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (toFrom rhs)
+     let ret = toMaybe leftVal :& rightVal
+     pure $ (ret, fromJoin " RIGHT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
+
+fullOuterJoin :: ( ToFrom a a'
+                 , ToFrom b b'
+                 , ToMaybe a'
+                 , ToMaybe b'
+                 , HasOnClause rhs (ToMaybeT a' :& ToMaybeT b')
+                 , rhs ~ (b, (ToMaybeT a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+                 ) => a -> rhs -> From (ToMaybeT a' :& ToMaybeT b')
+fullOuterJoin lhs (rhs, on') = From $ do
+     (leftVal, leftFrom) <- unFrom (toFrom lhs)
+     (rightVal, rightFrom) <- unFrom (toFrom rhs)
+     let ret = toMaybe leftVal :& toMaybe rightVal
+     pure $ (ret, fromJoin " FULL OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
+
+infixl 2 `innerJoin`,
+         `innerJoinLateral`,
+         `leftJoin`,
+         `leftJoinLateral`,
+         `crossJoin`,
+         `crossJoinLateral`,
+         `rightJoin`,
+         `fullOuterJoin`
+
+
+------ Compatibility for old syntax
+
+data Lateral
+data NotLateral
+
+type family IsLateral a where
+    IsLateral (a -> SqlQuery b, c) = Lateral
+    IsLateral (a -> SqlQuery b) = Lateral
+    IsLateral a = NotLateral
+
+class DoInnerJoin lateral lhs rhs res | lateral rhs lhs -> res where
+    doInnerJoin :: Proxy lateral -> lhs -> rhs -> From res
+
+instance ( ToFrom a a'
+         , ToFrom b b'
+         , HasOnClause rhs (a' :& b')
+         , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+         ) => DoInnerJoin NotLateral a rhs (a' :& b') where
+    doInnerJoin _ = innerJoin
+
+instance ( ToFrom a a'
          , SqlSelect b r
          , ToAlias b
          , ToAliasReference b
-         ) => From (CrossJoin a (a' -> SqlQuery b)) where
-    type FromT (CrossJoin a (a' -> SqlQuery b)) = FromCrossJoin a (a' -> SqlQuery b)
-    runFrom (CrossJoin leftPart q) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
+         , d ~ (a' :& b)
+         ) => DoInnerJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+    doInnerJoin _ = innerJoinLateral
 
-class FromLeftJoin lateral lhs rhs res where
-    runFromLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> SqlQuery (res, FromClause)
+instance ( DoInnerJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
+           => ToFrom (InnerJoin lhs rhs) r where
+     toFrom (InnerJoin a b) = doInnerJoin (Proxy @lateral) a b
 
-instance ( From a
-         , FromT a ~ a'
-         , SqlSelect b r
-         , ToAlias b
-         , ToAliasReference b
+class DoLeftJoin lateral lhs rhs res | lateral rhs lhs -> res where
+    doLeftJoin :: Proxy lateral -> lhs -> rhs -> From res
+
+instance ( ToFrom a a'
+         , ToFrom b b'
+         , ToMaybe b'
+         , ToMaybeT b' ~ mb
+         , HasOnClause rhs (a' :& mb)
+         , rhs ~ (b, (a' :& mb) -> SqlExpr (Value Bool))
+         ) => DoLeftJoin NotLateral a rhs (a' :& mb) where
+    doLeftJoin _ = leftJoin
+
+instance ( ToFrom a a'
          , ToMaybe b
-         , mb ~ ToMaybeT b
-         ) => FromLeftJoin Lateral a (a' -> SqlQuery b) (a' :& mb) where
-            runFromLeftJoin _ leftPart q on' = do
-                (leftVal, leftFrom) <- runFrom leftPart
-                (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-                let ret = leftVal :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
+         , d ~ (a' :& ToMaybeT b)
+         , SqlSelect b r
+         , ToAlias b
+         , ToAliasReference b
+         ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+    doLeftJoin _ = leftJoinLateral
 
-instance ( From a
-         , FromT a ~ a'
-         , From b
-         , FromT b ~ b'
-         , ToMaybe b'
-         , mb ~ ToMaybeT b'
-         ) => FromLeftJoin NotLateral a b (a' :& mb) where
-            runFromLeftJoin _ leftPart rightPart on' = do
-                (leftVal, leftFrom) <- runFrom leftPart
-                (rightVal, rightFrom) <- runFrom rightPart
-                let ret = leftVal :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
+instance ( DoLeftJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
+           => ToFrom (LeftOuterJoin lhs rhs) r where
+     toFrom (LeftOuterJoin a b) = doLeftJoin (Proxy @lateral) a b
 
-instance ( FromLeftJoin (IsLateral b) a b b'
-         ) => From (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
-            type FromT (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
-            runFrom (LeftOuterJoin lhs (rhs, on')) =
-                runFromLeftJoin (toProxy rhs) lhs rhs on'
-              where
-                toProxy :: b -> Proxy (IsLateral b)
-                toProxy _ = Proxy
+class DoCrossJoin lateral lhs rhs res | lateral lhs rhs -> res where
+    doCrossJoin :: Proxy lateral -> lhs -> rhs -> From res
 
-instance ( From a
-         , FromT a ~ a'
-         , From b
-         , FromT b ~ b'
+instance (ToFrom a a', ToFrom b b') => DoCrossJoin NotLateral a b (a' :& b') where
+    doCrossJoin _ = crossJoin
+instance (ToFrom a a', SqlSelect b r, ToAlias b, ToAliasReference b)
+  => DoCrossJoin Lateral a (a' -> SqlQuery b) (a' :& b) where
+    doCrossJoin _ = crossJoinLateral
+
+instance (DoCrossJoin lateral lhs rhs r, IsLateral rhs ~ lateral)
+  => ToFrom (CrossJoin lhs rhs) r where
+    toFrom (CrossJoin a b) = doCrossJoin (Proxy @lateral) a b
+
+instance ( ToFrom a a'
+         , ToFrom b b'
          , ToMaybe a'
-         , ma ~ ToMaybeT a'
-         , ToMaybe b'
-         , mb ~ ToMaybeT b'
+         , ToMaybeT a' ~ ma
+         , HasOnClause rhs (ma :& b')
          , ErrorOnLateral b
-         ) => From (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
-            type FromT (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& mb) -> SqlExpr(Value Bool))
-            runFrom (FullOuterJoin leftPart (rightPart, on')) = do
-                (leftVal, leftFrom) <- runFrom leftPart
-                (rightVal, rightFrom) <- runFrom rightPart
-                let ret = (toMaybe leftVal) :& (toMaybe rightVal)
-                pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
+         , rhs ~ (b, (ma :& b') -> SqlExpr (Value Bool))
+         ) => ToFrom (RightOuterJoin a rhs) (ma :& b') where
+    toFrom (RightOuterJoin a b) = rightJoin a b
 
-instance ( From a
-         , FromT a ~ a'
+instance ( ToFrom a a'
+         , ToFrom b b'
          , ToMaybe a'
-         , ma ~ ToMaybeT a'
-         , From b
-         , FromT b ~ b'
+         , ToMaybeT a' ~ ma
+         , ToMaybe b'
+         , ToMaybeT b' ~ mb
+         , HasOnClause rhs (ma :& mb)
          , ErrorOnLateral b
-         ) => From (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) where
-            type FromT (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& b') -> SqlExpr(Value Bool))
-            runFrom (RightOuterJoin leftPart (rightPart, on')) = do
-                (leftVal, leftFrom) <- runFrom leftPart
-                (rightVal, rightFrom) <- runFrom rightPart
-                let ret = (toMaybe leftVal) :& rightVal
-                pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
+         , rhs ~ (b, (ma :& mb) -> SqlExpr (Value Bool))
+         ) => ToFrom (FullOuterJoin a rhs) (ma :& mb) where
+    toFrom (FullOuterJoin a b) = fullOuterJoin a b
 
-instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
-    type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
-    toMaybe (a :& b) = (toMaybe a :& toMaybe b)

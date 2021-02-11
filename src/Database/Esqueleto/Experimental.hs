@@ -19,8 +19,10 @@ module Database.Esqueleto.Experimental
       -- * Documentation
 
       Table(..)
+    , table
     , from
     , SubQuery(..)
+    , selectQuery
     , (:&)(..)
     , on
 
@@ -40,6 +42,15 @@ module Database.Esqueleto.Experimental
     , with
     , withRecursive
 
+    , innerJoin
+    , innerJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , crossJoin
+    , crossJoinLateral
+
       -- * Internals
     , From(..)
     , ToMaybe(..)
@@ -47,7 +58,7 @@ module Database.Esqueleto.Experimental
     , ToAliasT
     , ToAliasReference(..)
     , ToAliasReferenceT
-    , ToSetOperation(..)
+    , ToSqlSetOperation(..)
     , ValidOnClauseValue
     -- * The Normal Stuff
 
@@ -216,6 +227,7 @@ import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
+
 -- $setup
 --
 -- If you're already using "Database.Esqueleto", then you can get

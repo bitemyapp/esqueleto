@@ -24,7 +24,7 @@
 module Database.Esqueleto.Internal.Internal where
 
 import Control.Applicative ((<|>))
-import Data.Coerce (coerce)
+import Data.Coerce (Coercible, coerce)
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
 import Control.Monad (MonadPlus(..), guard, void)
@@ -533,8 +533,7 @@ subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Va
 subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
-(^.)
-    :: forall typ val. (PersistEntity val, PersistField typ)
+(^.) :: forall typ val . (PersistEntity val, PersistField typ)
     => SqlExpr (Entity val)
     -> EntityField val typ
     -> SqlExpr (Value typ)
@@ -585,8 +584,7 @@ withNonNull field f = do
     f $ veryUnsafeCoerceSqlExprValue field
 
 -- | Project a field of an entity that may be null.
-(?.)
-    :: (PersistEntity val, PersistField typ)
+(?.) :: ( PersistEntity val , PersistField typ)
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
     -> SqlExpr (Value (Maybe typ))
@@ -1738,8 +1736,7 @@ data FromClause
     = FromStart Ident EntityDef
     | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Value Bool)))
     | OnClause (SqlExpr (Value Bool))
-    | FromQuery Ident (IdentInfo -> (TLB.Builder, [PersistValue])) SubQueryType
-    | FromIdent Ident
+    | FromRaw (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data CommonTableExpressionKind
     = RecursiveCommonTableExpression
@@ -1759,8 +1756,7 @@ collectIdents fc = case fc of
     FromStart i _ -> Set.singleton i
     FromJoin lhs _ rhs _ -> collectIdents lhs <> collectIdents rhs
     OnClause _ -> mempty
-    FromQuery _ _ _ -> mempty
-    FromIdent _ -> mempty
+    FromRaw _ -> mempty
 
 instance Show FromClause where
     show fc = case fc of
@@ -1782,10 +1778,8 @@ instance Show FromClause where
             ]
         OnClause expr ->
             "(OnClause " <> render' expr <> ")"
-        FromQuery ident _ subQueryType ->
-            "(FromQuery " <> show ident <> " " <> show subQueryType <> ")"
-        FromIdent ident ->
-            "(FromIdent " <> show ident <> ")"
+        FromRaw _ ->
+            "(FromRaw _)"
 
       where
         dummy = SqlBackend
@@ -1839,14 +1833,12 @@ collectOnClauses sqlBackend = go Set.empty []
     findRightmostIdent (FromStart i _) = Just i
     findRightmostIdent (FromJoin _ _ r _) = findRightmostIdent r
     findRightmostIdent (OnClause {}) = Nothing
-    findRightmostIdent (FromQuery _ _ _) = Nothing
-    findRightmostIdent (FromIdent _) = Nothing
+    findRightmostIdent (FromRaw _) = Nothing
 
     findLeftmostIdent (FromStart i _) = Just i
     findLeftmostIdent (FromJoin l _ _ _) = findLeftmostIdent l
     findLeftmostIdent (OnClause {}) = Nothing
-    findLeftmostIdent (FromQuery _ _ _) = Nothing
-    findLeftmostIdent (FromIdent _) = Nothing
+    findLeftmostIdent (FromRaw _) = Nothing
 
     tryMatch
         :: Set Ident
@@ -2819,18 +2811,7 @@ makeFrom info mode fs = ret
                 , maybe mempty makeOnClause monClause
                 ]
     mk _ (OnClause _) = throw (UnexpectedCaseErr MakeFromError)
-    mk _ (FromQuery ident f subqueryType) =
-        let (queryText, queryVals) = f info
-            lateralKeyword =
-              case subqueryType of
-                NormalSubQuery -> ""
-                LateralSubQuery -> "LATERAL "
-        in
-            ( lateralKeyword <> (parens queryText) <> " AS " <> useIdent info ident
-            , queryVals
-            )
-    mk _ (FromIdent ident) =
-        (useIdent info ident, mempty)
+    mk paren (FromRaw f) = f paren info
 
     base ident@(I identText) def =
         let db@(DBName dbText) = entityDB def
@@ -2913,13 +2894,6 @@ makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
-
-aliasedValueIdentToRawSql :: Ident -> IdentInfo -> (TLB.Builder, [PersistValue])
-aliasedValueIdentToRawSql i info = (useIdent info i, mempty)
-
-valueReferenceToRawSql ::  Ident -> (IdentInfo -> Ident) -> IdentInfo -> (TLB.Builder, [PersistValue])
-valueReferenceToRawSql sourceIdent columnIdentF info =
-    (useIdent info sourceIdent <> "." <> useIdent info (columnIdentF info), mempty)
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
 aliasedEntityColumnIdent (I baseIdent) field =
