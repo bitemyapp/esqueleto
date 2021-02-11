@@ -1,27 +1,28 @@
-{-# LANGUAGE ScopedTypeVariables
-           , FlexibleContexts
-           , RankNTypes
-           , TypeFamilies
-           , TypeApplications
-#-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
-import Database.Persist.MySQL ( withMySQLConn
-                              , connectHost
-                              , connectDatabase
-                              , connectUser
-                              , connectPassword
-                              , connectPort
-                              , defaultConnectInfo)
+import qualified Control.Monad.Trans.Resource as R
 import Database.Esqueleto
 import Database.Esqueleto.Experimental hiding (from, on)
 import qualified Database.Esqueleto.Experimental as Experimental
-import qualified Control.Monad.Trans.Resource as R
+import Database.Persist.MySQL
+       ( connectDatabase
+       , connectHost
+       , connectPassword
+       , connectPort
+       , connectUser
+       , defaultConnectInfo
+       , withMySQLConn
+       )
 import Test.Hspec
 
 import Common.Test
@@ -187,7 +188,7 @@ testMysqlUnionWithLimits = do
               pure $ foo ^. FooName
 
 
-        ret <- select $ Experimental.from $ SelectQuery q1 `Union` SelectQuery q2
+        ret <- select $ Experimental.from $ q1 `union_` q2
         liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
 
 

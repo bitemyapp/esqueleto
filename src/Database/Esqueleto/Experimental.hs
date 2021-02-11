@@ -19,8 +19,10 @@ module Database.Esqueleto.Experimental
       -- * Documentation
 
       Table(..)
+    , table
     , from
     , SubQuery(..)
+    , selectQuery
     , (:&)(..)
     , on
 
@@ -39,6 +41,15 @@ module Database.Esqueleto.Experimental
       -- ** Common Table Expressions
     , with
     , withRecursive
+
+    , innerJoin
+    , innerJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , crossJoin
+    , crossJoinLateral
 
       -- * Internals
     , From(..)

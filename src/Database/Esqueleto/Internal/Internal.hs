@@ -583,18 +583,6 @@ withNonNull field f = do
     where_ $ not_ $ isNothing field
     f $ veryUnsafeCoerceSqlExprValue field
 
-class (PersistEntity ent, PersistField val) 
-  => MaybeHasSqlField entity ent value val 
-    | entity val -> value
-    , entity value -> val
-    , entity -> ent
-    , value ent val -> entity where
-instance (PersistEntity ent, PersistField val) 
-  => MaybeHasSqlField (Maybe (Entity ent)) ent (Maybe val) val
-
-class WithMaybe noMaybe withMaybe | withMaybe -> noMaybe 
-instance WithMaybe a (Maybe a)
-
 -- | Project a field of an entity that may be null.
 (?.) :: ( PersistEntity val , PersistField typ)
     => SqlExpr (Maybe (Entity val))
