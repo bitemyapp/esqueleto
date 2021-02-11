@@ -1,28 +1,32 @@
-{-# LANGUAGE CPP                    #-}
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE PatternSynonyms        #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.Esqueleto.Experimental.From
     where
 
-import qualified Control.Monad.Trans.Writer                       as W
-import           Data.Proxy
-import qualified Data.Text.Lazy.Builder                           as TLB
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Experimental.ToAliasReference
-import           Database.Esqueleto.Internal.Internal             hiding
-                                                                  (From (..),
-                                                                   from, on)
-import           Database.Esqueleto.Internal.PersistentImport
+import Control.Arrow (first)
+import Control.Monad (ap)
+import qualified Control.Monad.Trans.Writer as W
+import Data.Proxy
+import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
+import Database.Esqueleto.Internal.PersistentImport
 
 -- | 'FROM' clause, used to bring entities into scope.
 --
@@ -33,16 +37,20 @@ import           Database.Esqueleto.Internal.PersistentImport
 -- instances of `From`. This implementation eliminates certain
 -- types of runtime errors by preventing the construction of
 -- invalid SQL (e.g. illegal nested-@from@).
-from :: From a  => a -> SqlQuery (FromT a)
-from parts = do
-    (a, clause) <- runFrom parts
-    Q $ W.tell mempty{sdFromClause=[FromRaw clause]}
+from :: ToFrom a a' => a -> SqlQuery a'
+from f = do
+    (a, clause) <- unFrom (toFrom f)
+    Q $ W.tell mempty{sdFromClause=[FromRaw $ clause]}
     pure a
 
 type RawFn = NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
-class From a where
-    type FromT a
-    runFrom :: a -> SqlQuery (FromT a, RawFn)
+newtype From a = From
+    { unFrom :: SqlQuery (a, RawFn)}
+
+class ToFrom a r | a -> r where
+    toFrom :: a -> From r
+instance ToFrom (From a) a where
+    toFrom = id
 
 -- | Data type for bringing a Table into scope in a JOIN tree
 --
@@ -50,63 +58,35 @@ class From a where
 -- select $ from $ Table \@People
 -- @
 data Table a = Table
+instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
+    toFrom _ = table
 
-instance PersistEntity a => From (Table a) where
-    type FromT (Table a) = SqlExpr (Entity a)
-    runFrom e@Table = do
-        let ed = entityDef $ getVal e
-        ident <- newIdentFor (entityDB ed)
-        let entity = unsafeSqlEntity ident
-        pure $ ( entity, \p -> base p ident ed )
-          where
-            getVal ::  Table ent -> Proxy ent
-            getVal = const Proxy
-
-            base _ ident@(I identText) def info =
-                let db@(DBName dbText) = entityDB def
-                in ( fromDBName info db <>
-                         if dbText == identText
-                         then mempty
-                         else " AS " <> useIdent info ident
-                   , mempty
-                   )
+table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
+table = From $ do
+    let ed = entityDef (Proxy @ent)
+    ident <- newIdentFor (entityDB ed)
+    let entity = unsafeSqlEntity ident
+    pure $ ( entity, const $ base ident ed )
+      where
+        base ident@(I identText) def info =
+            let db@(DBName dbText) = entityDB def
+            in ( fromDBName info db <>
+                     if dbText == identText
+                     then mempty
+                     else " AS " <> useIdent info ident
+               , mempty
+               )
 
 
 {-# DEPRECATED SubQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SubQuery@" #-}
 newtype SubQuery a = SubQuery a
+instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SubQuery (SqlQuery a)) a where
+    toFrom (SubQuery q) = selectQuery q
+instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a where
+    toFrom = selectQuery
 
-instance
-    ( ToAlias a
-    , ToAliasReference a
-    , SqlSelect a r
-    )
-  =>
-    From (SqlQuery a)
-  where
-    type FromT (SqlQuery a) = a
-    runFrom subquery =
-        fromSubQuery NormalSubQuery subquery
-
-instance
-    ( ToAlias a
-    , ToAliasReference a
-    , SqlSelect a r
-    )
-  =>
-    From (SubQuery (SqlQuery a))
-  where
-    type FromT (SubQuery (SqlQuery a)) = a
-    runFrom (SubQuery subquery) =
-        fromSubQuery NormalSubQuery subquery
-
-fromSubQuery
-    ::
-    ( SqlSelect a r
-    , ToAlias a
-    , ToAliasReference a
-    )
-    => SubQueryType -> SqlQuery a -> SqlQuery (a, RawFn)
-fromSubQuery subqueryType subquery = do
+selectQuery :: (SqlSelect a r, ToAlias a, ToAliasReference a) => SqlQuery a -> From a
+selectQuery subquery = From $ do
     -- We want to update the IdentState without writing the query to side data
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
     aliasedValue <- toAlias ret
@@ -121,13 +101,8 @@ fromSubQuery subqueryType subquery = do
 
     pure (ref, \_ info ->
             let (queryText,queryVals) = toRawSql SELECT info aliasedQuery
-                lateralKeyword =
-                    case subqueryType of
-                      NormalSubQuery  -> ""
-                      LateralSubQuery -> "LATERAL "
             in
-            ( lateralKeyword <> (parens queryText) <> " AS " <> useIdent info subqueryAlias
+            ( (parens queryText) <> " AS " <> useIdent info subqueryAlias
             , queryVals
             )
          )
-

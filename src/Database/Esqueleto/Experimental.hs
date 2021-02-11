@@ -47,7 +47,7 @@ module Database.Esqueleto.Experimental
     , ToAliasT
     , ToAliasReference(..)
     , ToAliasReferenceT
-    , ToSetOperation(..)
+    , ToSqlSetOperation(..)
     , ValidOnClauseValue
     -- * The Normal Stuff
 

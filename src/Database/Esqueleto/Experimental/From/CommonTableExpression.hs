@@ -1,26 +1,18 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.From.CommonTableExpression
     where
 
-import qualified Control.Monad.Trans.Writer                           as W
-import qualified Data.Text.Lazy.Builder                               as TLB
-import           Database.Esqueleto.Experimental.From
-import           Database.Esqueleto.Experimental.From.SqlSetOperation
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Experimental.ToAliasReference
-import           Database.Esqueleto.Internal.Internal                 hiding
-                                                                      (From (..),
-                                                                       from, on)
-import           Database.Esqueleto.Internal.PersistentImport         (DBName (..))
-
-data CommonTableExpression ref = CommonTableExpression Ident ref
-instance From (CommonTableExpression ref) where
-    type FromT (CommonTableExpression ref) = ref
-    runFrom (CommonTableExpression ident ref) =
-        pure (ref, (\_ info -> (useIdent info ident, mempty)))
+import qualified Control.Monad.Trans.Writer as W
+import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
+import Database.Esqueleto.Internal.PersistentImport (DBName(..))
 
 -- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
 -- CTEs are supported in most modern SQL engines and can be useful
@@ -46,7 +38,7 @@ instance From (CommonTableExpression ref) where
 with :: ( ToAlias a
         , ToAliasReference a
         , SqlSelect a r
-        ) => SqlQuery a -> SqlQuery (CommonTableExpression a)
+        ) => SqlQuery a -> SqlQuery (From a)
 with query = do
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
     aliasedValue <- toAlias ret
@@ -55,7 +47,7 @@ with query = do
     let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
     Q $ W.tell mempty{sdCteClause = [clause]}
     ref <- toAliasReference ident aliasedValue
-    pure $ CommonTableExpression ident ref
+    pure $ From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
 
 -- | @WITH@ @RECURSIVE@ allows one to make a recursive subquery, which can
 -- reference itself. Like @WITH@, this is supported in most modern SQL engines.
@@ -92,33 +84,29 @@ with query = do
 withRecursive :: ( ToAlias a
                  , ToAliasReference a
                  , SqlSelect a r
-                 , RecursiveCteUnion unionKind
                  )
               => SqlQuery a
-              -> unionKind
-              -> (CommonTableExpression a -> SqlQuery a)
-              -> SqlQuery (CommonTableExpression a)
+              -> UnionKind
+              -> (From a -> SqlQuery a)
+              -> SqlQuery (From a)
 withRecursive baseCase unionKind recursiveCase = do
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
     aliasedValue <- toAlias ret
     let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
     ident <- newIdentFor (DBName "cte")
     ref <- toAliasReference ident aliasedValue
-    let refFrom = CommonTableExpression ident ref
+    let refFrom = From (pure (ref, (\_ info -> (useIdent info ident, mempty))))
     let recursiveQuery = recursiveCase refFrom
     let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
                  (\info -> (toRawSql SELECT info aliasedQuery)
-                        <> (unionKeyword unionKind, mempty)
+                        <> ("\n" <> (unUnionKind unionKind)  <> "\n", mempty)
                         <> (toRawSql SELECT info recursiveQuery)
                  )
     Q $ W.tell mempty{sdCteClause = [clause]}
     pure refFrom
 
-class RecursiveCteUnion a where
-    unionKeyword :: a -> TLB.Builder
-
-instance RecursiveCteUnion (a -> b -> Union a b) where
-    unionKeyword _ = "\nUNION\n"
-
-instance RecursiveCteUnion (a -> b -> UnionAll a b) where
-    unionKeyword _ = "\nUNION ALL\n"
+newtype UnionKind = UnionKind { unUnionKind :: TLB.Builder }
+instance Union_ UnionKind where
+    union_ = UnionKind "UNION"
+instance UnionAll_ UnionKind where
+    unionAll_ = UnionKind "UNION ALL"
