@@ -18,13 +18,24 @@ module Database.Esqueleto.Experimental
 
       -- * Documentation
 
-      Table(..)
+    -- ** Basic Queries
+      from
     , table
-    , from
+    , Table(..)
     , SubQuery(..)
     , selectQuery
+
+    -- ** Joins
     , (:&)(..)
     , on
+    , innerJoin
+    , innerJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , crossJoin
+    , crossJoinLateral
 
       -- ** Set Operations
       -- $sql-set-operations
@@ -42,16 +53,7 @@ module Database.Esqueleto.Experimental
     , with
     , withRecursive
 
-    , innerJoin
-    , innerJoinLateral
-    , leftJoin
-    , leftJoinLateral
-    , rightJoin
-    , fullOuterJoin
-    , crossJoin
-    , crossJoinLateral
-
-      -- * Internals
+      -- ** Internals
     , From(..)
     , ToMaybe(..)
     , ToAlias(..)
@@ -60,8 +62,8 @@ module Database.Esqueleto.Experimental
     , ToAliasReferenceT
     , ToSqlSetOperation(..)
     , ValidOnClauseValue
-    -- * The Normal Stuff
 
+    -- * The Normal Stuff
     , where_
     , groupBy
     , orderBy
@@ -174,6 +176,7 @@ module Database.Esqueleto.Experimental
     , DistinctOn
     , LockingKind(..)
     , SqlString
+
       -- ** Joins
     , InnerJoin(..)
     , CrossJoin(..)
@@ -182,7 +185,8 @@ module Database.Esqueleto.Experimental
     , FullOuterJoin(..)
     , JoinKind(..)
     , OnClauseWithoutMatchingJoinException(..)
-      -- * SQL backend
+
+      -- ** SQL backend
     , SqlQuery
     , SqlExpr
     , SqlEntity
@@ -196,22 +200,20 @@ module Database.Esqueleto.Experimental
     , insertSelectCount
     , (<#)
     , (<&>)
+
     -- ** Rendering Queries
     , renderQueryToText
     , renderQuerySelect
     , renderQueryUpdate
     , renderQueryDelete
     , renderQueryInsertInto
-    -- * Internal.Language
-    -- * RDBMS-specific modules
-    -- $rdbmsSpecificModules
 
-    -- * Helpers
+    -- ** Helpers
     , valkey
     , valJ
     , associateJoin
 
-      -- * Re-exports
+      -- ** Re-exports
       -- $reexports
     , deleteKey
     , module Database.Esqueleto.Internal.PersistentImport
@@ -316,7 +318,7 @@ import Database.Esqueleto.Experimental.ToMaybe
 --
 -- @
 -- select $ do
--- people <- from $ Table \@Person
+-- people <- from $ table \@Person
 -- where_ (people ^. PersonName ==. val \"John\")
 -- pure people
 -- @
@@ -344,8 +346,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $ do
 -- (people :& blogPosts) <-
---     from $ Table \@Person
---     \`LeftOuterJoin\` Table \@BlogPost
+--     from $ table \@Person
+--     \`leftJoin\` table \@BlogPost
 --     \`on\` (\\(people :& blogPosts) ->
 --             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
 -- where_ (people ^. PersonAge >. val 18)
@@ -376,7 +378,7 @@ import Database.Esqueleto.Experimental.ToMaybe
 --
 -- In this version, with each successive 'on' clause, only the tables
 -- we have already joined into are in scope, so we must pattern match
--- accordingly. In this case, in the second 'InnerJoin', we do not use
+-- accordingly. In this case, in the second 'innerJoin', we do not use
 -- the first `Person` reference, so we use @_@ as a placeholder to
 -- ignore it. This prevents a possible runtime error where a table
 -- is referenced before it appears in the sequence of 'JOIN's.
@@ -384,11 +386,11 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $ do
 -- (people1 :& followers :& people2) <-
---     from $ Table \@Person
---     \`InnerJoin` Table \@Follow
+--     from $ table \@Person
+--     \`innerJoin` table \@Follow
 --     \`on\` (\\(people1 :& followers) ->
 --             people1 ^. PersonId ==. followers ^. FollowFollowed)
---     \`InnerJoin` Table \@Person
+--     \`innerJoin` table \@Person
 --     \`on\` (\\(_ :& followers :& people2) ->
 --             followers ^. FollowFollower ==. people2 ^. PersonId)
 -- where_ (people1 ^. PersonName ==. val \"John\")
@@ -420,8 +422,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- peopleWithPosts <-
 --   from $ do
 --     (people :& blogPosts) <-
---       from $ Table \@Person
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Person
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(p :& bP) ->
 --               p ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     groupBy (people ^. PersonId)
@@ -451,8 +453,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- (authors, blogPosts) <- from $
 --   (do
 --     (author :& blogPost) <-
---       from $ Table \@Person
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Person
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(a :& bP) ->
 --               a ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     where_ (author ^. PersonId ==. val currentPersonId)
@@ -461,11 +463,11 @@ import Database.Esqueleto.Experimental.ToMaybe
 --   \`union_\`
 --   (do
 --     (follow :& blogPost :& author) <-
---       from $ Table \@Follow
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Follow
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(f :& bP) ->
 --               f ^. FollowFollowed ==. bP ^. BlogPostAuthorId)
---       \`InnerJoin\` Table \@Person
+--       \`innerJoin\` table \@Person
 --       \`on\` (\\(_ :& bP :& a) ->
 --               bP ^. BlogPostAuthorId ==. a ^. PersonId)
 --     where_ (follow ^. FollowFollower ==. val currentPersonId)
@@ -484,14 +486,14 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $ do
 -- (salesPerson :& maxSaleAmount :& maxSaleCustomerName) <-
---   from $ Table \@SalesPerson
---   \`CrossJoin\` (\\salesPerson -> do
---         sales <- from $ Table \@Sale
+--   from $ table \@SalesPerson
+--   \`crossJoinLateral\` (\\salesPerson -> do
+--         sales <- from $ table \@Sale
 --         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
 --         pure $ max_ (sales ^. SaleAmount)
 --         )
---   \`CrossJoin\` (\\(salesPerson :& maxSaleAmount) -> do
---         sales <- from $ Table \@Sale
+--   \`crossJoinLateral\` (\\(salesPerson :& maxSaleAmount) -> do
+--         sales <- from $ table \@Sale
 --         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
 --              &&. sales ^. SaleAmount ==. maxSaleAmount
 --         pure $ sales ^. SaleCustomerName)
@@ -539,12 +541,12 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $ from $
 --   (do
---      a <- from Table @A
+--      a <- from $ table @A
 --      pure $ a ^. ASomeCol
 --   )
 --   \`union_\`
 --   (do
---      b <- from Table @B
+--      b <- from $ table @B
 --      pure $ b ^. BSomeCol
 --   )
 -- @

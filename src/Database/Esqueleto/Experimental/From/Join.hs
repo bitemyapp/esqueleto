@@ -65,8 +65,8 @@ type family ValidOnClauseValue a :: Constraint where
 --
 -- @
 -- select $
--- from $ Table \@Person
--- \`InnerJoin\` Table \@BlogPost
+-- from $ table \@Person
+-- \`innerJoin\` table \@BlogPost
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
@@ -103,6 +103,19 @@ type family HasOnClause actual expected :: Constraint where
                   )
 
 
+-- | INNER JOIN
+--
+-- Used as an infix operator \`innerJoin\`
+--
+-- @
+-- select $
+-- from $ table \@Person
+-- \`innerJoin\` table \@BlogPost
+-- \`on\` (\\(p :& bp) ->
+--         p ^. PersonId ==. bp ^. BlogPostAuthorId)
+-- @
+--
+-- /Since: 3.5.0.0/
 innerJoin :: ( ToFrom a a'
              , ToFrom b b'
              , HasOnClause rhs (a' :& b')
@@ -115,6 +128,16 @@ innerJoin lhs (rhs, on') = From $ do
      pure $ (ret, fromJoin " INNER JOIN " leftFrom rightFrom (Just $ on' ret))
 
 
+-- | INNER JOIN LATERAL
+--
+-- A Lateral subquery join allows the joined query to reference entities from the
+-- left hand side of the join. Discards rows that don't match the on clause
+--
+-- Used as an infix operator \`innerJoinLateral\`
+--
+-- See example 6
+--
+-- /Since: 3.5.0.0/
 innerJoinLateral :: ( ToFrom a a'
                     , HasOnClause rhs (a' :& b)
                     , SqlSelect b r
@@ -129,6 +152,17 @@ innerJoinLateral lhs (rhsFn, on') = From $ do
      let ret = leftVal :& rightVal
      pure $ (ret, fromJoin " INNER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
 
+-- | CROSS JOIN
+--
+-- Used as an infix \`crossJoin\`
+--
+-- @
+-- select $ do
+-- from $ table \@Person
+-- \`crossJoin\` table \@BlogPost
+-- @
+--
+-- /Since: 3.5.0.0/
 crossJoin :: ( ToFrom a a'
              , ToFrom b b'
              ) => a -> b -> From (a' :& b')
@@ -138,6 +172,16 @@ crossJoin lhs rhs = From $ do
      let ret = leftVal :& rightVal
      pure $ (ret, fromJoin " CROSS JOIN " leftFrom rightFrom Nothing)
 
+-- | CROSS JOIN LATERAL
+--
+-- A Lateral subquery join allows the joined query to reference entities from the
+-- left hand side of the join.
+--
+-- Used as an infix operator \`crossJoinLateral\`
+--
+-- See example 6
+--
+-- /Since: 3.5.0.0/
 crossJoinLateral :: ( ToFrom a a'
                     , SqlSelect b r
                     , ToAlias b
@@ -150,6 +194,23 @@ crossJoinLateral lhs rhsFn = From $ do
      let ret = leftVal :& rightVal
      pure $ (ret, fromJoin " CROSS JOIN LATERAL " leftFrom rightFrom Nothing)
 
+-- | LEFT OUTER JOIN
+--
+-- Join where the right side may not exist.
+-- If the on clause fails then the right side will be NULL'ed
+-- Because of this the right side needs to be handled as a Maybe
+--
+-- Used as an infix operator \`leftJoin\`
+--
+-- @
+-- select $
+-- from $ table \@Person
+-- \`leftJoin\` table \@BlogPost
+-- \`on\` (\\(p :& bp) ->
+--         p ^. PersonId ==. bp ?. BlogPostAuthorId)
+-- @
+--
+-- /Since: 3.5.0.0/
 leftJoin :: ( ToFrom a a'
             , ToFrom b b'
             , ToMaybe b'
@@ -162,6 +223,18 @@ leftJoin lhs (rhs, on') = From $ do
      let ret = leftVal :& toMaybe rightVal
      pure $ (ret, fromJoin " LEFT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
 
+-- | LEFT OUTER JOIN LATERAL
+--
+-- Lateral join where the right side may not exist.
+-- In the case that the query returns nothing or the on clause fails the right
+-- side of the join will be NULL'ed
+-- Because of this the right side needs to be handled as a Maybe
+--
+-- Used as an infix operator \`leftJoinLateral\`
+--
+-- See example 6 for how to use LATERAL
+--
+-- /Since: 3.5.0.0/
 leftJoinLateral :: ( ToFrom a a'
                    , SqlSelect b r
                    , HasOnClause rhs (a' :& ToMaybeT b)
@@ -177,6 +250,23 @@ leftJoinLateral lhs (rhsFn, on') = From $ do
      let ret = leftVal :& toMaybe rightVal
      pure $ (ret, fromJoin " LEFT OUTER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
 
+-- | RIGHT OUTER JOIN
+--
+-- Join where the left side may not exist.
+-- If the on clause fails then the left side will be NULL'ed
+-- Because of this the left side needs to be handled as a Maybe
+--
+-- Used as an infix operator \`rightJoin\`
+--
+-- @
+-- select $
+-- from $ table \@Person
+-- \`rightJoin\` table \@BlogPost
+-- \`on\` (\\(p :& bp) ->
+--         p ?. PersonId ==. bp ^. BlogPostAuthorId)
+-- @
+--
+-- /Since: 3.5.0.0/
 rightJoin :: ( ToFrom a a'
              , ToFrom b b'
              , ToMaybe a'
@@ -189,6 +279,22 @@ rightJoin lhs (rhs, on') = From $ do
      let ret = toMaybe leftVal :& rightVal
      pure $ (ret, fromJoin " RIGHT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
 
+-- | FULL OUTER JOIN
+--
+-- Join where both sides of the join may not exist.
+-- Because of this the result needs to be handled as a Maybe
+--
+-- Used as an infix operator \`fullOuterJoin\`
+--
+-- @
+-- select $
+-- from $ table \@Person
+-- \`fullOuterJoin\` table \@BlogPost
+-- \`on\` (\\(p :& bp) ->
+--         p ?. PersonId ==. bp ?. BlogPostAuthorId)
+-- @
+--
+-- /Since: 3.5.0.0/
 fullOuterJoin :: ( ToFrom a a'
                  , ToFrom b b'
                  , ToMaybe a'

@@ -1,14 +1,17 @@
-3.4.1.0
+3.5.0.0
 =======- 
 - @belevy
   - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
         - Destroy all GADTs; Removes the From GADT and SqlExpr GADT 
-        - From GADT is replaced with a From typeclass
+        - From GADT is replaced with a From data type and FromRaw 
         - SqlExpr is now all defined in terms of ERaw
         - Modified ERaw to contain a SqlExprMeta with any extra information 
           that may be needed
         - Experimental top level is now strictly for documentation and all the 
           implementation details are in Experimental.* modules
+
+3.4.1.0
+=======
 - @Vlix
   - [#232](https://github.com/bitemyapp/esqueleto/pull/232)
     - Export the `ValidOnClauseValue` type family

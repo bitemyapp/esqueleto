@@ -56,21 +56,21 @@ with query = do
 -- @
 -- select $ do
 -- cte <- withRecursive
---          (do $
---              person <- from $ Table \@Person
+--          (do
+--              person <- from $ table \@Person
 --              where_ $ person ^. PersonId ==. val personId
 --              pure person
 --          )
 --          unionAll_
---          (\\self -> do $
+--          (\\self -> do
 --              (p :& f :& p2 :& pSelf) <- from self
---                       \`InnerJoin\` $ Table \@Follow
+--                       \`innerJoin\` $ table \@Follow
 --                       \`on\` (\\(p :& f) ->
 --                               p ^. PersonId ==. f ^. FollowFollower)
---                       \`InnerJoin\` $ Table \@Person
+--                       \`innerJoin\` $ table \@Person
 --                       \`on\` (\\(p :& f :& p2) ->
 --                               f ^. FollowFollowed ==. p2 ^. PersonId)
---                       \`LeftOuterJoin\` self
+--                       \`leftJoin\` self
 --                       \`on\` (\\(_ :& _ :& p2 :& pSelf) ->
 --                               just (p2 ^. PersonId) ==. pSelf ?. PersonId)
 --              where_ $ isNothing (pSelf ?. PersonId)

@@ -2035,6 +2035,8 @@ data SqlExprMeta = SqlExprMeta
     , sqlExprMetaIsReference :: Bool -- Is this SqlExpr a reference to the selected value/entity (supports subqueries)
     } 
 
+-- | Empty 'SqlExprMeta' if you are constructing an 'ERaw' probably use this
+-- for your meta
 noMeta :: SqlExprMeta
 noMeta = SqlExprMeta 
     { sqlExprMetaCompositeFields = Nothing
@@ -2042,18 +2044,19 @@ noMeta = SqlExprMeta
     , sqlExprMetaIsReference = False
     }
 
+-- | Does this meta contain values for composite fields. 
+-- This field is field out for composite key values
 hasCompositeKeyMeta :: SqlExprMeta -> Bool
 hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields 
 
 -- | An expression on the SQL backend.
 --
--- There are many comments describing the constructors of this
--- data type.  However, Haddock doesn't like GADTs, so you'll have to read them by hitting \"Source\".
-    -- Raw expression: states whether parenthesis are needed
-    -- around this expression, and takes information about the SQL
-    -- connection (mainly for escaping names) and returns both an
-    -- string ('TLB.Builder') and a list of values to be
-    -- interpolated by the SQL backend.
+-- Raw expression: Contains a 'SqlExprMeta' and a function for 
+-- building the expr. It recieves a parameter telling it whether 
+-- it is in a parenthesized context, and takes information about the SQL
+-- connection (mainly for escaping names) and returns both an
+-- string ('TLB.Builder') and a list of values to be
+-- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
 -- | Data type to support from hack 

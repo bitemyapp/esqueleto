@@ -30,11 +30,11 @@ import Database.Esqueleto.Internal.PersistentImport
 
 -- | 'FROM' clause, used to bring entities into scope.
 --
--- Internally, this function uses the `From` datatype and the
--- `From` typeclass. Unlike the old `Database.Esqueleto.from`,
--- this does not take a function as a parameter, but rather
--- a value that represents a 'JOIN' tree constructed out of
--- instances of `From`. This implementation eliminates certain
+-- Internally, this function uses the `From` datatype.
+-- Unlike the old `Database.Esqueleto.from`, this does not
+-- take a function as a parameter, but rather a value that
+-- represents a 'JOIN' tree constructed out of instances of `From`.
+-- This implementation eliminates certain
 -- types of runtime errors by preventing the construction of
 -- invalid SQL (e.g. illegal nested-@from@).
 from :: ToFrom a a' => a -> SqlQuery a'
@@ -44,23 +44,44 @@ from f = do
     pure a
 
 type RawFn = NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+
+-- | Data type defining the "From" language. This should not
+-- constructed directly in application code.
+--
+-- A @From@ is a SqlQuery which returns a reference to the result of calling from
+-- and a function that produces a portion of a FROM clause. This gets passed to
+-- the FromRaw FromClause constructor directly when converting
+-- from a @From@ to a @SqlQuery@ using @from@
+--
+-- /Since: 3.5.0.0/
 newtype From a = From
     { unFrom :: SqlQuery (a, RawFn)}
 
+
+-- | A helper class primarily designed to allow using @SqlQuery@ directly in
+-- a From expression. This is also useful for embedding a @SqlSetOperation@,
+-- as well as supporting backwards compatibility for the
+-- data constructor join tree used prior to /3.5.0.0/
+--
+-- /Since: 3.5.0.0/
 class ToFrom a r | a -> r where
     toFrom :: a -> From r
 instance ToFrom (From a) a where
     toFrom = id
 
--- | Data type for bringing a Table into scope in a JOIN tree
---
--- @
--- select $ from $ Table \@People
--- @
+{-# DEPRECATED Table "/Since: 3.5.0.0/ - use 'table' instead" #-}
 data Table a = Table
+
 instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
     toFrom _ = table
 
+-- | Bring a PersistEntity into scope from a table
+--
+-- @
+-- select $ from $ table \@People
+-- @
+--
+-- /Since: 3.5.0.0/
 table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
 table = From $ do
     let ed = entityDef (Proxy @ent)
@@ -85,6 +106,21 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SubQuery (Sql
 instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a where
     toFrom = selectQuery
 
+-- | Select from a subquery, often used in conjuction with joins but can be
+-- used without any joins. Because @SqlQuery@ has a @ToFrom@ instance you probably
+-- dont need to use this function directly.
+--
+-- @
+-- select $
+--      p <- from $
+--              selectQuery do
+--              p <- from $ table \@Person
+--              limit 5
+--              orderBy [ asc p ^. PersonAge ]
+--      ...
+-- @
+--
+-- /Since: 3.5.0.0/
 selectQuery :: (SqlSelect a r, ToAlias a, ToAliasReference a) => SqlQuery a -> From a
 selectQuery subquery = From $ do
     -- We want to update the IdentState without writing the query to side data
