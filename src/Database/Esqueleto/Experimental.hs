@@ -61,7 +61,6 @@ module Database.Esqueleto.Experimental
     , ToAliasReference(..)
     , ToAliasReferenceT
     , ToSqlSetOperation(..)
-    , ValidOnClauseValue
 
     -- * The Normal Stuff
     , where_

@@ -46,19 +46,6 @@ instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
     toMaybe (a :& b) = (toMaybe a :& toMaybe b)
 
--- | Constraint for `on`. Ensures that only types that require an `on` can be used on
--- the left hand side. This was previously reusing the From class which was actually
--- a bit too lenient as it allowed to much.
---
--- @since 3.4.0.0
-type family ValidOnClauseValue a :: Constraint where
-  ValidOnClauseValue (Table a) = ()
-  ValidOnClauseValue (SubQuery a) = ()
-  ValidOnClauseValue (SqlQuery a) = ()
-  ValidOnClauseValue (SqlSetOperation a) = ()
-  ValidOnClauseValue (a -> SqlQuery b) = ()
-  ValidOnClauseValue (From a) = ()
-  ValidOnClauseValue _ = TypeError ('Text "Illegal use of ON")
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -70,7 +57,7 @@ type family ValidOnClauseValue a :: Constraint where
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
-on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
+on :: ToFrom a a' => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
 infix 9 `on`
 
