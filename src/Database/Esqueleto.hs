@@ -1,7 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs             #-}
+{-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE RankNTypes        #-}
 -- | The @esqueleto@ EDSL (embedded domain specific language).
 -- This module replaces @Database.Persist@, so instead of
 -- importing that module you should just import this one:
@@ -74,6 +75,8 @@ module Database.Esqueleto
   , else_
   , from
   , Value(..)
+  , pattern Value
+  , unValue
   , ValueList(..)
   , OrderBy
   , DistinctOn
@@ -123,13 +126,13 @@ module Database.Esqueleto
   , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Trans.Reader (ReaderT)
-import Data.Int (Int64)
-import qualified Data.Map.Strict as Map
-import Database.Esqueleto.Internal.Language
-import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Sql
+import           Control.Monad.IO.Class                       (MonadIO)
+import           Control.Monad.Trans.Reader                   (ReaderT)
+import           Data.Int                                     (Int64)
+import qualified Data.Map.Strict                              as Map
+import           Database.Esqueleto.Internal.Language
+import           Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Internal.Sql
 import qualified Database.Persist
 
 

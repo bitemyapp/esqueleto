@@ -1,13 +1,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies      #-}
 
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import Data.Coerce
-import Database.Esqueleto.Internal.Internal hiding (From, from, on)
-import Database.Esqueleto.Internal.PersistentImport
+import           Data.Coerce
+import           Database.Esqueleto.Internal.Internal         hiding (From,
+                                                               from, on)
+import           Database.Esqueleto.Internal.PersistentImport
 
 {-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasReferenceT a = a
@@ -16,7 +17,7 @@ type ToAliasReferenceT a = a
 class ToAliasReference a where
     toAliasReference :: Ident -> a -> SqlQuery a
 
-instance ToAliasReference (SqlExpr (Value a)) where
+instance {-# OVERLAPPABLE #-} ToAliasReference (SqlExpr a) where
     toAliasReference aliasSource (ERaw m _)
       | Just alias <- sqlExprMetaAlias m = pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
           (useIdent info aliasSource <> "." <> useIdent info alias, [])

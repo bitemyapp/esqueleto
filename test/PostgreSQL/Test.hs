@@ -1,53 +1,55 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# LANGUAGE FlexibleContexts
-           , LambdaCase
-           , NamedFieldPuns
-           , OverloadedStrings
-           , RankNTypes
-           , ScopedTypeVariables
-           , TypeApplications
-           , TypeFamilies
-           , PartialTypeSignatures
- #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE NamedFieldPuns        #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Main (main) where
 
-import Data.Coerce
-import Data.Foldable
-import qualified Data.Map.Strict as Map
-import Data.Map (Map)
-import Data.Time
-import Control.Arrow ((&&&))
-import Control.Monad (void, when)
-import Control.Monad.Catch (MonadCatch, catch)
-import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT, ask)
-import qualified Control.Monad.Trans.Resource as R
-import Data.Aeson hiding (Value)
-import qualified Data.Aeson as A (Value)
-import Data.ByteString (ByteString)
-import qualified Data.Char as Char
-import qualified Data.List as L
-import Data.Ord (comparing)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
-import Database.Esqueleto hiding (random_)
-import Database.Esqueleto.Experimental hiding (random_, from, on)
-import qualified Database.Esqueleto.Experimental as Experimental
-import qualified Database.Esqueleto.Internal.Sql as ES
-import Database.Esqueleto.PostgreSQL (random_)
-import qualified Database.Esqueleto.PostgreSQL as EP
-import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
+import           Control.Arrow                      ((&&&))
+import           Control.Monad                      (void, when)
+import           Control.Monad.Catch                (MonadCatch, catch)
+import           Control.Monad.IO.Class             (MonadIO (liftIO))
+import           Control.Monad.Logger               (runNoLoggingT,
+                                                     runStderrLoggingT)
+import           Control.Monad.Trans.Reader         (ReaderT, ask)
+import qualified Control.Monad.Trans.Resource       as R
+import           Data.Aeson                         hiding (Value)
+import qualified Data.Aeson                         as A (Value)
+import           Data.ByteString                    (ByteString)
+import qualified Data.Char                          as Char
+import           Data.Coerce
+import           Data.Foldable
+import qualified Data.List                          as L
+import           Data.Map                           (Map)
+import qualified Data.Map.Strict                    as Map
+import           Data.Ord                           (comparing)
+import qualified Data.Text                          as T
+import qualified Data.Text.Encoding                 as TE
+import           Data.Time
+import           Data.Time.Clock                    (UTCTime, diffUTCTime,
+                                                     getCurrentTime)
+import           Database.Esqueleto                 hiding (random_)
+import           Database.Esqueleto.Experimental    hiding (from, on, random_)
+import qualified Database.Esqueleto.Experimental    as Experimental
+import qualified Database.Esqueleto.Internal.Sql    as ES
+import           Database.Esqueleto.PostgreSQL      (random_)
+import qualified Database.Esqueleto.PostgreSQL      as EP
+import           Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import Database.Persist.Postgresql (withPostgresqlConn)
-import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
-import System.Environment
-import Test.Hspec
-import Test.Hspec.QuickCheck
+import           Database.Persist.Postgresql        (withPostgresqlConn)
+import           Database.PostgreSQL.Simple         (ExecStatus (..),
+                                                     SqlError (..))
+import           System.Environment
+import           Test.Hspec
+import           Test.Hspec.QuickCheck
 
-import Common.Test
-import PostgreSQL.MigrateJSON
+import           Common.Test
+import           PostgreSQL.MigrateJSON
 
 
 
@@ -1076,7 +1078,7 @@ testInsertSelectWithConflict =
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques2 <- select $ from $ \u -> return u
+        uniques2 <- select $ Experimental.from $ table @OneUnique
         liftIO $ n1 `shouldBe` 3
         liftIO $ n2 `shouldBe` 3
         let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
@@ -1226,7 +1228,7 @@ testLateralQuery = do
         select $ do
             l :& c <-
               Experimental.from $ Table @Lord
-              `CrossJoin` \lord -> do
+              `crossJoinLateral` \lord -> do
                     deed <- Experimental.from $ Table @Deed
                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                     pure $ countRows @Int
@@ -1241,7 +1243,7 @@ testLateralQuery = do
                             pure $ countRows @Int
         res <- select $ do
           l :& c <- Experimental.from $ Table @Lord
-                          `InnerJoin` subquery
+                          `innerJoinLateral` subquery
                           `Experimental.on` (const $ val True)
           pure (l, c)
 
@@ -1252,9 +1254,9 @@ testLateralQuery = do
     it "supports LEFT JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
-                          `LeftOuterJoin` (\lord -> do
-                                    deed <- Experimental.from $ Table @Deed
+          l :& c <- Experimental.from $ table @Lord
+                          `leftJoinLateral` (\lord -> do
+                                    deed <- Experimental.from $ table @Deed
                                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                                     pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
@@ -1295,7 +1297,7 @@ testLateralQuery = do
 
 type JSONValue = Maybe (JSONB A.Value)
 
-createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
+createSaneSQL :: (ES.SqlSelect (SqlExpr a) a, PersistField a) => SqlExpr a -> T.Text -> [PersistValue] -> IO ()
 createSaneSQL act q vals = run $ do
     (query, args) <- showQuery ES.SELECT $ fromValue act
     liftIO $ query `shouldBe` q

@@ -1,25 +1,25 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE EmptyDataDecls             #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE QuasiQuotes #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE PartialTypeSignatures      #-}
+{-# LANGUAGE QuasiQuotes                #-}
+{-# LANGUAGE Rank2Types                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE UndecidableInstances       #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -62,37 +62,41 @@ module Common.Test
     , Key(..)
     ) where
 
-import Control.Monad (forM_, replicateM, replicateM_, void)
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Reader (ask)
-import Data.Either
-import Data.Time
+import           Control.Monad                          (forM_, replicateM,
+                                                         replicateM_, void)
+import           Control.Monad.Catch                    (MonadCatch)
+import           Control.Monad.Reader                   (ask)
+import           Data.Either
+import           Data.Time
 #if __GLASGOW_HASKELL__ >= 806
-import Control.Monad.Fail (MonadFail)
+import           Control.Monad.Fail                     (MonadFail)
 #endif
-import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (MonadLogger(..), NoLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
-import qualified Data.Attoparsec.Text as AP
-import Data.Char (toLower, toUpper)
-import Data.Monoid ((<>))
-import Database.Esqueleto
-import Database.Esqueleto.Experimental hiding (from, on)
-import qualified Database.Esqueleto.Experimental as Experimental
-import Database.Persist.TH
-import Test.Hspec
-import UnliftIO
+import           Control.Monad.IO.Class                 (MonadIO (liftIO))
+import           Control.Monad.Logger                   (MonadLogger (..),
+                                                         NoLoggingT,
+                                                         runNoLoggingT)
+import           Control.Monad.Trans.Reader             (ReaderT)
+import qualified Data.Attoparsec.Text                   as AP
+import           Data.Char                              (toLower, toUpper)
+import           Data.Monoid                            ((<>))
+import           Database.Esqueleto
+import           Database.Esqueleto.Experimental        hiding (from, on)
+import qualified Database.Esqueleto.Experimental        as Experimental
+import           Database.Persist.TH
+import           Test.Hspec
+import           UnliftIO
 
-import Data.Conduit (ConduitT, runConduit, (.|))
-import qualified Data.Conduit.List as CL
-import qualified Data.List as L
-import qualified Data.Set as S
-import qualified Data.Text as Text
-import qualified Data.Text.Internal.Lazy as TL
-import qualified Data.Text.Lazy.Builder as TLB
+import           Data.Conduit                           (ConduitT, runConduit,
+                                                         (.|))
+import qualified Data.Conduit.List                      as CL
+import qualified Data.List                              as L
+import qualified Data.Set                               as S
+import qualified Data.Text                              as Text
+import qualified Data.Text.Internal.Lazy                as TL
+import qualified Data.Text.Lazy.Builder                 as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql as EI
-import qualified UnliftIO.Resource as R
+import qualified Database.Esqueleto.Internal.Sql        as EI
+import qualified UnliftIO.Resource                      as R
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -497,16 +501,14 @@ testSelectSource run = do
     describe "selectSource" $ do
         it "works for a simple example" $ run $ do
             let query = selectSource $
-                        from $ \person ->
-                        return person
+                        Experimental.from $ Table @Person
             p1e <- insert' p1
             ret <- runConduit $ query .| CL.consume
             liftIO $ ret `shouldBe` [ p1e ]
 
         it "can run a query many times" $ run $ do
             let query = selectSource $
-                        from $ \person ->
-                        return person
+                        Experimental.from $ Table @Person
             p1e <- insert' p1
             ret0 <- runConduit $ query .| CL.consume
             ret1 <- runConduit $ query .| CL.consume
@@ -535,17 +537,16 @@ testSelectFrom run = do
     describe "select/from" $ do
         it "works for a simple example" $ run $ do
             p1e <- insert' p1
-            ret <-
-                select $
-                from $ \person ->
-                return person
+            ret <- select $ Experimental.from $ Table @Person
             liftIO $ ret `shouldBe` [ p1e ]
 
         it "works for a simple self-join (one entity)" $ run $ do
             p1e <- insert' p1
             ret <-
-                select $
-                from $ \(person1, person2) ->
+                select $ do
+                person1 :& person2 <-
+                    Experimental.from $ Table @Person
+                    `crossJoin` Table @Person
                 return (person1, person2)
             liftIO $ ret `shouldBe` [ (p1e, p1e) ]
 
@@ -553,8 +554,10 @@ testSelectFrom run = do
             p1e <- insert' p1
             p2e <- insert' p2
             ret <-
-                select $
-                from $ \(person1, person2) ->
+                select $ do
+                person1 :& person2 <-
+                    Experimental.from $ Table @Person
+                    `crossJoin` Table @Person
                 return (person1, person2)
             liftIO $
                 ret
@@ -669,7 +672,7 @@ testSelectFrom run = do
                 number = 101
                 Right thePk = keyFromValues [toPersistValue number]
             fcPk <- insert fc
-            [Entity _ ret] <- select $ from return
+            [Entity _ ret] <- select $ Experimental.from $ Table @Frontcover
             liftIO $ do
                 ret `shouldBe` fc
                 fcPk `shouldBe` thePk

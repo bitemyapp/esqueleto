@@ -1,12 +1,13 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE EmptyDataDecls #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE EmptyDataDecls         #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -17,7 +18,9 @@ module Database.Esqueleto.Internal.Language
     {-# DEPRECATED "Use Database.Esqueleto.Internal.Internal instead. This module will be removed in 3.5.0.0 " #-}
     ( -- * The pretty face
       from
-    , Value(..)
+    , Value
+    , pattern Value
+    , unValue
     , ValueList(..)
     , SomeValue(..)
     , ToSomeValues(..)
@@ -136,5 +139,5 @@ module Database.Esqueleto.Internal.Language
     , subSelectUnsafe
     ) where
 
-import Database.Esqueleto.Internal.Internal
-import Database.Esqueleto.Internal.PersistentImport
+import           Database.Esqueleto.Internal.Internal
+import           Database.Esqueleto.Internal.PersistentImport
