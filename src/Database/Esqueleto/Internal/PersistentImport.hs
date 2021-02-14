@@ -151,6 +151,7 @@ import Database.Persist.Sql hiding
        , delete
        , deleteCascadeWhere
        , deleteWhereCount
+       , exists
        , getPersistMap
        , limitOffsetOrder
        , listToJSON
@@ -174,5 +175,4 @@ import Database.Persist.Sql hiding
        , (>.)
        , (>=.)
        , (||.)
-       , exists
        )

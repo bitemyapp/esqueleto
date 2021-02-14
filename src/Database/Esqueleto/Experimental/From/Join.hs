@@ -1,37 +1,32 @@
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Database.Esqueleto.Experimental.From.Join
     where
 
-import           Data.Bifunctor                                       (first)
-import           Data.Kind                                            (Constraint)
-import           Data.Proxy
-import qualified Data.Text.Lazy.Builder                               as TLB
-import           Database.Esqueleto.Experimental.From
-import           Database.Esqueleto.Experimental.From.SqlSetOperation
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Experimental.ToAliasReference
-import           Database.Esqueleto.Experimental.ToMaybe
-import           Database.Esqueleto.Internal.Internal                 hiding
-                                                                      (From (..),
-                                                                       from,
-                                                                       fromJoin,
-                                                                       on)
-import           Database.Esqueleto.Internal.PersistentImport         (Entity (..),
-                                                                       EntityField,
-                                                                       PersistEntity,
-                                                                       PersistField)
-import           GHC.TypeLits
+import Data.Bifunctor (first)
+import Data.Kind (Constraint)
+import Data.Proxy
+import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Experimental.ToMaybe
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), from, fromJoin, on)
+import Database.Esqueleto.Internal.PersistentImport
+       (Entity(..), EntityField, PersistEntity, PersistField)
+import GHC.TypeLits
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
 -- that have been joined together.
@@ -65,7 +60,7 @@ instance ValidOnClause (a -> SqlQuery b)
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
-on :: ValidOnClause a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
+on :: ValidOnClause a => a -> (b -> SqlExpr Bool) -> (a, b -> SqlExpr Bool)
 on = (,)
 infix 9 `on`
 
@@ -73,7 +68,7 @@ type family ErrorOnLateral a :: Constraint where
   ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
   ErrorOnLateral _ = ()
 
-fromJoin :: TLB.Builder -> RawFn -> RawFn -> Maybe (SqlExpr (Value Bool)) -> RawFn
+fromJoin :: TLB.Builder -> RawFn -> RawFn -> Maybe (SqlExpr Bool) -> RawFn
 fromJoin joinKind lhs rhs monClause =
     \paren info ->
         first (parensM paren) $
@@ -86,14 +81,14 @@ fromJoin joinKind lhs rhs monClause =
         makeOnClause info (ERaw _ f)        = first (" ON " <>) (f Never info)
 
 type family HasOnClause actual expected :: Constraint where
-    HasOnClause (a, b -> SqlExpr (Value Bool)) c = () -- Let the compiler handle the type mismatch
+    HasOnClause (a, b -> SqlExpr Bool) c = () -- Let the compiler handle the type mismatch
     HasOnClause a expected =
         TypeError ( 'Text "Missing ON clause for join with"
                     ':$$: 'ShowType a
                     ':$$: 'Text ""
                     ':$$: 'Text "Expected: "
                     ':$$: 'ShowType a
-                    ':$$: 'Text "`on` " ':<>: 'ShowType (expected -> SqlExpr (Value Bool))
+                    ':$$: 'Text "`on` " ':<>: 'ShowType (expected -> SqlExpr Bool)
                     ':$$: 'Text ""
                   )
 
@@ -114,7 +109,7 @@ type family HasOnClause actual expected :: Constraint where
 innerJoin :: ( ToFrom a a'
              , ToFrom b b'
              , HasOnClause rhs (a' :& b')
-             , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+             , rhs ~ (b, (a' :& b') -> SqlExpr Bool)
              ) => a -> rhs -> From (a' :& b')
 innerJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
@@ -138,7 +133,7 @@ innerJoinLateral :: ( ToFrom a a'
                     , SqlSelect b r
                     , ToAlias b
                     , ToAliasReference b
-                    , rhs ~ (a' -> SqlQuery b, (a' :& b) -> SqlExpr (Value Bool))
+                    , rhs ~ (a' -> SqlQuery b, (a' :& b) -> SqlExpr Bool)
                     )
                  => a -> rhs -> From (a' :& b)
 innerJoinLateral lhs (rhsFn, on') = From $ do
@@ -210,7 +205,7 @@ leftJoin :: ( ToFrom a a'
             , ToFrom b b'
             , ToMaybe b'
             , HasOnClause rhs (a' :& ToMaybeT b')
-            , rhs ~ (b, (a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+            , rhs ~ (b, (a' :& ToMaybeT b') -> SqlExpr Bool)
             ) => a -> rhs -> From (a' :& ToMaybeT b')
 leftJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
@@ -236,7 +231,7 @@ leftJoinLateral :: ( ToFrom a a'
                    , ToAlias b
                    , ToAliasReference b
                    , ToMaybe b
-                   , rhs ~ (a' -> SqlQuery b, (a' :& ToMaybeT b) -> SqlExpr (Value Bool))
+                   , rhs ~ (a' -> SqlQuery b, (a' :& ToMaybeT b) -> SqlExpr Bool)
                    )
                  => a -> rhs -> From (a' :& ToMaybeT b)
 leftJoinLateral lhs (rhsFn, on') = From $ do
@@ -266,7 +261,7 @@ rightJoin :: ( ToFrom a a'
              , ToFrom b b'
              , ToMaybe a'
              , HasOnClause rhs (ToMaybeT a' :& b')
-             , rhs ~ (b, (ToMaybeT a' :& b') -> SqlExpr (Value Bool))
+             , rhs ~ (b, (ToMaybeT a' :& b') -> SqlExpr Bool)
              ) => a -> rhs -> From (ToMaybeT a' :& b')
 rightJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
@@ -295,7 +290,7 @@ fullOuterJoin :: ( ToFrom a a'
                  , ToMaybe a'
                  , ToMaybe b'
                  , HasOnClause rhs (ToMaybeT a' :& ToMaybeT b')
-                 , rhs ~ (b, (ToMaybeT a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+                 , rhs ~ (b, (ToMaybeT a' :& ToMaybeT b') -> SqlExpr Bool)
                  ) => a -> rhs -> From (ToMaybeT a' :& ToMaybeT b')
 fullOuterJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
@@ -329,7 +324,7 @@ class DoInnerJoin lateral lhs rhs res | lateral rhs lhs -> res where
 instance ( ToFrom a a'
          , ToFrom b b'
          , HasOnClause rhs (a' :& b')
-         , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+         , rhs ~ (b, (a' :& b') -> SqlExpr Bool)
          ) => DoInnerJoin NotLateral a rhs (a' :& b') where
     doInnerJoin _ = innerJoin
 
@@ -338,7 +333,7 @@ instance ( ToFrom a a'
          , ToAlias b
          , ToAliasReference b
          , d ~ (a' :& b)
-         ) => DoInnerJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+         ) => DoInnerJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr Bool) d where
     doInnerJoin _ = innerJoinLateral
 
 instance ( DoInnerJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
@@ -353,7 +348,7 @@ instance ( ToFrom a a'
          , ToMaybe b'
          , ToMaybeT b' ~ mb
          , HasOnClause rhs (a' :& mb)
-         , rhs ~ (b, (a' :& mb) -> SqlExpr (Value Bool))
+         , rhs ~ (b, (a' :& mb) -> SqlExpr Bool)
          ) => DoLeftJoin NotLateral a rhs (a' :& mb) where
     doLeftJoin _ = leftJoin
 
@@ -363,7 +358,7 @@ instance ( ToFrom a a'
          , SqlSelect b r
          , ToAlias b
          , ToAliasReference b
-         ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+         ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr Bool) d where
     doLeftJoin _ = leftJoinLateral
 
 instance ( DoLeftJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
@@ -389,7 +384,7 @@ instance ( ToFrom a a'
          , ToMaybeT a' ~ ma
          , HasOnClause rhs (ma :& b')
          , ErrorOnLateral b
-         , rhs ~ (b, (ma :& b') -> SqlExpr (Value Bool))
+         , rhs ~ (b, (ma :& b') -> SqlExpr Bool)
          ) => ToFrom (RightOuterJoin a rhs) (ma :& b') where
     toFrom (RightOuterJoin a b) = rightJoin a b
 
@@ -401,7 +396,7 @@ instance ( ToFrom a a'
          , ToMaybeT b' ~ mb
          , HasOnClause rhs (ma :& mb)
          , ErrorOnLateral b
-         , rhs ~ (b, (ma :& mb) -> SqlExpr (Value Bool))
+         , rhs ~ (b, (ma :& mb) -> SqlExpr Bool)
          ) => ToFrom (FullOuterJoin a rhs) (ma :& mb) where
     toFrom (FullOuterJoin a b) = fullOuterJoin a b
 

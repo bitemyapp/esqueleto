@@ -2,13 +2,13 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# language DerivingStrategies #-}
 
 module Database.Esqueleto.PostgreSQL.JSON.Instances where
 
-import Data.Aeson (FromJSON(..), ToJSON(..), encode, eitherDecodeStrict)
+import Data.Aeson (FromJSON(..), ToJSON(..), eitherDecodeStrict, encode)
 import Data.Bifunctor (first)
 import qualified Data.ByteString.Lazy as BSL (toStrict)
 import Data.String (IsString(..))
@@ -42,7 +42,7 @@ newtype JSONB a = JSONB { unJSONB :: a }
 -- | 'SqlExpr' of a NULL-able 'JSONB' value. Hence the 'Maybe'.
 --
 -- Note: NULL here is a PostgreSQL NULL, not a JSON 'null'
-type JSONBExpr a = SqlExpr (Value (Maybe (JSONB a)))
+type JSONBExpr a = SqlExpr (Maybe (JSONB a))
 
 -- | Convenience function to lift a regular value into
 -- a 'JSONB' expression.

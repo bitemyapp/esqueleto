@@ -132,7 +132,7 @@ fromFinish (PreprocessedFrom ret f') = Q $ do
     return ret
 
 -- | @WHERE@ clause: restrict the query's result.
-where_ :: SqlExpr (Bool) -> SqlQuery ()
+where_ :: SqlExpr Bool -> SqlQuery ()
 where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 
 -- | An @ON@ clause, useful to describe how two tables are related. Cross joins
@@ -191,7 +191,7 @@ where_ expr = Q $ W.tell mempty { sdWhereClause = Where expr }
 --   'on' (baz '^.' BazId '==.' bar '^.' BarBazId)
 --   ...
 -- @
-on :: SqlExpr (Bool) -> SqlQuery ()
+on :: SqlExpr Bool -> SqlQuery ()
 on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 
 -- | @GROUP BY@ clause. You can enclose multiple columns
@@ -377,7 +377,7 @@ rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
 -- | @HAVING@.
 --
 -- @since 1.2.2
-having :: SqlExpr (Bool) -> SqlQuery ()
+having :: SqlExpr Bool -> SqlQuery ()
 having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
 -- | Add a locking clause to the query.  Please read
@@ -617,7 +617,7 @@ val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 -- > - error: {lhs: v ==. val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
 -- > - error: {lhs: v !=. nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
 -- > - error: {lhs: v !=. val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
-isNothing :: PersistField typ => SqlExpr ((Maybe typ)) -> SqlExpr (Bool)
+isNothing :: PersistField typ => SqlExpr ((Maybe typ)) -> SqlExpr Bool
 isNothing v =
     case v of
         ERaw m f ->
@@ -673,7 +673,7 @@ count = countHelper ""           ""
 countDistinct :: Num a => SqlExpr typ -> SqlExpr a
 countDistinct = countHelper "(DISTINCT " ")"
 
-not_ :: SqlExpr (Bool) -> SqlExpr (Bool)
+not_ :: SqlExpr Bool -> SqlExpr Bool
 not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
   where
     x p info =
@@ -685,27 +685,28 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
                     let (b, vals) = f Never info
                     in (parensM p b, vals)
 
-(==.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+
+(==.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
-(>=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+(>=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (>=.) = unsafeSqlBinOp " >= "
 
-(>.)  :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+(>.)  :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (>.)  = unsafeSqlBinOp " > "
 
-(<=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+(<=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (<=.) = unsafeSqlBinOp " <= "
 
-(<.)  :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+(<.)  :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (<.)  = unsafeSqlBinOp " < "
-(!=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr (Bool)
+(!=.) :: PersistField typ => SqlExpr typ -> SqlExpr typ -> SqlExpr Bool
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: SqlExpr (Bool) -> SqlExpr (Bool) -> SqlExpr (Bool)
+(&&.) :: SqlExpr Bool -> SqlExpr Bool -> SqlExpr Bool
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: SqlExpr (Bool) -> SqlExpr (Bool) -> SqlExpr (Bool)
+(||.) :: SqlExpr Bool -> SqlExpr Bool -> SqlExpr Bool
 (||.) = unsafeSqlBinOp " OR "
 
 (+.)  :: PersistField a => SqlExpr a -> SqlExpr a -> SqlExpr a
@@ -723,7 +724,7 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
 -- | @BETWEEN@.
 --
 -- @since: 3.1.0
-between :: PersistField a => SqlExpr a -> (SqlExpr a, SqlExpr a) -> SqlExpr (Bool)
+between :: PersistField a => SqlExpr a -> (SqlExpr a, SqlExpr a) -> SqlExpr Bool
 a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr a
@@ -831,7 +832,7 @@ right_ :: (SqlString s, Num a) => (SqlExpr s,  SqlExpr a) ->  SqlExpr s
 right_ = unsafeSqlFunction "RIGHT"
 
 -- | @LIKE@ operator.
-like :: SqlString s => SqlExpr s -> SqlExpr s -> SqlExpr (Bool)
+like :: SqlString s => SqlExpr s -> SqlExpr s -> SqlExpr Bool
 like    = unsafeSqlBinOp    " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
@@ -839,7 +840,7 @@ like    = unsafeSqlBinOp    " LIKE "
 -- Supported by PostgreSQL only.
 --
 -- @since 2.2.3
-ilike :: SqlString s => SqlExpr s -> SqlExpr s -> SqlExpr (Bool)
+ilike :: SqlString s => SqlExpr s -> SqlExpr s -> SqlExpr Bool
 ilike   = unsafeSqlBinOp    " ILIKE "
 
 -- | The string @'%'@.  May be useful while using 'like' and
@@ -915,7 +916,7 @@ justList (ERaw m f) = ERaw m f
 -- @
 --
 -- Where @personIds@ is of type @[Key Person]@.
-in_ :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr (Bool)
+in_ :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr Bool
 (ERaw _ v) `in_` (ERaw _ list) = 
     ERaw noMeta $ \p info ->
         let (b1, vals1) = v Parens info 
@@ -927,7 +928,7 @@ in_ :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr (Bo
             (b1 <> " IN " <> b2, vals1 <> vals2)
 
 -- | @NOT IN@ operator.
-notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr (Bool)
+notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr Bool
 (ERaw _ v) `notIn` (ERaw _ list) = 
     ERaw noMeta $ \p info ->
         let (b1, vals1) = v Parens info 
@@ -944,14 +945,14 @@ notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr (
 --          'where_' (post '^.' BlogPostAuthorId '==.' person '^.' PersonId)
 -- return person
 -- @
-exists :: SqlQuery () -> SqlExpr (Bool)
+exists :: SqlQuery () -> SqlExpr Bool
 exists q = ERaw noMeta $ \p info ->    
     let ERaw _ f = existsHelper q
         (b, vals) = f Never info
     in ( parensM p $ "EXISTS " <> b, vals)
 
 -- | @NOT EXISTS@ operator.
-notExists :: SqlQuery () -> SqlExpr (Bool)
+notExists :: SqlQuery () -> SqlExpr Bool
 notExists q = ERaw noMeta $ \p info ->    
     let ERaw _ f = existsHelper q 
         (b, vals) = f Never info
@@ -1033,7 +1034,7 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --      reproduce this via 'nothing'.
 --
 -- @since 2.1.2
-case_ :: PersistField a => [(SqlExpr (Bool), SqlExpr a)] -> SqlExpr a -> SqlExpr a
+case_ :: PersistField a => [(SqlExpr Bool, SqlExpr a)] -> SqlExpr a -> SqlExpr a
 case_ = unsafeSqlCase
 
 -- | Convert an entity's key into another entity's.
@@ -1092,7 +1093,7 @@ infixl 2 `InnerJoin`, `CrossJoin`, `LeftOuterJoin`, `RightOuterJoin`, `FullOuter
 -- | Syntax sugar for 'case_'.
 --
 -- @since 2.1.2
-when_ :: expr (Bool) -> () -> expr a -> (expr (Bool), expr a)
+when_ :: expr Bool -> () -> expr a -> (expr Bool, expr a)
 when_ cond _ expr = (cond, expr)
 
 -- | Syntax sugar for 'case_'.
@@ -1733,8 +1734,8 @@ instance Monoid DistinctClause where
 -- | A part of a @FROM@ clause.
 data FromClause
     = FromStart Ident EntityDef
-    | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr (Bool)))
-    | OnClause (SqlExpr (Bool))
+    | FromJoin FromClause JoinKind FromClause (Maybe (SqlExpr Bool))
+    | OnClause (SqlExpr Bool)
     | FromRaw (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data CommonTableExpressionKind
@@ -1795,7 +1796,7 @@ newtype SetClause = SetClause (SqlExpr Update)
 collectOnClauses
     :: SqlBackend
     -> [FromClause]
-    -> Either (SqlExpr (Bool)) [FromClause]
+    -> Either (SqlExpr Bool) [FromClause]
 collectOnClauses sqlBackend = go Set.empty []
   where
     go is []  (f@(FromStart i _) : fs) =
@@ -1811,8 +1812,8 @@ collectOnClauses sqlBackend = go Set.empty []
     findMatching
         :: Set Ident
         -> [FromClause]
-        -> SqlExpr (Bool)
-        -> Either (SqlExpr (Bool)) (Set Ident, [FromClause])
+        -> SqlExpr Bool
+        -> Either (SqlExpr Bool) (Set Ident, [FromClause])
     findMatching idents fromClauses expr =
         case fromClauses of
             f : acc ->
@@ -1841,7 +1842,7 @@ collectOnClauses sqlBackend = go Set.empty []
 
     tryMatch
         :: Set Ident
-        -> SqlExpr (Bool)
+        -> SqlExpr Bool
         -> FromClause
         -> Maybe (Set Ident, FromClause)
     tryMatch idents expr fromClause =
@@ -1906,7 +1907,7 @@ collectOnClauses sqlBackend = go Set.empty []
           $ renderedExpr
 
 -- | A complete @WHERE@ clause.
-data WhereClause = Where (SqlExpr (Bool))
+data WhereClause = Where (SqlExpr Bool)
                  | NoWhere
 
 instance Semigroup WhereClause where
@@ -2058,6 +2059,9 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 -- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
+instance Num a => Num (SqlExpr a) where
+    
+
 -- | Data type to support from hack 
 data PreprocessedFrom a = PreprocessedFrom a FromClause
 
@@ -2098,16 +2102,16 @@ sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info quer
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
 fromDBName (conn, _) = TLB.fromText . connEscapeName conn
 
-existsHelper :: SqlQuery () -> SqlExpr (Bool)
+existsHelper :: SqlQuery () -> SqlExpr Bool
 existsHelper = sub SELECT . (>> return true)
   where
-    true :: SqlExpr (Bool)
+    true :: SqlExpr Bool
     true = val True
 
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
-unsafeSqlCase :: PersistField a => [(SqlExpr (Bool), SqlExpr a)] -> SqlExpr a -> SqlExpr a
+unsafeSqlCase :: PersistField a => [(SqlExpr Bool, SqlExpr a)] -> SqlExpr a -> SqlExpr a
 unsafeSqlCase when v = ERaw noMeta buildCase
   where
     buildCase :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
@@ -2116,11 +2120,11 @@ unsafeSqlCase when v = ERaw noMeta buildCase
             (whenText, whenVals) = mapWhen when Parens info
         in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
-    mapWhen :: [(SqlExpr (Bool), SqlExpr a)] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mapWhen :: [(SqlExpr Bool, SqlExpr a)] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     mapWhen []    _ _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
     mapWhen when' p info = foldl (foldHelp p info) (mempty, mempty) when'
 
-    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Bool), SqlExpr a) -> (TLB.Builder, [PersistValue])
+    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr Bool, SqlExpr a) -> (TLB.Builder, [PersistValue])
     foldHelp p info (b0, vals0) (v1, v2) =
         let (b1, vals1) = valueToSql v1 p info
             (b2, vals2) = valueToSql v2 p info
@@ -2135,7 +2139,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
 -- signature.  For example:
 --
 -- @
--- (==.) :: SqlExpr a -> SqlExpr a -> SqlExpr (Bool)
+-- (==.) :: SqlExpr a -> SqlExpr a -> SqlExpr Bool
 -- (==.) = unsafeSqlBinOp " = "
 -- @
 --
@@ -2176,7 +2180,7 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 -- Usage example:
 --
 -- @
--- (==.) :: SqlExpr a -> SqlExpr a -> SqlExpr (Bool)
+-- (==.) :: SqlExpr a -> SqlExpr a -> SqlExpr Bool
 -- (==.) = unsafeSqlBinOpComposite " = " " AND "
 -- @
 --
@@ -2832,7 +2836,7 @@ makeFrom info mode fs = ret
 
     makeOnClause (ERaw _ f)        = first (" ON " <>) (f Never info)
 
-    mkExc :: SqlExpr (Bool) -> OnClauseWithoutMatchingJoinException
+    mkExc :: SqlExpr Bool -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
         OnClauseWithoutMatchingJoinException $
             TL.unpack $ TLB.toLazyText $ fst (f Never info)
@@ -3545,7 +3549,7 @@ insertSelectCount = rawEsqueleto INSERT_INTO
 -- representation of the clauses passed to an "On" clause.
 --
 -- @since 3.2.0
-renderExpr :: SqlBackend -> SqlExpr (Bool) -> T.Text
+renderExpr :: SqlBackend -> SqlExpr Bool -> T.Text
 renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues ->
          let (builder, _) = mkBuilderValues Never (sqlBackend, initialIdentState)

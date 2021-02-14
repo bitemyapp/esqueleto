@@ -219,19 +219,16 @@ module Database.Esqueleto.Experimental
     , module Database.Esqueleto.Internal.PersistentImport
     ) where
 
-import           Database.Esqueleto.Internal.Internal                       hiding
-                                                                            (From,
-                                                                             from,
-                                                                             on)
-import           Database.Esqueleto.Internal.PersistentImport
+import Database.Esqueleto.Internal.Internal hiding (From, from, on)
+import Database.Esqueleto.Internal.PersistentImport
 
-import           Database.Esqueleto.Experimental.From
-import           Database.Esqueleto.Experimental.From.CommonTableExpression
-import           Database.Esqueleto.Experimental.From.Join
-import           Database.Esqueleto.Experimental.From.SqlSetOperation
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Experimental.ToAliasReference
-import           Database.Esqueleto.Experimental.ToMaybe
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.CommonTableExpression
+import Database.Esqueleto.Experimental.From.Join
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Experimental.ToMaybe
 
 -- $setup
 --

@@ -189,7 +189,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(->>.) :: JSONBExpr a -> JSONAccessor -> SqlExpr (Value (Maybe Text))
+(->>.) :: JSONBExpr a -> JSONAccessor -> SqlExpr (Maybe Text)
 (->>.) value (JSONKey txt) = unsafeSqlBinOp " ->> " value $ val txt
 (->>.) value (JSONIndex i) = unsafeSqlBinOp " ->> " value $ val i
 
@@ -253,7 +253,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(#>>.) :: JSONBExpr a -> [Text] -> SqlExpr (Value (Maybe Text))
+(#>>.) :: JSONBExpr a -> [Text] -> SqlExpr (Maybe Text)
 (#>>.)  value = unsafeSqlBinOp " #>> " value . mkTextArray
 
 -- | /Requires PostgreSQL version >= 9.4/
@@ -275,7 +275,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(@>.) :: JSONBExpr a -> JSONBExpr b -> SqlExpr (Value Bool)
+(@>.) :: JSONBExpr a -> JSONBExpr b -> SqlExpr Bool
 (@>.) = unsafeSqlBinOp " @> "
 
 -- | /Requires PostgreSQL version >= 9.4/
@@ -297,7 +297,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(<@.) :: JSONBExpr a -> JSONBExpr b -> SqlExpr (Value Bool)
+(<@.) :: JSONBExpr a -> JSONBExpr b -> SqlExpr Bool
 (<@.) = unsafeSqlBinOp " <@ "
 
 -- | /Requires PostgreSQL version >= 9.4/
@@ -320,7 +320,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?.) :: JSONBExpr a -> Text -> SqlExpr (Value Bool)
+(?.) :: JSONBExpr a -> Text -> SqlExpr Bool
 (?.) value = unsafeSqlBinOp " ?? " value . val
 
 -- | /Requires PostgreSQL version >= 9.4/
@@ -343,7 +343,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?|.) :: JSONBExpr a -> [Text] -> SqlExpr (Value Bool)
+(?|.) :: JSONBExpr a -> [Text] -> SqlExpr Bool
 (?|.) value = unsafeSqlBinOp " ??| " value . mkTextArray
 
 -- | /Requires PostgreSQL version >= 9.4/
@@ -366,7 +366,7 @@ infixl 6 ||., -., --., #-.
 -- @
 --
 -- @since 3.1.0
-(?&.) :: JSONBExpr a -> [Text] -> SqlExpr (Value Bool)
+(?&.) :: JSONBExpr a -> [Text] -> SqlExpr Bool
 (?&.) value = unsafeSqlBinOp " ??& " value . mkTextArray
 
 -- | /Requires PostgreSQL version >= 9.5/
@@ -579,5 +579,5 @@ infixl 6 ||., -., --., #-.
 (#-.) :: JSONBExpr a -> [Text] -> JSONBExpr b
 (#-.) value = unsafeSqlBinOp " #- " value . mkTextArray
 
-mkTextArray :: [Text] -> SqlExpr (Value PersistValue)
+mkTextArray :: [Text] -> SqlExpr PersistValue
 mkTextArray = val . PersistArray . fmap toPersistValue

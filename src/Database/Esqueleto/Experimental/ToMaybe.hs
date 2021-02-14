@@ -1,12 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.ToMaybe
     where
 
-import           Database.Esqueleto.Internal.Internal         hiding (From (..),
-                                                               from, on)
-import           Database.Esqueleto.Internal.PersistentImport (Entity (..))
+import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
+import Database.Esqueleto.Internal.PersistentImport (Entity(..))
 
 type family Nullable a where
     Nullable (Maybe a) = a

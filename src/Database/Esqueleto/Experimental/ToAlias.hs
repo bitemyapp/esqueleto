@@ -1,13 +1,12 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.ToAlias
     where
 
-import           Database.Esqueleto.Internal.Internal         hiding (From,
-                                                               from, on)
-import           Database.Esqueleto.Internal.PersistentImport
+import Database.Esqueleto.Internal.Internal hiding (From, from, on)
+import Database.Esqueleto.Internal.PersistentImport
 
 {-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
 type ToAliasT a = a

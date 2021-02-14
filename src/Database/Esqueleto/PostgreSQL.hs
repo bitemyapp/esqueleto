@@ -52,18 +52,18 @@ import Database.Persist.Class (OnlyOneUniqueKey)
 -- because MySQL uses `rand()`.
 --
 -- @since 2.6.0
-random_ :: (PersistField a, Num a) => SqlExpr (Value a)
+random_ :: (PersistField a, Num a) => SqlExpr a
 random_ = unsafeSqlValue "RANDOM()"
 
 -- | Empty array literal. (@val []@) does unfortunately not work
-emptyArray :: SqlExpr (Value [a])
+emptyArray :: SqlExpr [a]
 emptyArray = unsafeSqlValue "'{}'"
 
 -- | Coalesce an array with an empty default value
 maybeArray ::
      (PersistField a, PersistField [a])
-  => SqlExpr (Value (Maybe [a]))
-  -> SqlExpr (Value [a])
+  => SqlExpr (Maybe [a])
+  -> SqlExpr [a]
 maybeArray x = coalesceDefault [x] (emptyArray)
 
 -- | Aggregate mode
@@ -82,7 +82,7 @@ unsafeSqlAggregateFunction
     -> AggMode
     -> a
     -> [OrderByClause]
-    -> SqlExpr (Value b)
+    -> SqlExpr b
 unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
@@ -106,14 +106,14 @@ unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info
 --- into an array.
 arrayAggWith
     :: AggMode
-    -> SqlExpr (Value a)
+    -> SqlExpr a
     -> [OrderByClause]
-    -> SqlExpr (Value (Maybe [a]))
+    -> SqlExpr (Maybe [a])
 arrayAggWith = unsafeSqlAggregateFunction "array_agg"
 
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
-arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe [a]))
+arrayAgg :: (PersistField a) => SqlExpr a -> SqlExpr (Maybe [a])
 arrayAgg x = arrayAggWith AggModeAll x []
 
 -- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
@@ -122,19 +122,19 @@ arrayAgg x = arrayAggWith AggModeAll x []
 -- @since 2.5.3
 arrayAggDistinct
     :: (PersistField a, PersistField [a])
-    => SqlExpr (Value a)
-    -> SqlExpr (Value (Maybe [a]))
+    => SqlExpr a
+    -> SqlExpr (Maybe [a])
 arrayAggDistinct x = arrayAggWith AggModeDistinct x []
 
 -- | (@array_remove@) Remove all elements equal to the given value from the
 -- array.
 --
 -- @since 2.5.3
-arrayRemove :: SqlExpr (Value [a]) -> SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayRemove :: SqlExpr [a] -> SqlExpr a -> SqlExpr [a]
 arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
 
 -- | Remove @NULL@ values from an array
-arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
+arrayRemoveNull :: SqlExpr [Maybe a] -> SqlExpr [a]
 -- This can't be a call to arrayRemove because it changes the value type
 arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 
@@ -144,10 +144,10 @@ arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 stringAggWith ::
      SqlString s
   => AggMode -- ^ Aggregate mode (ALL or DISTINCT)
-  -> SqlExpr (Value s) -- ^ Input values.
-  -> SqlExpr (Value s) -- ^ Delimiter.
+  -> SqlExpr s -- ^ Input values.
+  -> SqlExpr s -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr (Maybe s) -- ^ Concatenation.
 stringAggWith mode expr delim os =
   unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
 
@@ -157,19 +157,19 @@ stringAggWith mode expr delim os =
 -- @since 2.2.8
 stringAgg ::
      SqlString s
-  => SqlExpr (Value s) -- ^ Input values.
-  -> SqlExpr (Value s) -- ^ Delimiter.
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  => SqlExpr s -- ^ Input values.
+  -> SqlExpr s -- ^ Delimiter.
+  -> SqlExpr (Maybe s) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
 -- depend on the character set of your database.)
 --
 -- @since 2.2.11
-chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
+chr :: SqlString s => SqlExpr Int -> SqlExpr s
 chr = unsafeSqlFunction "chr"
 
-now_ :: SqlExpr (Value UTCTime)
+now_ :: SqlExpr UTCTime
 now_ = unsafeSqlFunction "NOW" ()
 
 upsert
@@ -350,11 +350,11 @@ insertSelectWithConflictCount unique query conflictQuery = do
 --
 -- @since 3.3.3.3
 filterWhere
-    :: SqlExpr (Value a)
+    :: SqlExpr a
     -- ^ Aggregate function
-    -> SqlExpr (Value Bool)
+    -> SqlExpr Bool
     -- ^ Filter clause
-    -> SqlExpr (Value a)
+    -> SqlExpr a
 filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     let (aggBuilder, aggValues) = case aggExpr of
             ERaw _ aggF     -> aggF Never info
