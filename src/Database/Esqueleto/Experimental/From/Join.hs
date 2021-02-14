@@ -1,32 +1,37 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module Database.Esqueleto.Experimental.From.Join
     where
 
-import Data.Bifunctor (first)
-import Data.Kind (Constraint)
-import Data.Proxy
-import qualified Data.Text.Lazy.Builder as TLB
-import Database.Esqueleto.Experimental.From
-import Database.Esqueleto.Experimental.From.SqlSetOperation
-import Database.Esqueleto.Experimental.ToAlias
-import Database.Esqueleto.Experimental.ToAliasReference
-import Database.Esqueleto.Experimental.ToMaybe
-import Database.Esqueleto.Internal.Internal hiding
-       (From(..), from, fromJoin, on)
-import Database.Esqueleto.Internal.PersistentImport
-       (Entity(..), EntityField, PersistEntity, PersistField)
-import GHC.TypeLits
+import           Data.Bifunctor                                       (first)
+import           Data.Kind                                            (Constraint)
+import           Data.Proxy
+import qualified Data.Text.Lazy.Builder                               as TLB
+import           Database.Esqueleto.Experimental.From
+import           Database.Esqueleto.Experimental.From.SqlSetOperation
+import           Database.Esqueleto.Experimental.ToAlias
+import           Database.Esqueleto.Experimental.ToAliasReference
+import           Database.Esqueleto.Experimental.ToMaybe
+import           Database.Esqueleto.Internal.Internal                 hiding
+                                                                      (From (..),
+                                                                       from,
+                                                                       fromJoin,
+                                                                       on)
+import           Database.Esqueleto.Internal.PersistentImport         (Entity (..),
+                                                                       EntityField,
+                                                                       PersistEntity,
+                                                                       PersistField)
+import           GHC.TypeLits
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
 -- that have been joined together.
@@ -46,6 +51,9 @@ instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
     toMaybe (a :& b) = (toMaybe a :& toMaybe b)
 
+class ValidOnClause a
+instance {-# OVERLAPPABLE #-} ToFrom a a' => ValidOnClause a
+instance ValidOnClause (a -> SqlQuery b)
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -57,7 +65,7 @@ instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
-on :: ToFrom a a' => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
+on :: ValidOnClause a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
 on = (,)
 infix 9 `on`
 
