@@ -16,6 +16,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
 
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
@@ -25,7 +27,6 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
-import Data.Kind (Constraint)
 import Control.Applicative ((<|>))
 import Data.Coerce (Coercible, coerce)
 import Control.Arrow (first, (***))
@@ -268,7 +269,7 @@ orderByExpr orderByType (ERaw m f)
             in uncommas' $ zip (map (<> orderByType) fs) vals
   | otherwise =
       ERaw noMeta $ \_ info ->
-          first (<> orderByType) $ f Never info
+          first (<> orderByType) $ f Parens info
 
 -- | @LIMIT@.  Limit the number of returned rows.
 limit :: Int64 -> SqlQuery ()
@@ -570,15 +571,15 @@ subSelectUnsafe = sub SELECT
 
     ed = entityDef $ getEntityVal $ getProxy field
 
-    dot info fieldDef =
+    dot info fd =
         sourceIdent info <> "." <> fieldIdent
       where
         sourceIdent = fmap fst $ f Never
         fieldIdent 
             | Just baseI <- sqlExprMetaAlias m = 
-                useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+                useIdent info $ aliasedEntityColumnIdent baseI fd
             | otherwise = 
-                fromDBName info (fieldDB fieldDef)
+                fromDBName info (fieldDB fd)
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
@@ -632,9 +633,7 @@ isNothing v =
                         first (parensM p) . flip (,) [] . (intersperseB " AND " . map (<> " IS NULL")) $ fields info
                 Nothing ->
                     ERaw noMeta $ \p info ->
-                        first (parensM p) . isNullExpr $ f Never info
-  where
-    isNullExpr = first (<> " IS NULL")
+                        first (parensM p . (<> " IS NULL")) $ f Never info
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
@@ -930,7 +929,7 @@ in_ :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr Boo
         if b2 == "()" then
             ("FALSE", [])
         else 
-            (b1 <> " IN " <> b2, vals1 <> vals2)
+            (parensM p (b1 <> " IN " <> b2), vals1 <> vals2)
 
 -- | @NOT IN@ operator.
 notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr Bool
@@ -938,7 +937,11 @@ notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr B
     ERaw noMeta $ \p info ->
         let (b1, vals1) = v Parens info 
             (b2, vals2) = list Parens info 
-        in (b1 <> " NOT IN " <> b2, vals1 <> vals2)
+        in
+        if b2 == "()" then
+            ("FALSE", [])
+        else 
+            (parensM p (b1 <> " NOT IN " <> b2), vals1 <> vals2)
 
 -- | @EXISTS@ operator.  For example:
 --
@@ -953,14 +956,14 @@ notIn :: PersistField typ => SqlExpr typ -> SqlExpr (ValueList typ) -> SqlExpr B
 exists :: SqlQuery () -> SqlExpr Bool
 exists q = ERaw noMeta $ \p info ->    
     let ERaw _ f = existsHelper q
-        (b, vals) = f Never info
+        (b, vals) = f Parens info
     in ( parensM p $ "EXISTS " <> b, vals)
 
 -- | @NOT EXISTS@ operator.
 notExists :: SqlQuery () -> SqlExpr Bool
 notExists q = ERaw noMeta $ \p info ->    
     let ERaw _ f = existsHelper q 
-        (b, vals) = f Never info
+        (b, vals) = f Parens info
     in ( parensM p $ "NOT EXISTS " <> b, vals)
 
 -- | @SET@ clause used on @UPDATE@s.  Note that while it's not
@@ -2107,7 +2110,7 @@ setAux field value = \ent -> ERaw noMeta $ \_ info ->
     in (fieldName info field <> " = " <> valueToSet, valueVals)
 
 sub :: (SqlSelect (SqlExpr a) r, PersistField a) => Mode -> SqlQuery (SqlExpr a) -> SqlExpr a
-sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info query
+sub mode query = ERaw noMeta $ \p info -> first (parensM p) $ toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
 fromDBName (conn, _) = TLB.fromText . connEscapeName conn
@@ -2254,7 +2257,7 @@ unsafeSqlFunction
     :: UnsafeSqlFunctionArgument a
     => TLB.Builder -> a -> SqlExpr b
 unsafeSqlFunction name arg =
-    ERaw noMeta $ \p info ->
+    ERaw noMeta $ \_ info ->
         let (argsTLB, argsVals) =
               uncommas' $ map (valueToFunctionArg info) $ toArgList arg
         in
@@ -2280,8 +2283,8 @@ unsafeSqlFunctionParens
     :: UnsafeSqlFunctionArgument a
     => TLB.Builder -> a -> SqlExpr b
 unsafeSqlFunctionParens name arg =
-    ERaw noMeta $ \p info ->
-        let valueToFunctionArgParens (ERaw _ f) = f Never info
+    ERaw noMeta $ \_ info ->
+        let valueToFunctionArgParens (ERaw _ f) = f Parens info
             (argsTLB, argsVals) =
                 uncommas' $ map valueToFunctionArgParens $ toArgList arg
         in
