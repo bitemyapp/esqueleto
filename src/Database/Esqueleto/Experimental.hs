@@ -53,6 +53,8 @@ module Database.Esqueleto.Experimental
     , with
     , withRecursive
 
+    , agg
+
       -- ** Internals
     , From(..)
     , ToMaybe(..)
@@ -219,9 +221,13 @@ module Database.Esqueleto.Experimental
     , module Database.Esqueleto.Internal.PersistentImport
     ) where
 
-import Database.Esqueleto.Internal.Internal hiding (From, from, on)
+import Data.Coerce
+import Database.Esqueleto.Internal.Internal hiding
+       (From, from, groupBy, on, sum_, (?.), (^.))
+import qualified Database.Esqueleto.Internal.Internal as I ((?.), (^.))
 import Database.Esqueleto.Internal.PersistentImport
 
+import Database.Esqueleto.Experimental.Aggregates
 import Database.Esqueleto.Experimental.From
 import Database.Esqueleto.Experimental.From.CommonTableExpression
 import Database.Esqueleto.Experimental.From.Join
@@ -560,4 +566,5 @@ import Database.Esqueleto.Experimental.ToMaybe
 --   (SELECT b.some_col FROM b)
 -- )
 -- @
+--
 --

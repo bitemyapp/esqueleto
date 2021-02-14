@@ -1,25 +1,25 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE ConstraintKinds            #-}
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE DerivingStrategies         #-}
-{-# LANGUAGE EmptyDataDecls             #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PartialTypeSignatures      #-}
-{-# LANGUAGE QuasiQuotes                #-}
-{-# LANGUAGE Rank2Types                 #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeApplications           #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -62,41 +62,38 @@ module Common.Test
     , Key(..)
     ) where
 
-import           Control.Monad                          (forM_, replicateM,
-                                                         replicateM_, void)
-import           Control.Monad.Catch                    (MonadCatch)
-import           Control.Monad.Reader                   (ask)
-import           Data.Either
-import           Data.Time
+import Control.Monad (forM_, replicateM, replicateM_, void)
+import Control.Monad.Catch (MonadCatch)
+import Control.Monad.Reader (ask)
+import Data.Either
+import Data.Time
 #if __GLASGOW_HASKELL__ >= 806
-import           Control.Monad.Fail                     (MonadFail)
+import Control.Monad.Fail (MonadFail)
 #endif
-import           Control.Monad.IO.Class                 (MonadIO (liftIO))
-import           Control.Monad.Logger                   (MonadLogger (..),
-                                                         NoLoggingT,
-                                                         runNoLoggingT)
-import           Control.Monad.Trans.Reader             (ReaderT)
-import qualified Data.Attoparsec.Text                   as AP
-import           Data.Char                              (toLower, toUpper)
-import           Data.Monoid                            ((<>))
-import           Database.Esqueleto
-import           Database.Esqueleto.Experimental        hiding (from, on)
-import qualified Database.Esqueleto.Experimental        as Experimental
-import           Database.Persist.TH
-import           Test.Hspec
-import           UnliftIO
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Logger (MonadLogger(..), NoLoggingT, runNoLoggingT)
+import Control.Monad.Trans.Reader (ReaderT)
+import qualified Data.Attoparsec.Text as AP
+import Data.Char (toLower, toUpper)
+import Data.Monoid ((<>))
+import Database.Esqueleto
+import Database.Esqueleto.Experimental hiding
+       (countRows_, from, groupBy, on, sum_, (?.), (^.))
+import qualified Database.Esqueleto.Experimental as EX
+import Database.Persist.TH
+import Test.Hspec
+import UnliftIO
 
-import           Data.Conduit                           (ConduitT, runConduit,
-                                                         (.|))
-import qualified Data.Conduit.List                      as CL
-import qualified Data.List                              as L
-import qualified Data.Set                               as S
-import qualified Data.Text                              as Text
-import qualified Data.Text.Internal.Lazy                as TL
-import qualified Data.Text.Lazy.Builder                 as TLB
+import Data.Conduit (ConduitT, runConduit, (.|))
+import qualified Data.Conduit.List as CL
+import qualified Data.List as L
+import qualified Data.Set as S
+import qualified Data.Text as Text
+import qualified Data.Text.Internal.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql        as EI
-import qualified UnliftIO.Resource                      as R
+import qualified Database.Esqueleto.Internal.Sql as EI
+import qualified UnliftIO.Resource as R
 
 -- Test schema
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
@@ -458,10 +455,10 @@ testSubSelect run = do
             eres <- try $ run $ do
                 setup
                 bad <- select $
-                    from $ \n -> do
+                    from $ \(n :: SqlExpr (Entity Numbers)) -> do
                     pure $ (,) (n ^. NumbersInt) $
                         subSelectUnsafe $
-                        from $ \n' -> do
+                        from $ \(n' :: SqlExpr (Entity Numbers)) -> do
                         pure (just (n' ^. NumbersDouble))
                 good <- select $
                     from $ \n -> do
@@ -484,10 +481,10 @@ testSubSelect run = do
             eres <- try $ run $ do
                 setup
                 select $
-                    from $ \n -> do
+                    from $ \(n :: SqlExpr (Entity Numbers)) -> do
                     pure $ (,) (n ^. NumbersInt) $
                         subSelectUnsafe $
-                        from $ \n' -> do
+                        from $ \(n' :: SqlExpr (Entity Numbers)) -> do
                         where_ $ val False
                         pure (n' ^. NumbersDouble)
             case eres of
@@ -501,14 +498,14 @@ testSelectSource run = do
     describe "selectSource" $ do
         it "works for a simple example" $ run $ do
             let query = selectSource $
-                        Experimental.from $ Table @Person
+                        EX.from $ Table @Person
             p1e <- insert' p1
             ret <- runConduit $ query .| CL.consume
             liftIO $ ret `shouldBe` [ p1e ]
 
         it "can run a query many times" $ run $ do
             let query = selectSource $
-                        Experimental.from $ Table @Person
+                        EX.from $ Table @Person
             p1e <- insert' p1
             ret0 <- runConduit $ query .| CL.consume
             ret1 <- runConduit $ query .| CL.consume
@@ -537,7 +534,7 @@ testSelectFrom run = do
     describe "select/from" $ do
         it "works for a simple example" $ run $ do
             p1e <- insert' p1
-            ret <- select $ Experimental.from $ Table @Person
+            ret <- select $ EX.from $ Table @Person
             liftIO $ ret `shouldBe` [ p1e ]
 
         it "works for a simple self-join (one entity)" $ run $ do
@@ -545,7 +542,7 @@ testSelectFrom run = do
             ret <-
                 select $ do
                 person1 :& person2 <-
-                    Experimental.from $ Table @Person
+                    EX.from $ Table @Person
                     `crossJoin` Table @Person
                 return (person1, person2)
             liftIO $ ret `shouldBe` [ (p1e, p1e) ]
@@ -556,7 +553,7 @@ testSelectFrom run = do
             ret <-
                 select $ do
                 person1 :& person2 <-
-                    Experimental.from $ Table @Person
+                    EX.from $ Table @Person
                     `crossJoin` Table @Person
                 return (person1, person2)
             liftIO $
@@ -672,7 +669,7 @@ testSelectFrom run = do
                 number = 101
                 Right thePk = keyFromValues [toPersistValue number]
             fcPk <- insert fc
-            [Entity _ ret] <- select $ Experimental.from $ Table @Frontcover
+            [Entity _ ret] <- select $ EX.from $ Table @Frontcover
             liftIO $ do
                 ret `shouldBe` fc
                 fcPk `shouldBe` thePk
@@ -879,9 +876,9 @@ testSelectSubQuery run = describe "select subquery" $ do
     it "works" $ run $ do
         _ <- insert' p1
         let q = do
-                p <- Experimental.from $ Table @Person
+                p <- EX.from $ Table @Person
                 return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ Experimental.from q
+        ret <- select $ EX.from q
         liftIO $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
     it "supports sub-selecting Maybe entities" $ run $ do
@@ -890,11 +887,11 @@ testSelectSubQuery run = describe "select subquery" $ do
         l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
         let l1WithDeeds = do d <- l1Deeds
                              pure (l1e, Just d)
-        let q = Experimental.from $ do
+        let q = EX.from $ do
                   (lords :& deeds) <-
-                      Experimental.from $ Table @Lord
+                      EX.from $ Table @Lord
                       `LeftOuterJoin` Table @Deed
-                      `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                      `EX.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
                   pure (lords, deeds)
 
         ret <- select q
@@ -905,8 +902,8 @@ testSelectSubQuery run = describe "select subquery" $ do
         _ <- insert' p3
         let q = do
                 (name, age) <-
-                  Experimental.from $ SubQuery $ do
-                      p <- Experimental.from $ Table @Person
+                  EX.from $ SubQuery $ do
+                      p <- EX.from $ Table @Person
                       return ( p ^. PersonName, p ^. PersonAge)
                 orderBy [ asc age ]
                 pure name
@@ -920,13 +917,13 @@ testSelectSubQuery run = describe "select subquery" $ do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
+                (lord :& deed) <- EX.from $ Table @Lord
                                         `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord :& deed) ->
+                                  `EX.on` (\(lord :& deed) ->
                                                        lord ^. LordId ==. deed ^. DeedOwnerId)
                 return (lord ^. LordId, deed ^. DeedId)
             q' = do
-                 (lordId, deedId) <- Experimental.from $ SubQuery q
+                 (lordId, deedId) <- EX.from $ SubQuery q
                  groupBy (lordId)
                  return (lordId, count deedId)
         (ret :: [(Value (Key Lord), Value Int)]) <- select q'
@@ -941,15 +938,15 @@ testSelectSubQuery run = describe "select subquery" $ do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
+                (lord :& deed) <- EX.from $ Table @Lord
                                         `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord :& deed) ->
+                                  `EX.on` (\(lord :& deed) ->
                                                       lord ^. LordId ==. deed ^. DeedOwnerId)
-                groupBy (lord ^. LordId)
+                groupBy (lord)
                 return (lord ^. LordId, count (deed ^. DeedId))
 
         (ret :: [(Value Int)]) <- select $ do
-                 (lordId, deedCount) <- Experimental.from $ SubQuery q
+                 (lordId, deedCount) <- EX.from $ SubQuery q
                  where_ $ deedCount >. val (3 :: Int)
                  return (count lordId)
 
@@ -962,9 +959,9 @@ testSelectSubQuery run = describe "select subquery" $ do
 
         mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
         let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
-                        `InnerJoin` (Experimental.from $ Table @Deed)
-                        `Experimental.on` (\(lord :& deed) ->
+                (lord :& deed) <- EX.from $ Table @Lord
+                        `InnerJoin` (EX.from $ Table @Deed)
+                        `EX.on` (\(lord :& deed) ->
                                              lord ^. LordId ==. deed ^. DeedOwnerId)
                 groupBy (lord ^. LordId)
                 return (lord ^. LordId, count (deed ^. DeedId))
@@ -976,11 +973,11 @@ testSelectSubQuery run = describe "select subquery" $ do
         l1k <- insert l1
         l3k <- insert l3
         let q = do
-                (lord :& (_, dogCounts)) <- Experimental.from $ Table @Lord
+                (lord :& (_, dogCounts)) <- EX.from $ Table @Lord
                         `LeftOuterJoin` do
-                            lord <- Experimental.from $ Table @Lord
+                            lord <- EX.from $ Table @Lord
                             pure (lord ^. LordId, lord ^. LordDogs)
-                        `Experimental.on` (\(lord :& (lordId, _)) ->
+                        `EX.on` (\(lord :& (lordId, _)) ->
                                              just (lord ^. LordId) ==. lordId)
                 groupBy (lord ^. LordId, dogCounts)
                 return (lord ^. LordId, dogCounts)
@@ -990,19 +987,19 @@ testSelectSubQuery run = describe "select subquery" $ do
     it "unions" $ run $ do
           _ <- insert p1
           _ <- insert p2
-          let q = Experimental.from $
+          let q = EX.from $
                   (do
-                    p <- Experimental.from $ Table @Person
+                    p <- EX.from $ Table @Person
                     where_ $ not_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
                   `union_`
                   (do
-                    p <- Experimental.from $ Table @Person
+                    p <- EX.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
                   `union_`
                   (do
-                    p <- Experimental.from $ Table @Person
+                    p <- EX.from $ Table @Person
                     where_ $ isNothing $ p ^. PersonAge
                     return (p ^. PersonName))
           names <- select q
@@ -2350,7 +2347,7 @@ testExperimentalFrom run = do
         _   <- insert' p2
         p3e <- insert' p3
         peopleWithAges <- select $ do
-          people <- Experimental.from $ Table @Person
+          people <- EX.from $ Table @Person
           where_ $ not_ $ isNothing $ people ^. PersonAge
           return people
         liftIO $ peopleWithAges `shouldMatchList` [p1e, p3e]
@@ -2363,9 +2360,9 @@ testExperimentalFrom run = do
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
           (lords :& deeds) <-
-            Experimental.from $ Table @Lord
+            EX.from $ Table @Lord
                     `InnerJoin` Table @Deed
-              `Experimental.on` (\(l :& d) -> l ^. LordId ==. d ^. DeedOwnerId)
+              `EX.on` (\(l :& d) -> l ^. LordId ==. d ^. DeedOwnerId)
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, d1e)
                                              , (l1e, d2e)
@@ -2379,9 +2376,9 @@ testExperimentalFrom run = do
         d2e <- insert' $ Deed "2" (entityKey l1e)
         lordDeeds <- select $ do
           (lords :& deeds) <-
-            Experimental.from $ Table @Lord
+            EX.from $ Table @Lord
                 `LeftOuterJoin` Table @Deed
-                  `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                  `EX.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
 
           pure (lords, deeds)
         liftIO $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
@@ -2393,8 +2390,8 @@ testExperimentalFrom run = do
         insert_ l1
         insert_ l2
         insert_ l3
-        delete $ void $ Experimental.from $ Table @Lord
-        lords <- select $ Experimental.from $ Table @Lord
+        delete $ void $ EX.from $ Table @Lord
+        lords <- select $ EX.from $ Table @Lord
         liftIO $ lords `shouldMatchList` []
 
     it "supports implicit cross joins" $ do
@@ -2402,11 +2399,11 @@ testExperimentalFrom run = do
         l1e <- insert' l1
         l2e <- insert' l2
         ret <- select $ do
-          lords1 <- Experimental.from $ Table @Lord
-          lords2 <- Experimental.from $ Table @Lord
+          lords1 <- EX.from $ Table @Lord
+          lords2 <- EX.from $ Table @Lord
           pure (lords1, lords2)
         ret2 <- select $ do
-          (lords1 :& lords2) <- Experimental.from $ Table @Lord `CrossJoin` Table @Lord
+          (lords1 :& lords2) <- EX.from $ Table @Lord `CrossJoin` Table @Lord
           pure (lords1,lords2)
         liftIO $ ret `shouldMatchList` ret2
         liftIO $ ret `shouldMatchList` [ (l1e, l1e)
@@ -2420,12 +2417,12 @@ testExperimentalFrom run = do
       run $ void $ do
         let q = do
               (persons :& profiles :& posts) <-
-                Experimental.from $  Table @Person
+                EX.from $  Table @Person
                          `InnerJoin` Table @Profile
-                   `Experimental.on` (\(people :& profiles) ->
+                   `EX.on` (\(people :& profiles) ->
                                         people ^. PersonId ==. profiles ^. ProfilePerson)
                      `LeftOuterJoin` Table @BlogPost
-                   `Experimental.on` (\(people :& _ :& posts) ->
+                   `EX.on` (\(people :& _ :& posts) ->
                                         just (people ^. PersonId) ==. posts ?. BlogPostAuthorId)
               pure (persons, posts, profiles)
         --error . show =<< renderQuerySelect q
@@ -2437,7 +2434,7 @@ testExperimentalFrom run = do
         insert_ p3
         -- Pretend this isnt all posts
         upperNames <- select $ do
-          author <- Experimental.from $ SelectQuery $ Experimental.from $ Table @Person
+          author <- EX.from $ SelectQuery $ EX.from $ Table @Person
           pure $ upper_ $ author ^. PersonName
 
         liftIO $ upperNames `shouldMatchList` [ Value "JOHN"

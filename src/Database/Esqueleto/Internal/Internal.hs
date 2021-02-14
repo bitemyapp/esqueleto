@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -24,6 +25,7 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Kind (Constraint)
 import Control.Applicative ((<|>))
 import Data.Coerce (Coercible, coerce)
 import Control.Arrow (first, (***))
@@ -534,14 +536,14 @@ subSelectForeign expr foreignKey k =
 subSelectUnsafe :: (SqlSelect (SqlExpr a) a, PersistField a) => SqlQuery (SqlExpr a) -> SqlExpr a
 subSelectUnsafe = sub SELECT
 
--- | Project a field of an entity.
-(^.) :: forall typ val . (PersistEntity val, PersistField typ)
+
+(^.) :: (PersistEntity val, PersistField typ)
     => SqlExpr (Entity val)
     -> EntityField val typ
     -> SqlExpr typ
-ERaw m f ^. field
+(ERaw m f) ^. field
     | isIdField field = idFieldValue
-    | Just alias <- sqlExprMetaAlias m =
+    | Just alias <- sqlExprMetaAlias m = 
         ERaw noMeta $ \_ info -> 
             f Never info <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef), [])
     | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
@@ -563,7 +565,10 @@ ERaw m f ^. field
                     \p info -> (parensM p $ uncommas $ dot info <$> idFields, [])
 
 
-    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
+    getProxy :: EntityField ent val -> Proxy (SqlExpr (Entity ent))
+    getProxy = const Proxy
+
+    ed = entityDef $ getEntityVal $ getProxy field
 
     dot info fieldDef =
         sourceIdent info <> "." <> fieldIdent
@@ -1135,6 +1140,13 @@ data SomeValue where
 -- @'groupBy' (foo '^.' FooId, foo '^.' FooName, foo '^.' FooType)@.
 class ToSomeValues a where
     toSomeValues :: a -> [SomeValue]
+
+instance {-# INCOHERENT #-} PersistField a => ToSomeValues (SqlExpr a) where
+    toSomeValues a = [SomeValue a]
+instance PersistEntity a => ToSomeValues (SqlExpr (Entity a)) where
+    toSomeValues a = [SomeValue $ a ^. persistIdField]
+instance PersistEntity a => ToSomeValues (SqlExpr (Maybe (Entity a))) where
+    toSomeValues a = [SomeValue $ a ?. persistIdField]
 
 instance
     ( ToSomeValues a
@@ -2077,8 +2089,6 @@ parensM Parens = parens
 
 data OrderByType = ASC | DESC
 
-instance ToSomeValues (SqlExpr a) where
-  toSomeValues a = [SomeValue a]
 
 fieldName
     :: (PersistEntity val, PersistField typ)
@@ -3042,13 +3052,8 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
             ]
     sqlSelectColCount = uncurry (+) . (sqlSelectColCount *** sqlSelectColCount) . fromTupleP
     sqlSelectProcessRow p =
-      let x = getType processRow
-          getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
-          getType = const Proxy
-
-          colCountFst = sqlSelectColCount x
-
-          (fstP, sndP) = fromTupleP p
+      let (fstP, sndP) = fromTupleP p
+          colCountFst = sqlSelectColCount fstP
           processRow row =
               let (rowFst, rowSnd) = splitAt colCountFst row
               in (,) <$> sqlSelectProcessRow fstP rowFst

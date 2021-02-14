@@ -30,6 +30,7 @@ library
     exposed-modules:
         Database.Esqueleto
         Database.Esqueleto.Experimental
+        Database.Esqueleto.Experimental.Aggregates
         Database.Esqueleto.Internal.Language
         Database.Esqueleto.Internal.Sql
         Database.Esqueleto.Internal.Internal

@@ -10,22 +10,21 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
 module Database.Esqueleto.Experimental.From.Join
     where
 
-import Data.Bifunctor (first)
+import Control.Arrow (first)
 import Data.Kind (Constraint)
 import Data.Proxy
 import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Experimental.From
-import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
 import Database.Esqueleto.Internal.Internal hiding
        (From(..), from, fromJoin, on)
-import Database.Esqueleto.Internal.PersistentImport
-       (Entity(..), EntityField, PersistEntity, PersistField)
 import GHC.TypeLits
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
@@ -40,29 +39,40 @@ import GHC.TypeLits
 -- See the examples at the beginning of this module to see how this
 -- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
+    deriving (Show, Eq)
 infixl 2 :&
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
     toMaybe (a :& b) = (toMaybe a :& toMaybe b)
 
-class ValidOnClause a
+fromInductiveTupleP :: Proxy (a :& b) -> Proxy (a, b)
+fromInductiveTupleP = const Proxy
+toInductiveTuple :: (a, b) -> (a :& b)
+toInductiveTuple (a, b) = a :& b
+
+instance (SqlSelect a a', SqlSelect b b') => SqlSelect (a :& b) (a' :& b') where
+    sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
+    sqlSelectColCount  = sqlSelectColCount . fromInductiveTupleP
+    sqlSelectProcessRow p = fmap toInductiveTuple . sqlSelectProcessRow (fromInductiveTupleP p)
+
+class ValidOnClause a where
+    -- | An @ON@ clause that describes how two tables are related. This should be
+    -- used as an infix operator after a 'JOIN'. For example,
+    --
+    -- @
+    -- select $
+    -- from $ table \@Person
+    -- \`innerJoin\` table \@BlogPost
+    -- \`on\` (\\(p :& bP) ->
+    --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
+    -- @
+    on :: a -> (b -> SqlExpr Bool) -> (a, b -> SqlExpr Bool)
+    on = (,)
+infix 9 `on`
+
 instance {-# OVERLAPPABLE #-} ToFrom a a' => ValidOnClause a
 instance ValidOnClause (a -> SqlQuery b)
-
--- | An @ON@ clause that describes how two tables are related. This should be
--- used as an infix operator after a 'JOIN'. For example,
---
--- @
--- select $
--- from $ table \@Person
--- \`innerJoin\` table \@BlogPost
--- \`on\` (\\(p :& bP) ->
---         p ^. PersonId ==. bP ^. BlogPostAuthorId)
--- @
-on :: ValidOnClause a => a -> (b -> SqlExpr Bool) -> (a, b -> SqlExpr Bool)
-on = (,)
-infix 9 `on`
 
 type family ErrorOnLateral a :: Constraint where
   ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
