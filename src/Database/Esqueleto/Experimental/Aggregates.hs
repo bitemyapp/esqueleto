@@ -55,15 +55,15 @@ instance SqlExprEntity SqlExpr where
     (^.) = (I.^.)
     (?.) = (I.?.)
 
-newtype SqlAggregate a = SqlAggregate { unsafeSqlAggregate :: SqlExpr a }
-deriving via SqlExpr instance SqlExprEntity SqlAggregate
-instance forall a. PersistField a => SqlSelect (SqlAggregate a) a where
+newtype SqlAggregate source a = SqlAggregate { unsafeSqlAggregate :: SqlExpr a }
+deriving via SqlExpr instance SqlExprEntity (SqlAggregate source)
+instance forall a source. PersistField a => SqlSelect (SqlAggregate source a) a where
     sqlSelectCols info (SqlAggregate e) = sqlSelectCols info e
     sqlSelectColCount = const 1
     sqlSelectProcessRow _ = sqlSelectProcessRow (Proxy :: Proxy (SqlExpr a))
-instance SqlQueryHaving (SqlAggregate Bool) where
+instance SqlQueryHaving (SqlAggregate source Bool) where
     having expr = Q $ W.tell mempty { sdHavingClause = I.Where (coerce expr) }
-instance SqlQueryHaving (SqlAggregate (Maybe Bool)) where
+instance SqlQueryHaving (SqlAggregate source (Maybe Bool)) where
     having expr = Q $ W.tell mempty { sdHavingClause = I.Where (coerce expr) }
 
 test :: (PersistEntity ent, PersistField a, PersistField b, PersistField c)
@@ -76,8 +76,6 @@ test ent field y other = do
     groupBy (ent, y) $ \(ent', y') ->
         pure (ent' ?. field, y', sum_ other, countRows_)
 
-countRows_ :: (PersistField n, Integral n) => SqlAggregate n
-countRows_ = SqlAggregate $ ERaw noMeta $ \_ _ -> ("COUNT(*)", [])
 
 -- Tuple magic, only SqlExprs are on the leaves.
 -- The Coercible instance from the SqlExpr a -> SqlExpr b allows 0 cost casting
@@ -88,8 +86,9 @@ class Coercible a r => Aggregateable a r | a -> r, r -> a where
     fromAggregate :: r -> a
     fromAggregate = coerce
 
+data GroupedValue
 instance Aggregateable () () where
-instance Aggregateable (SqlExpr a) (SqlAggregate a) where
+instance Aggregateable (SqlExpr a) (SqlAggregate GroupedValue a) where
 instance (Aggregateable a ra, Aggregateable b rb) => Aggregateable (a,b) (ra, rb) where
 instance
     ( Aggregateable a ra
@@ -137,9 +136,6 @@ instance
     , Aggregateable h rh
     ) => Aggregateable (a,b,c,d,e,f,g,h) (ra,rb,rc,rd,re,rf,rg,rh) where
 
-sum_ :: (PersistField a, PersistField n, Integral n) => SqlExpr a -> SqlAggregate (Maybe n)
-sum_ = coerce . unsafeSqlFunction "SUM"
-
 groupBy :: ( ToSomeValues a
            , Aggregateable a a'
            , Aggregateable b b'
@@ -147,3 +143,11 @@ groupBy :: ( ToSomeValues a
 groupBy a f = do
     Q $ W.tell $ mempty{sdGroupByClause = GroupBy $ toSomeValues a }
     fmap fromAggregate $ f $ toAggregate a
+
+-- Aggregation Functions
+countRows_ :: forall n s. (PersistField n, Integral n) => SqlAggregate s n
+countRows_ = SqlAggregate $ ERaw noMeta $ \_ _ -> ("COUNT(*)", [])
+
+sum_ :: forall n a w. (PersistField a, PersistField n, Integral n) => SqlExpr a -> SqlAggregate w (Maybe n)
+sum_ = coerce . unsafeSqlFunction "SUM"
+

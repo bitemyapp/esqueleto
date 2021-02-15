@@ -90,7 +90,7 @@ module Database.Esqueleto.Experimental
     , joinV
     , withNonNull
 
-    , countRows
+    , countRows_
     , count
     , countDistinct
 

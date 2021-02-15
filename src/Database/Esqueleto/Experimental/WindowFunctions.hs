@@ -253,16 +253,9 @@ unboundedFollowing = FrameRangeFollowing FrameRangeUnbounded
 currentRow :: FrameRange
 currentRow = FrameRangeCurrentRow
 
+data WindowAggregate
 class Over expr where
-    over_ :: RenderWindow window => expr a -> window -> SqlAggregate (WindowedValue a)
-
-data WindowedValue a = WindowedValue { unWindowedValue :: a }
-instance PersistField a => SqlSelect (SqlExpr (WindowedValue a)) (WindowedValue a) where
-    sqlSelectCols info expr = sqlSelectCols info (coerce expr :: SqlExpr a)
-    sqlSelectColCount = const 1
-    sqlSelectProcessRow _ [pv] = WindowedValue <$> fromPersistValue pv
-    sqlSelectProcessRow _ pvs  = WindowedValue <$> fromPersistValue (PersistList pvs)
-
+    over_ :: RenderWindow window => expr a -> window -> SqlAggregate WindowAggregate a
 
 newtype WindowExpr a = WindowExpr { unsafeWindowExpr :: SqlExpr a }
 instance Over WindowExpr where
@@ -271,4 +264,7 @@ instance Over WindowExpr where
             (w, vw) = renderWindow info window
         in (parensM p $ b <> " OVER " <> parens w , v <> vw)
 
-deriving via WindowExpr instance Over SqlAggregate
+-- Only universally quantified SqlAggregate's can be used
+-- TODO Add nicer type error
+data NoWindow
+deriving via WindowExpr instance (s ~ NoWindow) => Over (SqlAggregate s)
