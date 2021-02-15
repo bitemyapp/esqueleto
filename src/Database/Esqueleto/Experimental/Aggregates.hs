@@ -16,11 +16,13 @@ module Database.Esqueleto.Experimental.Aggregates
 import Control.Monad.IO.Class
 import qualified Control.Monad.Trans.Writer as W
 import Data.Coerce (Coercible, coerce)
+import Data.Proxy
 import Database.Esqueleto.Internal.Internal
        ( GroupByClause(..)
        , SideData(..)
        , SqlExpr(..)
        , SqlQuery(..)
+       , SqlQueryHaving(..)
        , SqlSelect(..)
        , ToSomeValues(..)
        , noMeta
@@ -53,8 +55,16 @@ instance SqlExprEntity SqlExpr where
     (^.) = (I.^.)
     (?.) = (I.?.)
 
-newtype SqlAggregate a = SqlAggregate { agg :: SqlExpr a }
+newtype SqlAggregate a = SqlAggregate { unsafeSqlAggregate :: SqlExpr a }
 deriving via SqlExpr instance SqlExprEntity SqlAggregate
+instance forall a. PersistField a => SqlSelect (SqlAggregate a) a where
+    sqlSelectCols info (SqlAggregate e) = sqlSelectCols info e
+    sqlSelectColCount = const 1
+    sqlSelectProcessRow _ = sqlSelectProcessRow (Proxy :: Proxy (SqlExpr a))
+instance SqlQueryHaving (SqlAggregate Bool) where
+    having expr = Q $ W.tell mempty { sdHavingClause = I.Where (coerce expr) }
+instance SqlQueryHaving (SqlAggregate (Maybe Bool)) where
+    having expr = Q $ W.tell mempty { sdHavingClause = I.Where (coerce expr) }
 
 test :: (PersistEntity ent, PersistField a, PersistField b, PersistField c)
      => SqlExpr (Maybe (Entity ent))

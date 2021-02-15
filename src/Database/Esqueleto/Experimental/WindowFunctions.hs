@@ -62,7 +62,7 @@ example =
         <> orderBy_ [asc (val @Int64 10)]
         )
 
-data NeedsWindow a
+example2 = countRows_ @Int64 `over_` ()
 
 lag :: SqlExpr (Value a) -> WindowExpr a
 lag v = lag_ v Nothing Nothing
@@ -254,7 +254,7 @@ currentRow :: FrameRange
 currentRow = FrameRangeCurrentRow
 
 class Over expr where
-    over_ :: RenderWindow window => expr a -> window -> SqlExpr (WindowedValue a)
+    over_ :: RenderWindow window => expr a -> window -> SqlAggregate (WindowedValue a)
 
 data WindowedValue a = WindowedValue { unWindowedValue :: a }
 instance PersistField a => SqlSelect (SqlExpr (WindowedValue a)) (WindowedValue a) where
@@ -266,7 +266,7 @@ instance PersistField a => SqlSelect (SqlExpr (WindowedValue a)) (WindowedValue 
 
 newtype WindowExpr a = WindowExpr { unsafeWindowExpr :: SqlExpr a }
 instance Over WindowExpr where
-    (WindowExpr (ERaw _ f)) `over_` window = ERaw noMeta $ \p info ->
+    (WindowExpr (ERaw _ f)) `over_` window = SqlAggregate $ ERaw noMeta $ \p info ->
         let (b, v) = f Never info
             (w, vw) = renderWindow info window
         in (parensM p $ b <> " OVER " <> parens w , v <> vw)

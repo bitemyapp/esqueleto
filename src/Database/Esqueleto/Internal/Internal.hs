@@ -377,11 +377,16 @@ distinctOnOrderBy exprs act =
 rand :: SqlExpr OrderBy
 rand = ERaw noMeta $ \_ _ -> ("RANDOM()", []) 
 
--- | @HAVING@.
---
--- @since 1.2.2
-having :: SqlExpr Bool -> SqlQuery ()
-having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
+class SqlQueryHaving expr where
+    -- | @HAVING@.
+    --
+    -- @since 1.2.2
+    having :: expr -> SqlQuery ()
+
+instance SqlQueryHaving (SqlExpr Bool) where
+    having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
+instance SqlQueryHaving (SqlExpr (Maybe Bool)) where
+    having expr = Q $ W.tell mempty { sdHavingClause = Where (coerce expr) }
 
 -- | Add a locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.

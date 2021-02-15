@@ -53,8 +53,6 @@ module Database.Esqueleto.Experimental
     , with
     , withRecursive
 
-    , agg
-
       -- ** Internals
     , From(..)
     , ToMaybe(..)
