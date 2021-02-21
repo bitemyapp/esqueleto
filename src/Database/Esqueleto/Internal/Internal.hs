@@ -2272,7 +2272,7 @@ unsafeSqlFunctionParens name arg =
         let valueToFunctionArgParens (ERaw _ f) = f Never info
             (argsTLB, argsVals) =
                 uncommas' $ map valueToFunctionArgParens $ toArgList arg
-
+        in (name <> parens argsTLB, argsVals)
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
