@@ -2121,6 +2121,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
     mapWhen []    _ _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
     mapWhen when' p info = foldl (foldHelp p info) (mempty, mempty) when'
 
+
     foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
     foldHelp p info (b0, vals0) (v1, v2) =
         let (b1, vals1) = valueToSql v1 p info
@@ -2271,8 +2272,7 @@ unsafeSqlFunctionParens name arg =
         let valueToFunctionArgParens (ERaw _ f) = f Never info
             (argsTLB, argsVals) =
                 uncommas' $ map valueToFunctionArgParens $ toArgList arg
-        in
-            (name <> parens argsTLB, argsVals)
+
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
