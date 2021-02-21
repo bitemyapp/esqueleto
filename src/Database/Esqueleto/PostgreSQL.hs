@@ -91,7 +91,7 @@ unsafeSqlAggregateFunction name mode args orderByClauses = ERaw Never $ \info ->
                 [] -> ""
                 (_:_) -> " "
         (argsTLB, argsVals) =
-            uncommas' $ map (\(ERaw _ f) -> f info) $ toArgList args
+            uncommas' $ map (\v -> valueToRawSqlParens SqlFunctionError v info) $ toArgList args
         aggMode =
             case mode of
                 AggModeAll -> ""
