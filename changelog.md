@@ -1,7 +1,7 @@
 3.4.1.1
 =======
 - @MaxGabriel
-  - []()
+  - [#240](https://github.com/bitemyapp/esqueleto/pull/240/files)
     - Improve recommend hlint to avoid doing `x = NULL` SQL queries
 
 3.4.1.0
