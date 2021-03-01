@@ -1,3 +1,9 @@
+3.4.1.1
+=======
+- @MaxGabriel
+  - []()
+    - Improve recommend hlint to avoid doing `x = NULL` SQL queries
+
 3.4.1.0
 =======
 - @arthurxavierx
