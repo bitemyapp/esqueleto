@@ -47,6 +47,7 @@ import Data.Time.Clock (UTCTime)
 import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import Database.Persist.Class (OnlyOneUniqueKey)
+import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -306,10 +307,10 @@ insertSelectWithConflictCount unique query conflictQuery = do
     updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
     entExcluded = EEntity $ I "excluded"
-    tableName = unDBName . entityDB . entityDef
+    tableName = unEntityNameDB . entityDB . entityDef
     entCurrent = EEntity $ I (tableName proxy)
     uniqueDef = toUniqueDef unique
-    constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
+    constraint = TLB.fromText . unConstraintNameDB . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
     renderedUpdates conn = renderUpdates conn updates
     conflict conn = (mconcat ([

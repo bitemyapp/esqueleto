@@ -619,14 +619,14 @@ testArrowJSONB =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= True]) ->. "a")
         "SELECT (? -> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":true}"
+        [ PersistLiteralEscaped "{\"a\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [1 :: Int,2,3]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" ->. 1)
         "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[1,2,3]}"
+        [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
         , PersistText "a"
         , PersistInt64 1 ]
     it "works as expected" $ run $ do
@@ -644,14 +644,14 @@ testArrowText =
       createSaneSQL
         (jsonbVal (object ["a" .= True]) ->>. "a")
         "SELECT (? ->> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":true}"
+        [ PersistLiteralEscaped "{\"a\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [1 :: Int,2,3]]
       createSaneSQL
         (jsonbVal obj ->. "a" ->>. 1)
         "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[1,2,3]}"
+        [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
         , PersistText "a"
         , PersistInt64 1 ]
     it "works as expected" $ run $ do
@@ -670,14 +670,14 @@ testHashArrowJSONB =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= True]) #>. list)
         "SELECT (? #> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":true}"
+        [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj #>. ["a","1"] #>. ["b"])
         "SELECT ((? #> ?) #> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
     it "works as expected" $ run $ do
@@ -696,14 +696,14 @@ testHashArrowText =
       createSaneSQL
         (jsonbVal (object ["a" .= True]) #>>. list)
         "SELECT (? #>> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":true}"
+        [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","1"] #>>. ["b"])
         "SELECT ((? #> ?) #>> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
     it "works as expected" $ run $ do
@@ -730,16 +730,16 @@ testInclusion = do
       createSaneSQL
         (jsonbVal (object ["a" .= False, "b" .= True]) @>. jsonbVal (object ["a" .= False]))
         "SELECT (? @> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
-        , PersistDbSpecific "{\"a\":false}" ]
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
+        , PersistLiteralEscaped "{\"a\":false}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj ->. "a" @>. jsonbVal (object ["b" .= True]))
         "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
-        , PersistDbSpecific "{\"b\":true}" ]
+        , PersistLiteralEscaped "{\"b\":true}" ]
     it "works as expected" $ run $ do
       x <- selectJSONwhere $ \v -> v @>. jsonbVal (Number 1)
       y <- selectJSONwhere $ \v -> v @>. jsonbVal (toJSON [object ["a" .= Number 3.14]])
@@ -752,16 +752,16 @@ testInclusion = do
       createSaneSQL
         (jsonbVal (object ["a" .= False]) <@. jsonbVal (object ["a" .= False, "b" .= True]))
         "SELECT (? <@ ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false}"
-        , PersistDbSpecific "{\"a\":false,\"b\":true}" ]
+        [ PersistLiteralEscaped "{\"a\":false}"
+        , PersistLiteralEscaped "{\"a\":false,\"b\":true}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj ->. "a" <@. jsonbVal (object ["b" .= True, "c" .= Null]))
         "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
-        , PersistDbSpecific "{\"b\":true,\"c\":null}" ]
+        , PersistLiteralEscaped "{\"b\":true,\"c\":null}" ]
     it "works as expected" $ run $ do
       x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
       y <- selectJSONwhere $ \v -> v <@. jsonbVal (object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
@@ -777,14 +777,14 @@ testQMark =
       createSaneSQL
         (jsonbVal (object ["a" .= False, "b" .= True]) JSON.?. "a")
         "SELECT (? ?? ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","0"] JSON.?. "b")
         "SELECT ((? #> ?) ?? ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
         , PersistText "b" ]
     it "works as expected" $ run $ do
@@ -802,14 +802,14 @@ testQMarkAny =
       createSaneSQL
         (jsonbVal (object ["a" .= False, "b" .= True]) ?|. ["a","c"])
         "SELECT (? ??| ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","c"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
         "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
         , persistTextArray ["b","c"] ]
     it "works as expected" $ run $ do
@@ -829,14 +829,14 @@ testQMarkAll =
       createSaneSQL
         (jsonbVal (object ["a" .= False, "b" .= True]) ?&. ["a","c"])
         "SELECT (? ??& ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","c"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
         "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
         , persistTextArray ["b","c"] ]
     it "works as expected" $ run $ do
@@ -866,16 +866,16 @@ testConcatenationOperator =
         (jsonbVal (object ["a" .= False, "b" .= True])
             JSON.||. jsonbVal (object ["c" .= Null]))
         "SELECT (? || ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
-        , PersistDbSpecific "{\"c\":null}" ]
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
+        , PersistLiteralEscaped "{\"c\":null}" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" JSON.||. jsonbVal (toJSON [Null]))
         "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
-        , PersistDbSpecific "[null]" ]
+        , PersistLiteralEscaped "[null]" ]
     it "works as expected" $ run $ do
       x <- selectJSON $ \v -> do
           where_ $ v @>. jsonbVal (object [])
@@ -905,14 +905,14 @@ testMinusOperator =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) JSON.-. "a")
         "SELECT (? - ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
         , PersistText "a" ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" JSON.-. 0)
         "SELECT ((? -> ?) - ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , PersistText "a"
         , PersistInt64 0 ]
     it "works as expected" $ run $ do
@@ -943,14 +943,14 @@ testMinusOperatorV10 =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) --. ["a","b"])
         "SELECT (? - ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
         , persistTextArray ["a","b"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj #>. ["a","0"] --. ["b"])
         "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","0"]
         , persistTextArray ["b"] ]
     it "works as expected" $ run $ do
@@ -981,14 +981,14 @@ testHashMinusOperator =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) #-. ["a"])
         "SELECT (? #- ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":false,\"b\":true}"
+        [ PersistLiteralEscaped (encode [])
         , persistTextArray ["a"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" #-. ["0","b"])
         "SELECT ((? -> ?) #- ?)\nFROM \"Json\"\n"
-        [ PersistDbSpecific "{\"a\":[{\"b\":true}]}"
+        [ PersistLiteralEscaped (encode obj)
         , PersistText "a"
         , persistTextArray ["0","b"] ]
     it "works as expected" $ run $ do

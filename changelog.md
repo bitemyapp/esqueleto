@@ -1,3 +1,9 @@
+3.5.0.0
+=======
+- @parsonsmatt
+  - [#???]()
+    - Support `persistent-2.12`
+
 3.4.1.0
 =======
 - @arthurxavierx

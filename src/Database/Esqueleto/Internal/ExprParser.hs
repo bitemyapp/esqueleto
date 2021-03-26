@@ -43,7 +43,7 @@ parseOnExpr sqlBackend text = do
 -- with postgresql, mysql, and sqlite backends.
 mkEscapeChar :: SqlBackend -> Either String Char
 mkEscapeChar sqlBackend =
-    case Text.uncons (connEscapeName sqlBackend (DBName "")) of
+    case Text.uncons (connEscapeRawName sqlBackend "") of
         Nothing ->
             Left "Failed to get an escape character from the SQL backend."
         Just (c, _) ->
