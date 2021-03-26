@@ -240,7 +240,7 @@ withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
   R.runResourceT .
   withMySQLConn defaultConnectInfo
-    { connectHost     = "127.0.0.1"
+    { connectHost     = "localhost"
     , connectUser     = "travis"
     , connectPassword = "esqutest"
     , connectDatabase = "esqutest"
