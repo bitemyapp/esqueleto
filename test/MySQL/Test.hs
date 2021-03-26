@@ -244,5 +244,5 @@ withConn =
     , connectUser     = "travis"
     , connectPassword = "esqutest"
     , connectDatabase = "esqutest"
-    , connectPort     = 33306
+    , connectPort     = 3306
     }
