@@ -100,7 +100,6 @@ test-suite mysql
       , mysql-simple
       , persistent
       , persistent-mysql
-      , persistent-template
       , resourcet >=1.2
       , tagged >=0.2
       , text >=0.11 && <1.3
