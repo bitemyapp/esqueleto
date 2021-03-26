@@ -18,7 +18,7 @@ import Data.Map (Map)
 import Data.Time
 import Control.Arrow ((&&&))
 import Control.Monad (void, when)
-import Control.Monad.Catch (MonadCatch, catch)
+import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
 import Control.Monad.Trans.Reader (ReaderT, ask)
@@ -45,6 +45,7 @@ import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
 import System.Environment
 import Test.Hspec
 import Test.Hspec.QuickCheck
+import qualified Data.ByteString.Lazy as BSL
 
 import Common.Test
 import PostgreSQL.MigrateJSON
@@ -894,9 +895,6 @@ testConcatenationOperator =
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 2
       liftIO $ length w `shouldBe` 7
-      sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v JSON.||. jsonbVal (toJSON $ String "test")
-                 @>. jsonbVal (String "test")
 
 testMinusOperator :: Spec
 testMinusOperator =
@@ -981,14 +979,14 @@ testHashMinusOperator =
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) #-. ["a"])
         "SELECT (? #- ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped (encode [])
+        [ PersistLiteralEscaped (BSL.toStrict $ encode $ object ["a" .= False, "b" .= True])
         , persistTextArray ["a"] ]
     it "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" #-. ["0","b"])
         "SELECT ((? -> ?) #- ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped (encode obj)
+        [ PersistLiteralEscaped (BSL.toStrict $ encode obj)
         , PersistText "a"
         , persistTextArray ["0","b"] ]
     it "works as expected" $ run $ do
@@ -1309,20 +1307,30 @@ fromValue act = from $ \x -> do
 persistTextArray :: [T.Text] -> PersistValue
 persistTextArray = PersistArray . fmap PersistText
 
-sqlFailWith :: (MonadCatch m, MonadIO m) => ByteString -> SqlPersistT (R.ResourceT m) a -> SqlPersistT (R.ResourceT m) ()
+sqlFailWith :: (HasCallStack, MonadCatch m, MonadIO m, Show a) => ByteString -> SqlPersistT (R.ResourceT m) a -> SqlPersistT (R.ResourceT m) ()
 sqlFailWith errState f = do
-    p <- (f >> return True) `catch` success
-    when p failed
-  where success SqlError{sqlState}
-          | sqlState == errState = return False
-          | otherwise = do
-              liftIO $ expectationFailure $ T.unpack $ T.concat
-                  [ "should fail with: ", errStateT
-                  , ", but received: ", TE.decodeUtf8 sqlState
-                  ]
-              return False
-        failed = liftIO $ expectationFailure $ "should fail with: " `mappend` T.unpack errStateT
-        errStateT = TE.decodeUtf8 errState
+    eres <- try f
+    case eres of
+        Left err ->
+            success err
+        Right a ->
+            liftIO $ expectationFailure $ mconcat
+                [ "should fail with error code: "
+                , T.unpack errStateT
+                , ", but got: "
+                , show a
+                ]
+  where
+    success SqlError{sqlState}
+        | sqlState == errState =
+            pure ()
+        | otherwise = do
+            liftIO $ expectationFailure $ T.unpack $ T.concat
+                [ "should fail with: ", errStateT
+                , ", but received: ", TE.decodeUtf8 sqlState
+                ]
+    errStateT =
+        TE.decodeUtf8 errState
 
 selectJSONwhere
   :: MonadIO m
