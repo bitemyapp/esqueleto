@@ -50,7 +50,7 @@ jobs:
            postgresql password: esqutest
            postgresql db: esqutest
       - name: Create MySQL
-        run: mysql -utravis -pesqutest -h127.0.0.1 --port=33306 esqutest -e "SELECT 1;"
+        run: mysql -utravis -pesqutest -h127.0.0.1 --port=3306 esqutest -e "SELECT 1;"
             # - name: Shutdown Ubuntu MySQL (SUDO)
             #   run: sudo service mysql stop
             # - uses: mirromutth/mysql-action@v1.1
