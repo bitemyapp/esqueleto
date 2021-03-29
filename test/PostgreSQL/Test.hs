@@ -772,7 +772,7 @@ testInclusion = do
                 "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
                 [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
                 , PersistText "a"
-                , PersistLiteralEscaped encoded'
+                , PersistLiteralEscaped encoded
                 ]
         it "works as expected" $ run $ do
             x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
