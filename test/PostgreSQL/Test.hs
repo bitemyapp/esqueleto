@@ -766,9 +766,9 @@ testInclusion = do
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 obj' = object ["b" .= True, "c" .= Null]
-                encoded = encode obj'
+                encoded = BSL.toStrict $ encode obj'
             createSaneSQL
-                (jsonbVal obj ->. "a" <@. jsonbVal )
+                (jsonbVal obj ->. "a" <@. jsonbVal obj')
                 "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
                 [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
                 , PersistText "a"
