@@ -134,7 +134,6 @@ test-suite postgresql
       , mtl
       , persistent
       , persistent-postgresql
-      , persistent-template
       , postgresql-libpq
       , postgresql-simple
       , resourcet >=1.2
@@ -170,7 +169,6 @@ test-suite sqlite
       , mtl
       , persistent
       , persistent-sqlite
-      , persistent-template
       , resourcet >=1.2
       , tagged >=0.2
       , text >=0.11 && <1.3
