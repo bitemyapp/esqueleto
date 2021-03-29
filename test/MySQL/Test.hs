@@ -237,12 +237,39 @@ migrateIt = do
 
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn =
-  R.runResourceT .
-  withMySQLConn defaultConnectInfo
-    { connectHost     = "localhost"
-    , connectUser     = "travis"
-    , connectPassword = "esqutest"
-    , connectDatabase = "esqutest"
-    , connectPort     = 3306
-    }
+withConn f = do
+    ci <- isCI
+    let connInfo
+            | ci =
+                defaultConnectInfo
+                    { connectHost     = "localhost"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 33306
+                    }
+            | otherwise =
+                defaultConnectInfo
+                    { connectHost     = "localhost"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 3306
+                    }
+    R.runResourceT $
+        withMySQLConn defaultConnectInfo
+            { connectHost     = "localhost"
+            , connectUser     = "travis"
+            , connectPassword = "esqutest"
+            , connectDatabase = "esqutest"
+            , connectPort     = 3306
+            }
+            f
+
+isCI :: IO Bool
+isCI =  do
+    env <- liftIO getEnvironment
+    return $ case lookup "TRAVIS" env <|> lookup "CI" env of
+        Just "true" -> True
+        _ -> False
+

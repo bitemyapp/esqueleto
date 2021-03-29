@@ -898,7 +898,7 @@ testConcatenationOperator =
 
 testMinusOperator :: Spec
 testMinusOperator =
-    fdescribe "Minus Operator" $ do
+    describe "Minus Operator" $ do
         it "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
@@ -919,21 +919,21 @@ testMinusOperator =
                 , PersistInt64 0
                 ]
         it "works as expected" $ run $ do
-          x <- selectJSON $ \v -> do
-              where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
-              where_ $ v JSON.-. 0 @>. jsonbVal (toJSON [Bool True])
-          y <- selectJSON $ \v -> do
-              where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
-              where_ $ v JSON.-. (-1) @>. jsonbVal (toJSON [Null])
-          z <- selectJSON_ $ \v -> v JSON.-. "b" ?&. ["a", "b"]
-          w <- selectJSON_ $ \v -> do
-              v JSON.-. "test" @>. jsonbVal (toJSON [String "test"])
-          liftIO $ length x `shouldBe` 2
-          liftIO $ length y `shouldBe` 1
-          liftIO $ length z `shouldBe` 0
-          liftIO $ length w `shouldBe` 0
-          sqlFailWith "22023" $ selectJSONwhere $ \v ->
-              v JSON.-. 0 @>. jsonbVal (toJSON ([] :: [Int]))
+            x <- selectJSON $ \v -> do
+                where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+                where_ $ v JSON.-. 0 @>. jsonbVal (toJSON [Bool True])
+            y <- selectJSON $ \v -> do
+                where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+                where_ $ v JSON.-. (-1) @>. jsonbVal (toJSON [Null])
+            z <- selectJSON_ $ \v -> v JSON.-. "b" ?&. ["a", "b"]
+            w <- selectJSON_ $ \v -> do
+                v JSON.-. "test" @>. jsonbVal (toJSON [String "test"])
+            liftIO $ length x `shouldBe` 2
+            liftIO $ length y `shouldBe` 1
+            liftIO $ length z `shouldBe` 0
+            liftIO $ length w `shouldBe` 0
+            sqlFailWith "22023" $ selectJSONwhere $ \v ->
+                v JSON.-. 0 @>. jsonbVal (toJSON ([] :: [Int]))
   where
     selectJSON_ f = selectJSON $ \v -> do
         where_
