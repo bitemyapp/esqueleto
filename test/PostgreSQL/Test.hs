@@ -1,51 +1,50 @@
 {-# OPTIONS_GHC -fno-warn-unused-binds  #-}
-{-# LANGUAGE FlexibleContexts
-           , LambdaCase
-           , NamedFieldPuns
-           , OverloadedStrings
-           , RankNTypes
-           , ScopedTypeVariables
-           , TypeApplications
-           , TypeFamilies
-           , PartialTypeSignatures
- #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 module Main (main) where
 
-import Data.Coerce
-import Data.Foldable
-import qualified Data.Map.Strict as Map
-import Data.Map (Map)
-import Data.Time
 import Control.Arrow ((&&&))
 import Control.Monad (void, when)
 import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
 import Control.Monad.Trans.Reader (ReaderT, ask)
 import qualified Control.Monad.Trans.Resource as R
 import Data.Aeson hiding (Value)
 import qualified Data.Aeson as A (Value)
 import Data.ByteString (ByteString)
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.Char as Char
+import Data.Coerce
+import Data.Foldable
 import qualified Data.List as L
+import Data.Map (Map)
+import qualified Data.Map.Strict as Map
 import Data.Ord (comparing)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
-import Data.Time.Clock (getCurrentTime, diffUTCTime, UTCTime)
+import Data.Time
+import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Database.Esqueleto hiding (random_)
-import Database.Esqueleto.Experimental hiding (random_, from, on)
+import Database.Esqueleto.Experimental hiding (from, on, random_)
 import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Sql as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
-import Database.Esqueleto.PostgreSQL.JSON hiding ((?.), (-.), (||.))
+import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import Database.Persist.Postgresql (withPostgresqlConn)
-import Database.PostgreSQL.Simple (SqlError(..), ExecStatus(..))
+import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
 import Test.Hspec.QuickCheck
-import qualified Data.ByteString.Lazy as BSL
 
 import Common.Test
 import PostgreSQL.MigrateJSON
@@ -570,11 +569,6 @@ testPostgresModule = do
 
         -- | Get the time diff and check it's less than a second
         liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< oneSecond)
-
-
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
 
 testJSONInsertions :: Spec
 testJSONInsertions =
