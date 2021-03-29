@@ -729,7 +729,7 @@ testInclusion = do
     describe "@>" $ do
         it "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj  @>. jsonbVal (object ["a" .= False]))
                 "SELECT (? @> ?)\nFROM \"Json\"\n"
@@ -738,7 +738,7 @@ testInclusion = do
                 ]
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj ->. "a" @>. jsonbVal (object ["b" .= True]))
                 "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
@@ -754,9 +754,9 @@ testInclusion = do
           liftIO $ length y `shouldBe` 1
           liftIO $ length z `shouldBe` 1
     describe "<@" $ do
-        it "creates sane SQL" $
+        it "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal (object ["a" .= False]) <@. jsonbVal obj )
                 "SELECT (? <@ ?)\nFROM \"Json\"\n"
@@ -826,7 +826,7 @@ testQMarkAny = do
                 ]
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
                 "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
@@ -849,7 +849,7 @@ testQMarkAll = do
     describe "Question Mark (All)" $ do
         it "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj  ?&. ["a","c"])
                 "SELECT (? ??& ?)\nFROM \"Json\"\n"
@@ -858,7 +858,7 @@ testQMarkAll = do
                 ]
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
                 "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
@@ -899,7 +899,7 @@ testConcatenationOperator = do
                 ]
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj ->. "a" JSON.||. jsonbVal (toJSON [Null]))
                 "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
@@ -976,7 +976,7 @@ testMinusOperatorV10 = do
     describe "Minus Operator (PSQL >= v10)" $ do
         it "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj  --. ["a","b"])
                 "SELECT (? - ?)\nFROM \"Json\"\n"
@@ -985,7 +985,7 @@ testMinusOperatorV10 = do
                 ]
         it "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
-                encoded = BSL.toStrct $ encode obj
+                encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
               (jsonbVal obj #>. ["a","0"] --. ["b"])
               "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
