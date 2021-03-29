@@ -4,6 +4,12 @@
   - [#243](https://github.com/bitemyapp/esqueleto/pull/243)
     - Support `persistent-2.12`
 
+3.4.1.1
+=======
+- @MaxGabriel
+  - [#240](https://github.com/bitemyapp/esqueleto/pull/240/files)
+    - Improve recommend hlint to avoid doing `x = NULL` SQL queries
+
 3.4.1.0
 =======
 - @arthurxavierx
