@@ -30,6 +30,7 @@ import Common.Test (RunDbMonad)
 share [mkPersist sqlSettings, mkMigrate "migrateJSON"] [persistUpperCase|
 Json
   value (JSONB Value)
+  deriving Show
 |]
 
 cleanJSON

@@ -56,6 +56,7 @@ import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
 import qualified Database.Persist
+import Database.Persist (FieldNameDB(..), EntityNameDB(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
        , entityColumnNames
@@ -64,6 +65,7 @@ import Database.Persist.Sql.Util
        , parseEntityValues
        )
 import Text.Blaze.Html (Html)
+import Data.Coerce (coerce)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -86,10 +88,13 @@ fromStart
     => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a))))
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
-    ident <- newIdentFor (entityDB ed)
+    ident <- newIdentFor (coerce $ entityDB ed)
     let ret = EEntity ident
         f' = FromStart ident ed
     return (EPreprocessedFrom ret f')
+
+-- | Copied from @persistent@
+newtype DBName = DBName { unDBName :: T.Text }
 
 -- | (Internal) Same as 'fromStart', but entity may be missing.
 fromStartMaybe
@@ -568,7 +573,7 @@ e ^. field
                         ]
         fieldIdent =
             case e of
-                EEntity _ -> fromDBName info (fieldDB fieldDef)
+                EEntity _ -> fromDBName info (coerce $ fieldDB fieldDef)
                 EAliasedEntity baseI _ -> useIdent info $ aliasedEntityColumnIdent baseI fieldDef
                 EAliasedEntityReference a b ->
                     error $ unwords
@@ -1805,7 +1810,7 @@ instance Show FromClause where
 
       where
         dummy = SqlBackend
-            { connEscapeName = \(DBName x) -> x
+            { connEscapeRawName = id
             }
         render' = T.unpack . renderExpr dummy
 
@@ -2124,7 +2129,7 @@ instance ToSomeValues (SqlExpr (Value a)) where
 fieldName
     :: (PersistEntity val, PersistField typ)
     => IdentInfo -> EntityField val typ -> TLB.Builder
-fieldName info = fromDBName info . fieldDB . persistFieldDef
+fieldName info = fromDBName info . coerce . fieldDB . persistFieldDef
 
 -- FIXME: Composite/non-id pKS not supported on set
 setAux
@@ -2140,7 +2145,7 @@ sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value 
 sub mode query = ERaw Parens $ \info -> toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
-fromDBName (conn, _) = TLB.fromText . connEscapeName conn
+fromDBName (conn, _) = TLB.fromText . connEscapeRawName conn . unDBName
 
 existsHelper :: SqlQuery () -> SqlExpr (Value Bool)
 existsHelper = sub SELECT . (>> return true)
@@ -2900,7 +2905,7 @@ makeFrom info mode fs = ret
         (useIdent info ident, mempty)
 
     base ident@(I identText) def =
-        let db@(DBName dbText) = entityDB def
+        let db@(DBName dbText) = coerce $ entityDB def
         in ( fromDBName info db <>
                  if dbText == identText
                  then mempty
@@ -3030,7 +3035,7 @@ valueReferenceToRawSql sourceIdent columnIdentF info =
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
 aliasedEntityColumnIdent (I baseIdent) field =
-    I (baseIdent <> "_" <> (unDBName $ fieldDB field))
+    I (baseIdent <> "_" <> (unDBName $ coerce $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
 aliasedColumnName (I baseIdent) info columnName =
@@ -3064,11 +3069,11 @@ instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
     sqlInsertInto info (EInsertFinal (EInsert p _)) =
         let fields =
                 uncommas $
-                map (fromDBName info . fieldDB) $
+                map (fromDBName info . coerce . fieldDB) $
                 entityFields $
                 entityDef p
             table  =
-                fromDBName info . entityDB . entityDef $ p
+                fromDBName info . DBName . coerce . entityDB . entityDef $ p
         in
             ("INSERT INTO " <> table <> parens fields <> "\n", [])
     sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
@@ -3084,8 +3089,8 @@ instance SqlSelect () () where
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
-    (if hasCompositeKey ent then id else ( fieldDB (entityId ent) :))
-    $ map fieldDB (entityFields ent)
+    (if hasCompositeKey ent then id else ( coerce (fieldDB (entityId ent)) :))
+    $ map (coerce . fieldDB) (entityFields ent)
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where

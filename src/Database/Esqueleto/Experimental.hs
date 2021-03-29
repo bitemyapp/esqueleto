@@ -227,6 +227,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 import GHC.TypeLits
+import Database.Persist (EntityNameDB(..))
 
 -- $setup
 --
@@ -1040,7 +1041,7 @@ from parts = do
     runFrom :: From a -> SqlQuery (a, FromClause)
     runFrom e@Table = do
         let ed = entityDef $ getVal e
-        ident <- newIdentFor (entityDB ed)
+        ident <- newIdentFor . DBName . unEntityNameDB $ entityDB ed
         let entity = EEntity ident
         pure $ (entity, FromStart ident ed)
           where

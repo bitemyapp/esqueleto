@@ -87,7 +87,7 @@ instance IsString JSONAccessor where
 
 -- | @since 3.1.0
 instance (FromJSON a, ToJSON a) => PersistField (JSONB a) where
-    toPersistValue = PersistDbSpecific . BSL.toStrict . encode . unJSONB
+    toPersistValue = PersistLiteralEscaped . BSL.toStrict . encode . unJSONB
     fromPersistValue pVal = fmap JSONB $ case pVal of
         PersistByteString bs -> first (badParse $ TE.decodeUtf8 bs) $ eitherDecodeStrict bs
         PersistText t -> first (badParse t) $ eitherDecodeStrict (TE.encodeUtf8 t)
