@@ -726,130 +726,155 @@ testFilterOperators =
 
 testInclusion :: Spec
 testInclusion = do
-  describe "@>" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= False, "b" .= True]) @>. jsonbVal (object ["a" .= False]))
-        "SELECT (? @> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , PersistLiteralEscaped "{\"a\":false}" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (jsonbVal obj ->. "a" @>. jsonbVal (object ["b" .= True]))
-        "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , PersistText "a"
-        , PersistLiteralEscaped "{\"b\":true}" ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v @>. jsonbVal (Number 1)
-      y <- selectJSONwhere $ \v -> v @>. jsonbVal (toJSON [object ["a" .= Number 3.14]])
-      z <- selectJSONwhere $ \v -> v ->. 1 @>. jsonbVal (object ["a" .= Number 3.14])
-      liftIO $ length x `shouldBe` 2
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 1
-  describe "<@" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= False]) <@. jsonbVal (object ["a" .= False, "b" .= True]))
-        "SELECT (? <@ ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false}"
-        , PersistLiteralEscaped "{\"a\":false,\"b\":true}" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (jsonbVal obj ->. "a" <@. jsonbVal (object ["b" .= True, "c" .= Null]))
-        "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , PersistText "a"
-        , PersistLiteralEscaped "{\"b\":true,\"c\":null}" ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
-      y <- selectJSONwhere $ \v -> v <@. jsonbVal (object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
-      z <- selectJSONwhere $ \v -> v #>. ["a","b"] <@. jsonbVal (object ["b" .= False, "c" .= String "message"])
-      liftIO $ length x `shouldBe` 2
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 1
+    describe "@>" $ do
+        it "creates sane SQL" $ do
+            let obj = object ["a" .= False, "b" .= True]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal obj  @>. jsonbVal (object ["a" .= False]))
+                "SELECT (? @> ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , PersistLiteralEscaped "{\"a\":false}"
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal obj ->. "a" @>. jsonbVal (object ["b" .= True]))
+                "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , PersistText "a"
+                , PersistLiteralEscaped "{\"b\":true}"
+                ]
+        it "works as expected" $ run $ do
+          x <- selectJSONwhere $ \v -> v @>. jsonbVal (Number 1)
+          y <- selectJSONwhere $ \v -> v @>. jsonbVal (toJSON [object ["a" .= Number 3.14]])
+          z <- selectJSONwhere $ \v -> v ->. 1 @>. jsonbVal (object ["a" .= Number 3.14])
+          liftIO $ length x `shouldBe` 2
+          liftIO $ length y `shouldBe` 1
+          liftIO $ length z `shouldBe` 1
+    describe "<@" $ do
+        it "creates sane SQL" $
+            let obj = object ["a" .= False, "b" .= True]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal (object ["a" .= False]) <@. jsonbVal obj )
+                "SELECT (? <@ ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped "{\"a\":false}"
+                , PersistLiteralEscaped encoded
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                obj' = object ["b" .= True, "c" .= Null]
+                encoded = encode obj'
+            createSaneSQL
+                (jsonbVal obj ->. "a" <@. jsonbVal )
+                "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
+                , PersistText "a"
+                , PersistLiteralEscaped encoded'
+                ]
+        it "works as expected" $ run $ do
+            x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
+            y <- selectJSONwhere $ \v -> v <@. jsonbVal (object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
+            z <- selectJSONwhere $ \v -> v #>. ["a","b"] <@. jsonbVal (object ["b" .= False, "c" .= String "message"])
+            liftIO $ length x `shouldBe` 2
+            liftIO $ length y `shouldBe` 1
+            liftIO $ length z `shouldBe` 1
 
 testQMark :: Spec
-testQMark =
-  describe "Question Mark" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= False, "b" .= True]) JSON.?. "a")
-        "SELECT (? ?? ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , PersistText "a" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (jsonbVal obj #>. ["a","0"] JSON.?. "b")
-        "SELECT ((? #> ?) ?? ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , persistTextArray ["a","0"]
-        , PersistText "b" ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere (JSON.?. "a")
-      y <- selectJSONwhere (JSON.?. "test")
-      z <- selectJSONwhere $ \v -> v ->. "a" JSON.?. "b"
-      liftIO $ length x `shouldBe` 2
-      liftIO $ length y `shouldBe` 2
-      liftIO $ length z `shouldBe` 1
+testQMark = do
+    describe "Question Mark" $ do
+        it "creates sane SQL" $ do
+            let obj = object ["a" .= False, "b" .= True]
+                encoded = BSL.toStrict $ encode obj
+            createSaneSQL
+              (jsonbVal obj JSON.?. "a")
+              "SELECT (? ?? ?)\nFROM \"Json\"\n"
+              [ PersistLiteralEscaped encoded
+              , PersistText "a"
+              ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrict $ encode obj
+            createSaneSQL
+                (jsonbVal obj #>. ["a","0"] JSON.?. "b")
+                "SELECT ((? #> ?) ?? ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","0"]
+                , PersistText "b"
+                ]
+        it "works as expected" $ run $ do
+            x <- selectJSONwhere (JSON.?. "a")
+            y <- selectJSONwhere (JSON.?. "test")
+            z <- selectJSONwhere $ \v -> v ->. "a" JSON.?. "b"
+            liftIO $ length x `shouldBe` 2
+            liftIO $ length y `shouldBe` 2
+            liftIO $ length z `shouldBe` 1
 
 testQMarkAny :: Spec
-testQMarkAny =
-  describe "Question Mark (Any)" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= False, "b" .= True]) ?|. ["a","c"])
-        "SELECT (? ??| ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , persistTextArray ["a","c"] ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
-        "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , persistTextArray ["a","0"]
-        , persistTextArray ["b","c"] ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere (?|. ["b","test"])
-      y <- selectJSONwhere (?|. ["a"])
-      z <- selectJSONwhere $ \v -> v ->. (-3) ?|. ["a"]
-      w <- selectJSONwhere (?|. [])
-      liftIO $ length x `shouldBe` 3
-      liftIO $ length y `shouldBe` 2
-      liftIO $ length z `shouldBe` 1
-      liftIO $ length w `shouldBe` 0
+testQMarkAny = do
+    describe "Question Mark (Any)" $ do
+        it "creates sane SQL" $ do
+            let obj = (object ["a" .= False, "b" .= True])
+                encoded = BSL.toStrict $ encode obj
+            createSaneSQL
+                (jsonbVal obj  ?|. ["a","c"])
+                "SELECT (? ??| ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","c"]
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
+                "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","0"]
+                , persistTextArray ["b","c"]
+                ]
+        it "works as expected" $ run $ do
+          x <- selectJSONwhere (?|. ["b","test"])
+          y <- selectJSONwhere (?|. ["a"])
+          z <- selectJSONwhere $ \v -> v ->. (-3) ?|. ["a"]
+          w <- selectJSONwhere (?|. [])
+          liftIO $ length x `shouldBe` 3
+          liftIO $ length y `shouldBe` 2
+          liftIO $ length z `shouldBe` 1
+          liftIO $ length w `shouldBe` 0
 
 testQMarkAll :: Spec
-testQMarkAll =
-  describe "Question Mark (All)" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= False, "b" .= True]) ?&. ["a","c"])
-        "SELECT (? ??& ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , persistTextArray ["a","c"] ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL
-        (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
-        "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , persistTextArray ["a","0"]
-        , persistTextArray ["b","c"] ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere (?&. ["test"])
-      y <- selectJSONwhere (?&. ["a","b"])
-      z <- selectJSONwhere $ \v -> v ->. "a" ?&. ["b"]
-      w <- selectJSONwhere (?&. [])
-      liftIO $ length x `shouldBe` 2
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 1
-      liftIO $ length w `shouldBe` 9
-
+testQMarkAll = do
+    describe "Question Mark (All)" $ do
+        it "creates sane SQL" $ do
+            let obj = object ["a" .= False, "b" .= True]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal obj  ?&. ["a","c"])
+                "SELECT (? ??& ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","c"]
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL
+                (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
+                "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","0"]
+                , persistTextArray ["b","c"]
+                ]
+        it "works as expected" $ run $ do
+            x <- selectJSONwhere (?&. ["test"])
+            y <- selectJSONwhere (?&. ["a","b"])
+            z <- selectJSONwhere $ \v -> v ->. "a" ?&. ["b"]
+            w <- selectJSONwhere (?&. [])
+            liftIO $ length x `shouldBe` 2
+            liftIO $ length y `shouldBe` 1
+            liftIO $ length z `shouldBe` 1
+            liftIO $ length w `shouldBe` 9
 
 testConcatDeleteOperators :: Spec
 testConcatDeleteOperators = do
@@ -860,41 +885,46 @@ testConcatDeleteOperators = do
     testHashMinusOperator
 
 testConcatenationOperator :: Spec
-testConcatenationOperator =
-  describe "Concatenation" $ do
-    it "creates sane SQL" $
-      createSaneSQL @JSONValue
-        (jsonbVal (object ["a" .= False, "b" .= True])
-            JSON.||. jsonbVal (object ["c" .= Null]))
-        "SELECT (? || ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , PersistLiteralEscaped "{\"c\":null}" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL @JSONValue
-        (jsonbVal obj ->. "a" JSON.||. jsonbVal (toJSON [Null]))
-        "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , PersistText "a"
-        , PersistLiteralEscaped "[null]" ]
-    it "works as expected" $ run $ do
-      x <- selectJSON $ \v -> do
-          where_ $ v @>. jsonbVal (object [])
-          where_ $ v JSON.||. jsonbVal (object ["x" .= True])
-                          @>. jsonbVal (object ["x" .= True])
-      y <- selectJSONwhere $ \v ->
-          v JSON.||. jsonbVal (toJSON [String "a", String "b"])
-                ->>. 4 ==. just (val "b")
-      z <- selectJSONwhere $ \v ->
-          v JSON.||. jsonbVal (toJSON [Bool False])
-                 ->. 0 JSON.@>. jsonbVal (Number 1)
-      w <- selectJSON $ \v -> do
-          where_ . not_ $ v @>. jsonbVal (object [])
-          where_ $ jsonbVal (String "test1") JSON.||. v ->>. 0 ==. just (val "test1")
-      liftIO $ length x `shouldBe` 2
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 2
-      liftIO $ length w `shouldBe` 7
+testConcatenationOperator = do
+    describe "Concatenation" $ do
+        it "creates sane SQL" $ do
+            let objAB = object ["a" .= False, "b" .= True]
+                objC = object ["c" .= Null]
+            createSaneSQL @JSONValue
+                (jsonbVal objAB
+                    JSON.||. jsonbVal objC)
+                "SELECT (? || ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped $ BSL.toStrict $ encode objAB
+                , PersistLiteralEscaped $ BSL.toStrict $ encode objC
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL @JSONValue
+                (jsonbVal obj ->. "a" JSON.||. jsonbVal (toJSON [Null]))
+                "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , PersistText "a"
+                , PersistLiteralEscaped "[null]"
+                ]
+        it "works as expected" $ run $ do
+          x <- selectJSON $ \v -> do
+              where_ $ v @>. jsonbVal (object [])
+              where_ $ v JSON.||. jsonbVal (object ["x" .= True])
+                              @>. jsonbVal (object ["x" .= True])
+          y <- selectJSONwhere $ \v ->
+              v JSON.||. jsonbVal (toJSON [String "a", String "b"])
+                    ->>. 4 ==. just (val "b")
+          z <- selectJSONwhere $ \v ->
+              v JSON.||. jsonbVal (toJSON [Bool False])
+                     ->. 0 JSON.@>. jsonbVal (Number 1)
+          w <- selectJSON $ \v -> do
+              where_ . not_ $ v @>. jsonbVal (object [])
+              where_ $ jsonbVal (String "test1") JSON.||. v ->>. 0 ==. just (val "test1")
+          liftIO $ length x `shouldBe` 2
+          liftIO $ length y `shouldBe` 1
+          liftIO $ length z `shouldBe` 2
+          liftIO $ length w `shouldBe` 7
 
 testMinusOperator :: Spec
 testMinusOperator =
@@ -942,42 +972,48 @@ testMinusOperator =
         where_ $ f v
 
 testMinusOperatorV10 :: Spec
-testMinusOperatorV10 =
-  describe "Minus Operator (PSQL >= v10)" $ do
-    it "creates sane SQL" $
-      createSaneSQL @JSONValue
-        (jsonbVal (object ["a" .= False, "b" .= True]) --. ["a","b"])
-        "SELECT (? - ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":false,\"b\":true}"
-        , persistTextArray ["a","b"] ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [object ["b" .= True]]]
-      createSaneSQL @JSONValue
-        (jsonbVal obj #>. ["a","0"] --. ["b"])
-        "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
-        , persistTextArray ["a","0"]
-        , persistTextArray ["b"] ]
-    it "works as expected" $ run $ do
-      x <- selectJSON $ \v -> do
-          where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
-          where_ $ v --. ["test","a"] @>. jsonbVal (toJSON [String "test"])
-      y <- selectJSON $ \v -> do
-          where_ $ v @>. jsonbVal (object [])
-          where_ $ v --. ["a","b"] <@. jsonbVal (object [])
-      z <- selectJSON_ $ \v -> v --. ["b"] <@. jsonbVal (object ["a" .= (1 :: Int)])
-      w <- selectJSON_ $ \v -> do
-          v --. ["test"] @>. jsonbVal (toJSON [String "test"])
-      liftIO $ length x `shouldBe` 0
-      liftIO $ length y `shouldBe` 2
-      liftIO $ length z `shouldBe` 1
-      liftIO $ length w `shouldBe` 0
-      sqlFailWith "22023" $ selectJSONwhere $ \v ->
-          v --. ["a"] @>. jsonbVal (toJSON ([] :: [Int]))
-  where selectJSON_ f = selectJSON $ \v -> do
-          where_ $ v @>. jsonbVal (object [])
+testMinusOperatorV10 = do
+    describe "Minus Operator (PSQL >= v10)" $ do
+        it "creates sane SQL" $ do
+            let obj = object ["a" .= False, "b" .= True]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL @JSONValue
+                (jsonbVal obj  --. ["a","b"])
+                "SELECT (? - ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped encoded
+                , persistTextArray ["a","b"]
+                ]
+        it "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [object ["b" .= True]]]
+                encoded = BSL.toStrct $ encode obj
+            createSaneSQL @JSONValue
+              (jsonbVal obj #>. ["a","0"] --. ["b"])
+              "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
+              [ PersistLiteralEscaped encoded
+              , persistTextArray ["a","0"]
+              , persistTextArray ["b"]
+              ]
+        it "works as expected" $ run $ do
+            x <- selectJSON $ \v -> do
+                where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
+                where_ $ v --. ["test","a"] @>. jsonbVal (toJSON [String "test"])
+            y <- selectJSON $ \v -> do
+                where_ $ v @>. jsonbVal (object [])
+                where_ $ v --. ["a","b"] <@. jsonbVal (object [])
+            z <- selectJSON_ $ \v -> v --. ["b"] <@. jsonbVal (object ["a" .= (1 :: Int)])
+            w <- selectJSON_ $ \v -> do
+                v --. ["test"] @>. jsonbVal (toJSON [String "test"])
+            liftIO $ length x `shouldBe` 0
+            liftIO $ length y `shouldBe` 2
+            liftIO $ length z `shouldBe` 1
+            liftIO $ length w `shouldBe` 0
+            sqlFailWith "22023" $ selectJSONwhere $ \v ->
+                v --. ["a"] @>. jsonbVal (toJSON ([] :: [Int]))
+  where
+    selectJSON_ f = selectJSON $ \v -> do
+        where_ $ v @>. jsonbVal (object [])
                ||. v @>. jsonbVal (toJSON ([] :: [Int]))
-          where_ $ f v
+        where_ $ f v
 
 testHashMinusOperator :: Spec
 testHashMinusOperator =
