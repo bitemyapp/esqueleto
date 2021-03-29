@@ -244,7 +244,7 @@ withConn f = do
     let connInfo
             | ci =
                 defaultConnectInfo
-                    { connectHost     = "localhost"
+                    { connectHost     = "127.0.0.1"
                     , connectUser     = "travis"
                     , connectPassword = "esqutest"
                     , connectDatabase = "esqutest"
