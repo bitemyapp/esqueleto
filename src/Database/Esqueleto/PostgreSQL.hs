@@ -48,6 +48,7 @@ import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -207,7 +208,7 @@ upsertBy
     -- ^ the record in the database after the operation
 upsertBy uniqueKey record updates = do
     sqlB <- R.ask
-    case connUpsertSql sqlB of
+    case getConnUpsertSql sqlB of
         Nothing ->
             -- Postgres backend should have connUpsertSql, if this error is
             -- thrown, check changes on persistent

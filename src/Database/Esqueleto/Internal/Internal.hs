@@ -55,6 +55,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
+import Database.Persist.SqlBackend
 import qualified Database.Persist
 import Database.Persist (FieldNameDB(..), EntityNameDB(..))
 import Database.Persist.Sql.Util
@@ -1809,7 +1810,7 @@ instance Show FromClause where
             "(FromIdent " <> show ident <> ")"
 
       where
-        dummy = SqlBackend
+        dummy = mkSqlBackend MkSqlBackendArgs
             { connEscapeRawName = id
             }
         render' = T.unpack . renderExpr dummy
@@ -2145,7 +2146,7 @@ sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value 
 sub mode query = ERaw Parens $ \info -> toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
-fromDBName (conn, _) = TLB.fromText . connEscapeRawName conn . unDBName
+fromDBName (conn, _) = TLB.fromText . flip getEscapedRawName conn . unDBName
 
 existsHelper :: SqlQuery () -> SqlExpr (Value Bool)
 existsHelper = sub SELECT . (>> return true)
@@ -3010,8 +3011,7 @@ makeOrderBy info is =
 
 makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) orderByClauses =
-    let limitRaw = connLimitOffset conn (v ml, v mo) hasOrderClause "\n"
-        hasOrderClause = not (null orderByClauses)
+    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
