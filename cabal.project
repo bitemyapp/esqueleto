@@ -3,15 +3,3 @@
 packages:
     ./
   , examples/
-
-source-repository-package
-    type: git
-    location: git@github.com:yesodweb/persistent
-    tag: f7ad9b05a1ee899c6800962cbc795b39d01c5643
-    subdir: persistent
-            persistent-mysql
-            persistent-postgresql
-            persistent-sqlite
-
-allow-older: *
-allow-newer: *
