@@ -1041,7 +1041,7 @@ from parts = do
     runFrom :: From a -> SqlQuery (a, FromClause)
     runFrom e@Table = do
         let ed = entityDef $ getVal e
-        ident <- newIdentFor . DBName . unEntityNameDB $ entityDB ed
+        ident <- newIdentFor . DBName . unEntityNameDB $ getEntityDBName ed
         let entity = EEntity ident
         pure $ (entity, FromStart ident ed)
           where

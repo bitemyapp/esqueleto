@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
@@ -23,6 +25,8 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NEL
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -60,8 +64,8 @@ import qualified Database.Persist
 import Database.Persist (FieldNameDB(..), EntityNameDB(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
-       , entityColumnNames
-       , hasCompositeKey
+       , keyAndEntityColumnNames
+       , hasNaturalKey
        , isIdField
        , parseEntityValues
        )
@@ -89,7 +93,7 @@ fromStart
     => SqlQuery (SqlExpr (PreprocessedFrom (SqlExpr (Entity a))))
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
-    ident <- newIdentFor (coerce $ entityDB ed)
+    ident <- newIdentFor (coerce $ getEntityDBName ed)
     let ret = EEntity ident
         f' = FromStart ident ed
     return (EPreprocessedFrom ret f')
@@ -538,7 +542,7 @@ subSelectUnsafe = sub SELECT
     fieldDef =
         if isIdField field then
             -- TODO what about composite natural keys in a join this will ignore them
-            head $ entityKeyFields ed
+            NEL.head $ getEntityKeyFields ed
         else
             persistFieldDef field
 
@@ -549,12 +553,12 @@ e ^. field
     | otherwise = ERaw Never $ \info -> (dot info $ persistFieldDef field, [])
   where
     idFieldValue =
-        case entityKeyFields ed of
-            idField:[] ->
+        case getEntityKeyFields ed of
+            idField :| [] ->
                 ERaw Never    $ \info -> (dot info idField, [])
 
             idFields ->
-                ECompositeKey $ \info ->  dot info <$> idFields
+                ECompositeKey $ \info ->  NEL.toList $ dot info <$> idFields
 
 
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
@@ -1288,7 +1292,7 @@ toUniqueDef uniqueConstructor = uniqueDef
     unique = finalR uniqueConstructor
     -- there must be a better way to get the constrain name from a unique, make this not a list search
     filterF = (==) (persistUniqueToFieldNames unique) . uniqueFields
-    uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
+    uniqueDef = head . filter filterF . getEntityUniques . entityDef $ proxy
 
 -- | Render updates to be use in a SET clause for a given sql backend.
 --
@@ -2018,6 +2022,43 @@ type IdentInfo = (SqlBackend, IdentState)
 -- | Use an identifier.
 useIdent :: IdentInfo -> Ident -> TLB.Builder
 useIdent info (I ident) = fromDBName info $ DBName ident
+
+entityAsValue
+    :: SqlExpr (Entity val)
+    -> SqlExpr (Value (Entity val))
+entityAsValue eent =
+    case eent of
+        EEntity ident ->
+            identToRaw ident
+        EAliasedEntity ident _ ->
+            identToRaw ident
+        EAliasedEntityReference _ ident ->
+            identToRaw ident
+  where
+    identToRaw ident =
+        ERaw Never $ \identInfo ->
+            ( useIdent identInfo ident
+            , []
+            )
+
+entityAsValueMaybe
+    :: SqlExpr (Maybe (Entity val))
+    -> SqlExpr (Value (Maybe (Entity val)))
+entityAsValueMaybe (EMaybe eent) =
+    case eent of
+        EEntity ident ->
+            identToRaw ident
+        EAliasedEntity ident _ ->
+            identToRaw ident
+        EAliasedEntityReference _ ident ->
+            identToRaw ident
+  where
+    identToRaw ident =
+        ERaw Never $ \identInfo ->
+            ( useIdent identInfo ident
+            , []
+            )
+
 
 -- | An expression on the SQL backend.
 --
@@ -2906,7 +2947,7 @@ makeFrom info mode fs = ret
         (useIdent info ident, mempty)
 
     base ident@(I identText) def =
-        let db@(DBName dbText) = coerce $ entityDB def
+        let db@(DBName dbText) = coerce $ getEntityDBName def
         in ( fromDBName info db <>
                  if dbText == identText
                  then mempty
@@ -3070,10 +3111,10 @@ instance SqlSelect (SqlExpr InsertFinal) InsertFinal where
         let fields =
                 uncommas $
                 map (fromDBName info . coerce . fieldDB) $
-                entityFields $
+                getEntityFields $
                 entityDef p
             table  =
-                fromDBName info . DBName . coerce . entityDB . entityDef $ p
+                fromDBName info . DBName . coerce . getEntityDBName . entityDef $ p
         in
             ("INSERT INTO " <> table <> parens fields <> "\n", [])
     sqlSelectCols info (EInsertFinal (EInsert _ f)) = f info
@@ -3089,16 +3130,26 @@ instance SqlSelect () () where
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
-    (if hasCompositeKey ent then id else ( coerce (fieldDB (entityId ent)) :))
-    $ map (coerce . fieldDB) (entityFields ent)
+    addIdColumn rest
+  where
+    rest =
+        map (coerce . fieldDB) (getEntityFields ent)
+    addIdColumn =
+        case getEntityId ent of
+            EntityIdField fd ->
+                (:) (coerce (fieldDB fd))
+            EntityIdNaturalKey _ ->
+                id
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
     sqlSelectCols info expr@(EEntity ident) = ret
       where
-        process ed = uncommas $
-                     map ((name <>) . TLB.fromText) $
-                     entityColumnNames ed (fst info)
+        process ed =
+            uncommas
+            $ map ((name <>) . TLB.fromText)
+            $ NEL.toList
+            $ keyAndEntityColumnNames ed (fst info)
         -- 'name' is the biggest difference between 'RawSql' and
         -- 'SqlSelect'.  We automatically create names for tables
         -- (since it's not the user who's writing the FROM

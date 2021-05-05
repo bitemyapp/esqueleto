@@ -220,7 +220,7 @@ upsertBy uniqueKey record updates = do
     entDef = entityDef (Just record)
     updatesText conn = first builderToText $ renderUpdates conn updates
 #if MIN_VERSION_persistent(2,11,0)
-    uniqueFields = NonEmpty.fromList (persistUniqueToFieldNames uniqueKey)
+    uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
         let (updateText, updateVals) =
                 updatesText sqlB
@@ -308,7 +308,7 @@ insertSelectWithConflictCount unique query conflictQuery = do
     updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
     entExcluded = EEntity $ I "excluded"
-    tableName = unEntityNameDB . entityDB . entityDef
+    tableName = unEntityNameDB . getEntityDBName . entityDef
     entCurrent = EEntity $ I (tableName proxy)
     uniqueDef = toUniqueDef unique
     constraint = TLB.fromText . unConstraintNameDB . uniqueDBName $ uniqueDef
