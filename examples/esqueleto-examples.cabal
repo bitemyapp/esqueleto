@@ -1,0 +1,49 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.4.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: d5fddaf37d0c2f27fb2446f5038899d766102efd74ccfe4c7bcd02c61837e6b6
+
+name:           esqueleto-examples
+version:        0.0.0.0
+category:       Database
+homepage:       https://github.com/bitemyapp/esqueleto#readme
+bug-reports:    https://github.com/bitemyapp/esqueleto/issues
+author:         Fintan Halpenny
+maintainer:     cma@bitemyapp.com
+copyright:      2019, Chris Allen
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+
+source-repository head
+  type: git
+  location: https://github.com/bitemyapp/esqueleto
+
+flag werror
+  description: Treat warnings as errors
+  manual: True
+  default: False
+
+executable blog-example
+  main-is: Main.hs
+  other-modules:
+      Blog
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , esqueleto
+    , monad-control
+    , monad-logger
+    , mtl
+    , persistent >=2.12
+    , persistent-postgresql
+    , transformers-base
+    , unliftio-core
+  if flag(werror)
+    ghc-options: -Werror
+  default-language: Haskell2010
