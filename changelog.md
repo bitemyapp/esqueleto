@@ -1,3 +1,9 @@
+3.4.2.1
+=======
+- @parsonsmatt
+  - [#245](https://github.com/bitemyapp/esqueleto/pull/245)
+    - Support `persistent-2.13`
+
 3.4.2.0
 =======
 - @parsonsmatt
