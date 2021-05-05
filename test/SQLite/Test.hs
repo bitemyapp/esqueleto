@@ -161,10 +161,6 @@ testSqliteTextFunctions = do
          nameContains like "i"  [p4e, p3e]
          nameContains like "iv" [p4e]
 
-
-
-
-
 main :: IO ()
 main = do
   hspec $ do
@@ -173,7 +169,7 @@ main = do
     describe "Test SQLite locking" $ do
       testLocking withConn
 
-    describe "SQLite specific tests" $ do
+    fdescribe "SQLite specific tests" $ do
       testAscRandom random_ run
       testRandomMath run
       testSqliteRandom
@@ -184,10 +180,6 @@ main = do
       testSqliteUpdate
       testSqliteTextFunctions
 
-
-
-
-
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
 runVerbose act = runStderrLoggingT $ run_worker act
@@ -196,19 +188,15 @@ run =
   then runVerbose
   else runSilent
 
-
 verbose :: Bool
 verbose = False
-
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
-
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
-
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =
