@@ -16,6 +16,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Database.Persist.Sql
+import Database.Persist.SqlBackend
 
 -- | A type representing the access of a table value. In Esqueleto, we get
 -- a guarantee that the access will look something like:
@@ -43,7 +44,7 @@ parseOnExpr sqlBackend text = do
 -- with postgresql, mysql, and sqlite backends.
 mkEscapeChar :: SqlBackend -> Either String Char
 mkEscapeChar sqlBackend =
-    case Text.uncons (connEscapeName sqlBackend (DBName "")) of
+    case Text.uncons (getEscapedRawName "" sqlBackend) of
         Nothing ->
             Left "Failed to get an escape character from the SQL backend."
         Just (c, _) ->
@@ -63,9 +64,9 @@ skipToEscape escapeChar = void (takeWhile (/= escapeChar))
 
 parseEscapedIdentifier :: ExprParser [Char]
 parseEscapedIdentifier escapeChar = do
-    char escapeChar
+    _ <- char escapeChar
     str <- parseEscapedChars escapeChar
-    char escapeChar
+    _ <- char escapeChar
     pure str
 
 parseTableAccess :: ExprParser TableAccess

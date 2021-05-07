@@ -12,7 +12,6 @@ import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
-import Database.Esqueleto.Internal.PersistentImport (DBName(..))
 
 -- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
 -- CTEs are supported in most modern SQL engines and can be useful

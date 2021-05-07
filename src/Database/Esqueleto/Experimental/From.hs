@@ -21,12 +21,15 @@ module Database.Esqueleto.Experimental.From
 import Control.Arrow (first)
 import Control.Monad (ap)
 import qualified Control.Monad.Trans.Writer as W
+import Data.Coerce (coerce)
 import Data.Proxy
 import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 import Database.Esqueleto.Internal.PersistentImport
+
+import Database.Persist.Names (EntityNameDB(..))
 
 -- | 'FROM' clause, used to bring entities into scope.
 --
@@ -85,14 +88,14 @@ instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
 table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
 table = From $ do
     let ed = entityDef (Proxy @ent)
-    ident <- newIdentFor (entityDB ed)
+    ident <- newIdentFor (coerce $ getEntityDBName ed)
     let entity = unsafeSqlEntity ident
     pure $ ( entity, const $ base ident ed )
       where
         base ident@(I identText) def info =
-            let db@(DBName dbText) = entityDB def
-            in ( fromDBName info db <>
-                     if dbText == identText
+            let db = coerce $ getEntityDBName def
+            in ( (fromDBName info (coerce db)) <>
+                     if  db == identText
                      then mempty
                      else " AS " <> useIdent info ident
                , mempty

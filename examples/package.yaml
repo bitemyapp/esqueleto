@@ -13,8 +13,7 @@ extra-source-files:
 dependencies:
 - base
 - esqueleto
-- persistent
-- persistent-template
+- persistent >= 2.12
 - persistent-postgresql
 - mtl
 - monad-logger

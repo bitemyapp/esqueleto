@@ -11,7 +11,7 @@ module Blog
 
 import           Control.Monad.Base          (MonadBase (..))
 import           Control.Monad.IO.Unlift     (MonadUnliftIO(..), wrappedWithRunInIO)
-import           Control.Monad.Logger        (MonadLogger, NoLoggingT (..))
+import           Control.Monad.Logger        (MonadLoggerIO, MonadLogger, NoLoggingT (..))
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control (ComposeSt, MonadBaseControl (..),
                                               MonadTransControl (..),
@@ -26,6 +26,7 @@ newtype BlogT m a = BlogT { unBlogT :: NoLoggingT (ReaderT ConnectionString m) a
            , MonadLogger
            , MonadReader ConnectionString
            , MonadIO
+           , MonadLoggerIO
            )
 
 instance MonadUnliftIO m => MonadUnliftIO (BlogT m) where

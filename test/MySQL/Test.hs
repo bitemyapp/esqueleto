@@ -6,6 +6,7 @@
 
 module Main (main) where
 
+import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
@@ -23,6 +24,8 @@ import Database.Persist.MySQL
        , defaultConnectInfo
        , withMySQLConn
        )
+
+import System.Environment
 import Test.Hspec
 
 import Common.Test
@@ -238,12 +241,31 @@ migrateIt = do
 
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn =
-  R.runResourceT .
-  withMySQLConn defaultConnectInfo
-    { connectHost     = "127.0.0.1"
-    , connectUser     = "travis"
-    , connectPassword = "esqutest"
-    , connectDatabase = "esqutest"
-    , connectPort     = 33306
-    }
+withConn f = do
+    ci <- liftIO isCI
+    let connInfo
+            | ci =
+                defaultConnectInfo
+                    { connectHost     = "127.0.0.1"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 33306
+                    }
+            | otherwise =
+                defaultConnectInfo
+                    { connectHost     = "localhost"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 3306
+                    }
+    R.runResourceT $ withMySQLConn connInfo f
+
+isCI :: IO Bool
+isCI =  do
+    env <- getEnvironment
+    return $ case lookup "TRAVIS" env <|> lookup "CI" env of
+        Just "true" -> True
+        _ -> False
+

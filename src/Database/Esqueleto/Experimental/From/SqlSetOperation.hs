@@ -22,7 +22,7 @@ import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 import Database.Esqueleto.Internal.PersistentImport
-       (DBName(..), Entity, PersistEntity, PersistValue)
+       (Entity, PersistEntity, PersistValue)
 
 -- | Data type used to implement the SqlSetOperation language
 -- this type is implemented in the same way as a @From@

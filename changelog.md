@@ -1,5 +1,5 @@
 3.5.0.0
-=======- 
+======= 
 - @belevy
   - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
         - Destroy all GADTs; Removes the From GADT and SqlExpr GADT 
@@ -9,6 +9,24 @@
           that may be needed
         - Experimental top level is now strictly for documentation and all the 
           implementation details are in Experimental.* modules
+
+3.4.2.1
+=======
+- @parsonsmatt
+  - [#245](https://github.com/bitemyapp/esqueleto/pull/245)
+    - Support `persistent-2.13`
+
+3.4.2.0
+=======
+- @parsonsmatt
+  - [#243](https://github.com/bitemyapp/esqueleto/pull/243)
+    - Support `persistent-2.12`
+
+3.4.1.1
+=======
+- @MaxGabriel
+  - [#240](https://github.com/bitemyapp/esqueleto/pull/240/files)
+    - Improve recommend hlint to avoid doing `x = NULL` SQL queries
 
 3.4.1.0
 =======

@@ -15,6 +15,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+{-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
+
 -- | This is an internal module, anything exported by this module
 -- may change without a major version bump.  Please use only
 -- "Database.Esqueleto" if possible.
@@ -23,6 +25,8 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NEL
 import Control.Applicative ((<|>))
 import Data.Coerce (Coercible, coerce)
 import Control.Arrow (first, (***))
@@ -56,15 +60,18 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
+import Database.Persist.SqlBackend
 import qualified Database.Persist
+import Database.Persist (FieldNameDB(..), EntityNameDB(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
-       , entityColumnNames
-       , hasCompositeKey
+       , keyAndEntityColumnNames
+       , hasNaturalKey
        , isIdField
        , parseEntityValues
        )
 import Text.Blaze.Html (Html)
+import Data.Coerce (coerce)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -87,10 +94,13 @@ fromStart
     => SqlQuery (PreprocessedFrom (SqlExpr (Entity a)))
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
-    ident <- newIdentFor (entityDB ed)
+    ident <- newIdentFor (coerce $ getEntityDBName ed)
     let ret = unsafeSqlEntity ident 
         f' = FromStart ident ed
     return (PreprocessedFrom ret f')
+
+-- | Copied from @persistent@
+newtype DBName = DBName { unDBName :: T.Text }
 
 -- | (Internal) Same as 'fromStart', but entity may be missing.
 fromStartMaybe
@@ -547,19 +557,18 @@ ERaw m f ^. field
     fieldDef =
         if isIdField field then
             -- TODO what about composite natural keys in a join this will ignore them
-            head $ entityKeyFields ed
+            NEL.head $ getEntityKeyFields ed
         else
             persistFieldDef field
     idFieldValue =
-        case entityKeyFields ed of
-            idField:[] ->
+        case getEntityKeyFields ed of
+            idField :| [] ->
                 ERaw noMeta $ \_ info -> (dot info idField, [])
 
             idFields ->
-                let renderedFields info = dot info <$> idFields
+                let renderedFields info = dot info <$> NEL.toList idFields
                 in ERaw noMeta{ sqlExprMetaCompositeFields = Just renderedFields} $ 
-                    \p info -> (parensM p $ uncommas $ dot info <$> idFields, [])
-
+                    \p info -> (parensM p $ uncommas $ renderedFields info, [])
 
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
@@ -571,7 +580,7 @@ ERaw m f ^. field
             | Just baseI <- sqlExprMetaAlias m = 
                 useIdent info $ aliasedEntityColumnIdent baseI fieldDef
             | otherwise = 
-                fromDBName info (fieldDB fieldDef)
+                fromDBName info (coerce $ fieldDB fieldDef)
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
@@ -611,10 +620,10 @@ val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 -- In SQL, @= NULL@ and @!= NULL@ return NULL instead of true or false. For this reason, you very likely do not want to use @'!=.' Nothing@ in Esqueleto.
 -- You may find these @hlint@ rules helpful to enforce this:
 --
--- > - error: {lhs: v ==. nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
--- > - error: {lhs: v ==. val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
--- > - error: {lhs: v !=. nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
--- > - error: {lhs: v !=. val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
+-- > - error: {lhs: v Database.Esqueleto.==. Database.Esqueleto.nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
+-- > - error: {lhs: v Database.Esqueleto.==. Database.Esqueleto.val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
+-- > - error: {lhs: v Database.Esqueleto.!=. Database.Esqueleto.nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
+-- > - error: {lhs: v Database.Esqueleto.!=. Database.Esqueleto.val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
 isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
 isNothing v =
     case v of
@@ -1270,7 +1279,7 @@ toUniqueDef uniqueConstructor = uniqueDef
     unique = finalR uniqueConstructor
     -- there must be a better way to get the constrain name from a unique, make this not a list search
     filterF = (==) (persistUniqueToFieldNames unique) . uniqueFields
-    uniqueDef = head . filter filterF . entityUniques . entityDef $ proxy
+    uniqueDef = head . filter filterF . getEntityUniques . entityDef $ proxy
 
 -- | Render updates to be use in a SET clause for a given sql backend.
 --
@@ -1782,8 +1791,8 @@ instance Show FromClause where
             "(FromRaw _)"
 
       where
-        dummy = SqlBackend
-            { connEscapeName = \(DBName x) -> x
+        dummy = mkSqlBackend MkSqlBackendArgs
+            { connEscapeRawName = id
             }
         render' = T.unpack . renderExpr dummy
 
@@ -2049,6 +2058,16 @@ noMeta = SqlExprMeta
 hasCompositeKeyMeta :: SqlExprMeta -> Bool
 hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields 
 
+entityAsValue
+    :: SqlExpr (Entity val)
+    -> SqlExpr (Value (Entity val))
+entityAsValue = coerce 
+
+entityAsValueMaybe
+    :: SqlExpr (Maybe (Entity val))
+    -> SqlExpr (Value (Maybe (Entity val)))
+entityAsValueMaybe = coerce 
+
 -- | An expression on the SQL backend.
 --
 -- Raw expression: Contains a 'SqlExprMeta' and a function for 
@@ -2080,7 +2099,7 @@ instance ToSomeValues (SqlExpr (Value a)) where
 fieldName
     :: (PersistEntity val, PersistField typ)
     => IdentInfo -> EntityField val typ -> TLB.Builder
-fieldName info = fromDBName info . fieldDB . persistFieldDef
+fieldName info = fromDBName info . coerce . fieldDB . persistFieldDef
 
 -- FIXME: Composite/non-id pKS not supported on set
 setAux
@@ -2097,7 +2116,7 @@ sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value 
 sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
-fromDBName (conn, _) = TLB.fromText . connEscapeName conn
+fromDBName (conn, _) = TLB.fromText . flip getEscapedRawName conn . unDBName
 
 existsHelper :: SqlQuery () -> SqlExpr (Value Bool)
 existsHelper = sub SELECT . (>> return true)
@@ -2817,7 +2836,7 @@ makeFrom info mode fs = ret
     mk paren (FromRaw f) = f paren info
 
     base ident@(I identText) def =
-        let db@(DBName dbText) = entityDB def
+        let db@(DBName dbText) = coerce $ getEntityDBName def
         in ( fromDBName info db <>
                  if dbText == identText
                  then mempty
@@ -2882,8 +2901,7 @@ makeOrderBy info is =
 
 makeLimit :: IdentInfo -> LimitClause -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) orderByClauses =
-    let limitRaw = connLimitOffset conn (v ml, v mo) hasOrderClause "\n"
-        hasOrderClause = not (null orderByClauses)
+    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
@@ -2900,7 +2918,7 @@ parens b = "(" <> (b <> ")")
 
 aliasedEntityColumnIdent :: Ident -> FieldDef -> Ident
 aliasedEntityColumnIdent (I baseIdent) field =
-    I (baseIdent <> "_" <> (unDBName $ fieldDB field))
+    I (baseIdent <> "_" <> (unDBName $ coerce $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
 aliasedColumnName (I baseIdent) info columnName =
@@ -2934,13 +2952,15 @@ instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) wher
     sqlInsertInto info e =
         let fields =
                 uncommas $
-                map (fromDBName info . fieldDB) $
-                entityFields $
+                map (fromDBName info . coerce . fieldDB) $
+                getEntityFields $
                 entityDef (proxy e)
+
             proxy :: SqlExpr (Insertion a) -> Proxy a
             proxy = const Proxy
+
             table  =
-                fromDBName info . entityDB . entityDef . proxy
+                fromDBName info . DBName . coerce . getEntityDBName . entityDef . proxy
         in
             ("INSERT INTO " <> table e <> parens fields <> "\n", [])
     sqlSelectCols info (ERaw _ f) = f Never info
@@ -2956,8 +2976,16 @@ instance SqlSelect () () where
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
-    (if hasCompositeKey ent then id else ( fieldDB (entityId ent) :))
-    $ map fieldDB (entityFields ent)
+    addIdColumn rest
+  where
+    rest =
+        map (coerce . fieldDB) (getEntityFields ent)
+    addIdColumn =
+        case getEntityId ent of
+            EntityIdField fd ->
+                (:) (coerce (fieldDB fd))
+            EntityIdNaturalKey _ ->
+                id
 
 -- | You may return an 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
@@ -2978,9 +3006,11 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
               ed = entityDef $ getEntityVal $ return expr
           in (process ed, mempty)
       | otherwise =
-          let process ed = uncommas $
-                         map ((name <>) . TLB.fromText) $
-                         entityColumnNames ed (fst info)
+          let process ed = 
+                  uncommas 
+                  $ map ((name <>) . TLB.fromText) 
+                  $ NEL.toList        
+                  $ keyAndEntityColumnNames ed (fst info)
               -- 'name' is the biggest difference between 'RawSql' and
               -- 'SqlSelect'.  We automatically create names for tables
               -- (since it's not the user who's writing the FROM

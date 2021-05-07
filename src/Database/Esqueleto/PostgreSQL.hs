@@ -47,6 +47,8 @@ import Data.Time.Clock (UTCTime)
 import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import Database.Persist.Class (OnlyOneUniqueKey)
+import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -206,7 +208,7 @@ upsertBy
     -- ^ the record in the database after the operation
 upsertBy uniqueKey record updates = do
     sqlB <- R.ask
-    case connUpsertSql sqlB of
+    case getConnUpsertSql sqlB of
         Nothing ->
             -- Postgres backend should have connUpsertSql, if this error is
             -- thrown, check changes on persistent
@@ -218,7 +220,7 @@ upsertBy uniqueKey record updates = do
     entDef = entityDef (Just record)
     updatesText conn = first builderToText $ renderUpdates conn updates
 #if MIN_VERSION_persistent(2,11,0)
-    uniqueFields = NonEmpty.fromList (persistUniqueToFieldNames uniqueKey)
+    uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
         let (updateText, updateVals) =
                 updatesText sqlB
@@ -306,10 +308,10 @@ insertSelectWithConflictCount unique query conflictQuery = do
     updates = conflictQuery entCurrent entExcluded
     combine (tlb1,vals1) (tlb2,vals2) = (builderToText (tlb1 `mappend` tlb2), vals1 ++ vals2)
     entExcluded = unsafeSqlEntity (I "excluded")
-    tableName = unDBName . entityDB . entityDef
+    tableName = unEntityNameDB . getEntityDBName . entityDef
     entCurrent = unsafeSqlEntity (I (tableName proxy))
     uniqueDef = toUniqueDef unique
-    constraint = TLB.fromText . unDBName . uniqueDBName $ uniqueDef
+    constraint = TLB.fromText . unConstraintNameDB . uniqueDBName $ uniqueDef
     renderedUpdates :: (BackendCompatible SqlBackend backend) => backend -> (TLB.Builder, [PersistValue])
     renderedUpdates conn = renderUpdates conn updates
     conflict conn = (mconcat ([
