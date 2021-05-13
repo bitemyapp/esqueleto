@@ -1,4 +1,4 @@
-Esqueleto [![TravisCI](https://travis-ci.org/bitemyapp/esqueleto.svg)](https://travis-ci.org/bitemyapp/esqueleto)
+Esqueleto [![CI](https://github.com/bitemyapp/esqueleto/actions/workflows/haskell.yml/badge.svg?branch=master)](https://github.com/bitemyapp/esqueleto/actions/workflows/haskell.yml)
 ==========
 
 ![Skeleton](./esqueleto.png)
@@ -255,13 +255,13 @@ for that end we use `unsafeSqlFunction`. For example, if we wish to consult the 
 
 ```haskell
 postgresTime :: (MonadIO m, MonadLogger m) => SqlWriteT m UTCTime
-postgresTime = 
+postgresTime =
   result <- select (pure now)
   case result of
     [x] -> pure x
     _ -> error "now() is guaranteed to return a single result"
   where
-    now :: SqlExpr (Value UTCTime) 
+    now :: SqlExpr (Value UTCTime)
     now = unsafeSqlFunction "now" ()
 ```
 
@@ -276,20 +276,20 @@ Do notice that `now` does not use any arguments, so we use `()` that is an insta
 `UnsafeSqlFunctionArgument` to represent no arguments, an empty list cast to a correct value
 will yield the same result as `()`.
 
-We can also use `unsafeSqlFunction` for more complex functions with customs values using 
+We can also use `unsafeSqlFunction` for more complex functions with customs values using
 `unsafeSqlValue` which turns any string into a sql value of whatever type we want, disclaimer:
 if you use it badly you will cause a runtime error. For example, say we want to try postgres'
 `date_part` function and get the day of a timestamp, we could use:
 
 ```haskell
 postgresTimestampDay :: (MonadIO m, MonadLogger m) => SqlWriteT m Int
-postgresTimestampDay = 
+postgresTimestampDay =
   result <- select (return $ dayPart date)
   case result of
     [x] -> pure x
     _ -> error "dayPart is guaranteed to return a single result"
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     date :: SqlExpr (Value UTCTime)
     date = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\'"
@@ -316,7 +316,7 @@ postgresTimestampDay = do
     [x] -> pure x
     _ -> error "dayPart is guaranteed to return a single result"
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     toTIMESTAMP :: SqlExpr (Value UTCTime) -> SqlExpr (Value UTCTime)
     toTIMESTAMP = unsafeSqlCastAs "TIMESTAMP"
@@ -335,7 +335,7 @@ on all queries, for example, if we have:
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return $ val ("hi\'; DROP TABLE foo; select \'bye\'" :: String)) >>= liftIO . print
 ```
 
@@ -351,10 +351,10 @@ Let's see an example of defining a new evil `now` function:
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return nowWithInjection) >>= liftIO . print
   where
-    nowWithInjection :: SqlExpr (Value UTCTime) 
+    nowWithInjection :: SqlExpr (Value UTCTime)
     nowWithInjection = unsafeSqlFunction "0; DROP TABLE bar; select now" ([] :: [SqlExpr (Value Int)])
 ```
 
@@ -370,10 +370,10 @@ will be erased with no indication whatsoever. Another example of this behavior i
 
 ```haskell
 myEvilQuery :: (MonadIO m, MonadLogger m) => SqlWriteT m ()
-myEvilQuery = 
+myEvilQuery =
   select (return $ dayPart dateWithInjection) >>= liftIO . print
   where
-    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int) 
+    dayPart :: SqlExpr (Value UTCTime) -> SqlExpr (Value Int)
     dayPart s = unsafeSqlFunction "date_part" (unsafeSqlValue "\'day\'" :: SqlExpr (Value String) ,s)
     dateWithInjection :: SqlExpr (Value UTCTime)
     dateWithInjection = unsafeSqlValue "TIMESTAMP \'2001-02-16 20:38:40\');DROP TABLE bar; select (16"
