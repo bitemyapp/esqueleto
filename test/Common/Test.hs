@@ -1466,6 +1466,21 @@ testUpdate run = describe "update" $ do
                                 , (Entity p1k p1, Value 3)
                                 , (Entity p3k p3, Value 7) ]
 
+    it "GROUP BY works with composite primary key" $ run $ do
+        p1k <- insert $ Point 1 2 "asdf"
+        p2k <- insert $ Point 2 3 "asdf"
+        ret <-
+            selectRethrowingQuery $
+            from $ \point -> do
+            where_ $ point ^. PointName ==. val "asdf"
+            groupBy (point ^. PointId)
+            pure (point ^. PointId)
+        liftIO $ do
+            ret `shouldMatchList`
+                map Value [p1k, p2k]
+
+
+
     it "GROUP BY works with COUNT and InnerJoin" $ run $ do
         l1k <- insert l1
         l3k <- insert l3
