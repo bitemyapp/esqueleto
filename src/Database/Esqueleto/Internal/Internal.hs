@@ -3003,7 +3003,7 @@ makeGroupBy info (GroupBy fields) = first ("\nGROUP BY " <>) build
 
     match :: SomeValue -> (TLB.Builder, [PersistValue])
     match (SomeValue (ERaw _ f)) = f info
-    match (SomeValue (ECompositeKey f)) = (mconcat $ f info, mempty)
+    match (SomeValue (ECompositeKey f)) = (uncommas $ f info, mempty)
     match (SomeValue (EAliasedValue i _)) = aliasedValueIdentToRawSql i info
     match (SomeValue (EValueReference i i')) = valueReferenceToRawSql i i' info
 

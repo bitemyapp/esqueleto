@@ -1423,26 +1423,6 @@ main = do
                 testJSONInsertions
                 testJSONOperators
             testLateralQuery
-            testUpdateWithExperimental
-
-testUpdateWithExperimental :: Spec
-testUpdateWithExperimental = fdescribe "Update/Experimental" $ do
-    it "works" $ do
-        run $ do
-            p1k <- insert p1
-            updateRethrowingQuery $ \p -> do
-                (p0 :& p1) <- Experimental.from $
-                    Table @Person
-                    `InnerJoin`
-                     Table @Person
-                        `Experimental.on` do
-                            \(p0 :& p1) ->
-                                p0 ^. PersonName ==. p1 ^. PersonName
-
-                set p [ PersonName =. val "asdf" ]
-                where_ $ p0 ^. PersonName ==. p ^. PersonName
-
-
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
