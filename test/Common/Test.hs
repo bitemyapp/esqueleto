@@ -34,6 +34,8 @@ module Common.Test
     , cleanUniques
     , RunDbMonad
     , Run
+    , updateRethrowingQuery
+    , selectRethrowingQuery
     , p1, p2, p3, p4, p5
     , l1, l2, l3
     , u1, u2, u3, u4
@@ -2578,3 +2580,17 @@ selectRethrowingQuery query =
     `catch` \(SomeException e) -> do
       (text, _) <- renderQuerySelect query
       liftIO . throwIO . userError $ Text.unpack text <> "\n\n" <> show e
+
+updateRethrowingQuery
+    ::
+    ( MonadUnliftIO  m
+    , PersistEntity val
+    , BackendCompatible SqlBackend (PersistEntityBackend val)
+    )
+    => (SqlExpr (Entity val) -> SqlQuery ())
+    -> SqlWriteT m ()
+updateRethrowingQuery k =
+    update k
+        `catch` \(SomeException e) -> do
+            (text, _) <- renderQueryUpdate (from k)
+            liftIO . throwIO . userError $ Text.unpack text <> "\n\n" <> show e
