@@ -1,3 +1,9 @@
+3.4.2.2
+=======
+- @parsonsmatt
+  - [#255](https://github.com/bitemyapp/esqueleto/pull/255)
+    - Fix a bug where a composite primary key in a `groupBy` clause would break.
+
 3.4.2.1
 =======
 - @parsonsmatt
