@@ -17,14 +17,14 @@ class ToAlias a where
 
 instance ToAlias (SqlExpr (Value a)) where
     toAlias e@(ERaw m f)
-      | Just _ <- sqlExprMetaAlias m, not (sqlExprMetaIsReference m) = pure e
+      | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
             ident <- newIdentFor (DBName "v")
             pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} f
 
 instance ToAlias (SqlExpr (Entity a)) where
     toAlias e@(ERaw m f)
-      | Just _ <- sqlExprMetaAlias m, not (sqlExprMetaIsReference m) = pure e
+      | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
            ident <- newIdentFor (DBName "v")
            pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
@@ -32,7 +32,7 @@ instance ToAlias (SqlExpr (Entity a)) where
 instance ToAlias (SqlExpr (Maybe (Entity a))) where
     -- FIXME: Code duplication because the compiler doesnt like half final encoding
     toAlias e@(ERaw m f)
-      | Just _ <- sqlExprMetaAlias m, not (sqlExprMetaIsReference m) = pure e
+      | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
            ident <- newIdentFor (DBName "v")
            pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
