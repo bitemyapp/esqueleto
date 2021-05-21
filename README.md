@@ -1,4 +1,4 @@
-Esqueleto [![TravisCI](https://travis-ci.org/bitemyapp/esqueleto.svg)](https://travis-ci.org/bitemyapp/esqueleto)
+Esqueleto [![CI](https://github.com/bitemyapp/esqueleto/actions/workflows/haskell.yml/badge.svg?branch=master)](https://github.com/bitemyapp/esqueleto/actions/workflows/haskell.yml)
 ==========
 
 ![Skeleton](./esqueleto.png)

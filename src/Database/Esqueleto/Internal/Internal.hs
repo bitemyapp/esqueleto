@@ -2121,7 +2121,7 @@ fromDBName (conn, _) = TLB.fromText . flip getEscapedRawName conn . unDBName
 existsHelper :: SqlQuery () -> SqlExpr (Value Bool)
 existsHelper = sub SELECT . (>> return true)
   where
-    true :: SqlExpr (Value Bool)
+    true  :: SqlExpr (Value Bool)
     true = val True
 
 -- | (Internal) Create a case statement.
