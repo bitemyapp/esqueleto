@@ -29,7 +29,7 @@ import Database.Esqueleto.Internal.PersistentImport
 --
 -- Semantically a @SqlSetOperation@ is always a @From@ but not vice versa
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 newtype SqlSetOperation a = SqlSetOperation
     { unSqlSetOperation :: NeedParens -> SqlQuery (a, IdentInfo -> (TLB.Builder, [PersistValue]))}
 
@@ -42,7 +42,7 @@ instance ToAliasReference a => ToFrom (SqlSetOperation a) a where
 
 -- | Type class to support direct use of @SqlQuery@ in a set operation tree
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 class ToSqlSetOperation a r | a -> r where
     toSqlSetOperation :: a -> SqlSetOperation r
 instance ToSqlSetOperation (SqlSetOperation a) a where
@@ -67,7 +67,7 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
             pure (aliasedValue, \info -> first (parensM p') $ toRawSql SELECT info aliasedQuery)
 
 -- | Helper function for defining set operations
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 mkSetOperation :: (ToSqlSetOperation a a', ToSqlSetOperation b a')
                => TLB.Builder -> a -> b -> SqlSetOperation a'
 mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
@@ -83,7 +83,7 @@ instance ToSqlSetOperation a a' => ToSqlSetOperation (Union a a) a' where
 -- | Overloaded @union_@ function to support use in both 'SqlSetOperation'
 -- and 'withRecursive'
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 class Union_ a where
     -- | @UNION@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
     union_ :: a
@@ -95,7 +95,7 @@ instance (ToSqlSetOperation a c, ToSqlSetOperation b c, res ~ SqlSetOperation c)
 -- | Overloaded @unionAll_@ function to support use in both 'SqlSetOperation'
 -- and 'withRecursive'
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 class UnionAll_ a where
     -- | @UNION@ @ALL@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
     unionAll_ :: a

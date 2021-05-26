@@ -4,8 +4,8 @@
 -- Haskell. The old method was a bit finicky and could permit runtime errors,
 -- and this new way is both significantly safer and much more powerful.
 --
--- Esqueleto users are encouraged to migrate to this module, as it will become
--- the default in a new major version @4.0.0.0@.
+-- This syntax will become the default syntax exported from the library in
+-- version @3.6.0.0@. To use the old syntax, see "Database.Esqueleto.Legacy".
 module Database.Esqueleto.Experimental
     ( -- * Setup
       -- $setup

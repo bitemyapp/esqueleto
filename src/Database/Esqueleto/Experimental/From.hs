@@ -56,7 +56,7 @@ type RawFn = NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
 -- the FromRaw FromClause constructor directly when converting
 -- from a @From@ to a @SqlQuery@ using @from@
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 newtype From a = From
     { unFrom :: SqlQuery (a, RawFn)}
 
@@ -66,13 +66,13 @@ newtype From a = From
 -- as well as supporting backwards compatibility for the
 -- data constructor join tree used prior to /3.5.0.0/
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 class ToFrom a r | a -> r where
     toFrom :: a -> From r
 instance ToFrom (From a) a where
     toFrom = id
 
-{-# DEPRECATED Table "/Since: 3.5.0.0/ - use 'table' instead" #-}
+{-# DEPRECATED Table "@since 3.5.0.0 - use 'table' instead" #-}
 data Table a = Table
 
 instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
@@ -84,7 +84,7 @@ instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
 -- select $ from $ table \@People
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
 table = From $ do
     let ed = entityDef (Proxy @ent)
@@ -123,7 +123,7 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a
 --      ...
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 selectQuery :: (SqlSelect a r, ToAlias a, ToAliasReference a) => SqlQuery a -> From a
 selectQuery subquery = From $ do
     -- We want to update the IdentState without writing the query to side data

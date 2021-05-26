@@ -110,7 +110,7 @@ type family HasOnClause actual expected :: Constraint where
 --         p ^. PersonId ==. bp ^. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 innerJoin :: ( ToFrom a a'
              , ToFrom b b'
              , HasOnClause rhs (a' :& b')
@@ -132,7 +132,7 @@ innerJoin lhs (rhs, on') = From $ do
 --
 -- See example 6
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 innerJoinLateral :: ( ToFrom a a'
                     , HasOnClause rhs (a' :& b)
                     , SqlSelect b r
@@ -157,7 +157,7 @@ innerJoinLateral lhs (rhsFn, on') = From $ do
 -- \`crossJoin\` table \@BlogPost
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 crossJoin :: ( ToFrom a a'
              , ToFrom b b'
              ) => a -> b -> From (a' :& b')
@@ -176,7 +176,7 @@ crossJoin lhs rhs = From $ do
 --
 -- See example 6
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 crossJoinLateral :: ( ToFrom a a'
                     , SqlSelect b r
                     , ToAlias b
@@ -205,7 +205,7 @@ crossJoinLateral lhs rhsFn = From $ do
 --         p ^. PersonId ==. bp ?. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 leftJoin :: ( ToFrom a a'
             , ToFrom b b'
             , ToMaybe b'
@@ -229,7 +229,7 @@ leftJoin lhs (rhs, on') = From $ do
 --
 -- See example 6 for how to use LATERAL
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 leftJoinLateral :: ( ToFrom a a'
                    , SqlSelect b r
                    , HasOnClause rhs (a' :& ToMaybeT b)
@@ -261,7 +261,7 @@ leftJoinLateral lhs (rhsFn, on') = From $ do
 --         p ?. PersonId ==. bp ^. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 rightJoin :: ( ToFrom a a'
              , ToFrom b b'
              , ToMaybe a'
@@ -289,7 +289,7 @@ rightJoin lhs (rhs, on') = From $ do
 --         p ?. PersonId ==. bp ?. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 fullOuterJoin :: ( ToFrom a a'
                  , ToFrom b b'
                  , ToMaybe a'
