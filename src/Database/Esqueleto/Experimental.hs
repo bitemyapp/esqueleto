@@ -229,9 +229,6 @@ import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
 
-import GHC.TypeLits
-import Database.Persist (EntityNameDB(..))
-
 -- $setup
 --
 -- If you're already using "Database.Esqueleto", then you can get

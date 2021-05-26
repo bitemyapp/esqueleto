@@ -138,7 +138,6 @@ module Database.Esqueleto.Internal.PersistentImport
     , getEntityId
     , getEntityDBName
     , getEntityUniques
-    , getEntityDBName
     ) where
 
 import Database.Persist.Sql hiding

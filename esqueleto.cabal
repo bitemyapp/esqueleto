@@ -75,7 +75,6 @@ library
         -Wpartial-fields
         -Wmissing-home-modules
         -Widentities
-        -Wredundant-constraints
         -Wcpp-undef
         -Wcpp-undef
         -Wmonomorphism-restriction

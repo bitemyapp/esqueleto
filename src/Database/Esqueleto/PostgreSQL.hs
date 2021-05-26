@@ -33,14 +33,12 @@ module Database.Esqueleto.PostgreSQL
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
-import Control.Arrow (first, (***))
+import Control.Arrow (first)
 import Control.Exception (throw)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
 import Data.Int (Int64)
-import Data.List.NonEmpty (NonEmpty((:|)))
-import qualified Data.List.NonEmpty as NonEmpty
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import Data.Time.Clock (UTCTime)
@@ -283,8 +281,8 @@ insertSelectWithConflict
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
     -> SqlWriteT m ()
-insertSelectWithConflict unique query =
-    void . insertSelectWithConflictCount unique query
+insertSelectWithConflict unique query a =
+    void $ insertSelectWithConflictCount unique query a
 
 -- | Same as 'insertSelectWithConflict' but returns the number of rows affected.
 --

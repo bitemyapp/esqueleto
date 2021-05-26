@@ -129,13 +129,8 @@ module Database.Esqueleto.Legacy
   , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Trans.Reader (ReaderT)
-import Data.Int (Int64)
-import qualified Data.Map.Strict as Map
 import Database.Esqueleto.Internal.Internal
 import Database.Esqueleto.Internal.PersistentImport
-import qualified Database.Persist
 
 
 -- $setup

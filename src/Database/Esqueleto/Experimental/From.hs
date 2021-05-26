@@ -18,8 +18,6 @@
 module Database.Esqueleto.Experimental.From
     where
 
-import Control.Arrow (first)
-import Control.Monad (ap)
 import qualified Control.Monad.Trans.Writer as W
 import Data.Coerce (coerce)
 import Data.Proxy
