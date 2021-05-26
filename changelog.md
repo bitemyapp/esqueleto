@@ -1,14 +1,22 @@
 3.5.0.0
-======= 
+=======
 - @belevy
   - [#228](https://github.com/bitemyapp/esqueleto/pull/228)
-        - Destroy all GADTs; Removes the From GADT and SqlExpr GADT 
-        - From GADT is replaced with a From data type and FromRaw 
+        - Destroy all GADTs; Removes the From GADT and SqlExpr GADT
+        - From GADT is replaced with a From data type and FromRaw
         - SqlExpr is now all defined in terms of ERaw
-        - Modified ERaw to contain a SqlExprMeta with any extra information 
+        - Modified ERaw to contain a SqlExprMeta with any extra information
           that may be needed
-        - Experimental top level is now strictly for documentation and all the 
+        - Experimental top level is now strictly for documentation and all the
           implementation details are in Experimental.* modules
+- @parsonsmatt
+    - [#259](https://github.com/bitemyapp/esqueleto/pull/259)
+        - Create the `Database.Esqueleto.Legacy` module. The
+          `Database.Esqueleto` module now emits a warning, directing users to
+          either import `Database.Esqueleto.Legacy` to keep the old behavior or
+          to import `Database.Esqueleto.Experimental` to opt in to the new
+          behavior.
+
 3.4.2.2
 =======
 - @parsonsmatt
