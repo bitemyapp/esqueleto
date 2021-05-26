@@ -93,7 +93,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql as EI
+import qualified Database.Esqueleto.Internal.Internal as EI
 import qualified UnliftIO.Resource as R
 
 -- Test schema

@@ -15,9 +15,8 @@ import Data.String (IsString(..))
 import Data.Text (Text)
 import qualified Data.Text as T (concat, pack)
 import qualified Data.Text.Encoding as TE (decodeUtf8, encodeUtf8)
-import Database.Esqueleto (Value, just, val)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Sql (SqlExpr)
+import Database.Esqueleto.Internal.Internal (SqlExpr, Value, just, val)
 import GHC.Generics (Generic)
 
 -- | Newtype wrapper around any type with a JSON representation.

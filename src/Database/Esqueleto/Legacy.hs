@@ -133,9 +133,8 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Reader (ReaderT)
 import Data.Int (Int64)
 import qualified Data.Map.Strict as Map
-import Database.Esqueleto.Internal.Language
+import Database.Esqueleto.Internal.Internal
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Sql
 import qualified Database.Persist
 
 

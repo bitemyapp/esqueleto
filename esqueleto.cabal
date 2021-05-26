@@ -31,8 +31,6 @@ library
         Database.Esqueleto
         Database.Esqueleto.Legacy
         Database.Esqueleto.Experimental
-        Database.Esqueleto.Internal.Language
-        Database.Esqueleto.Internal.Sql
         Database.Esqueleto.Internal.Internal
         Database.Esqueleto.Internal.ExprParser
         Database.Esqueleto.MySQL

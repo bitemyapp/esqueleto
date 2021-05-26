@@ -35,7 +35,7 @@ import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.Experimental hiding (from, on, random_)
 import qualified Database.Esqueleto.Experimental as Experimental
-import qualified Database.Esqueleto.Internal.Sql as ES
+import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
@@ -1197,7 +1197,7 @@ testCommonTableExpressions = do
         void $ select $ do
           limitedLordsCte <-
             Experimental.with $ do
-              lords <- Experimental.from $ Experimental.Table @Lord
+              lords <- Experimental.from $ Experimental.table @Lord
               limit 10
               pure lords
           lords <- Experimental.from limitedLordsCte
@@ -1260,9 +1260,9 @@ testLateralQuery = do
       _ <- run $ do
         select $ do
             l :& c <-
-              Experimental.from $ Table @Lord
+              Experimental.from $ table @Lord
               `CrossJoin` \lord -> do
-                    deed <- Experimental.from $ Table @Deed
+                    deed <- Experimental.from $ table @Deed
                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                     pure $ countRows @Int
             pure (l, c)
@@ -1271,11 +1271,11 @@ testLateralQuery = do
     it "supports INNER JOIN LATERAL" $ do
       run $ do
         let subquery lord = do
-                            deed <- Experimental.from $ Table @Deed
+                            deed <- Experimental.from $ table @Deed
                             where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                             pure $ countRows @Int
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `InnerJoin` subquery
                           `Experimental.on` (const $ val True)
           pure (l, c)
@@ -1287,9 +1287,9 @@ testLateralQuery = do
     it "supports LEFT JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `LeftOuterJoin` (\lord -> do
-                                    deed <- Experimental.from $ Table @Deed
+                                    deed <- Experimental.from $ table @Deed
                                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                                     pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
@@ -1303,9 +1303,9 @@ testLateralQuery = do
     it "compile error on RIGHT JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `RightOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ Table @Deed
+                                      deed <- Experimental.from $ table @Deed
                                       where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
                                       pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
@@ -1316,9 +1316,9 @@ testLateralQuery = do
     it "compile error on FULL OUTER JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `FullOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ Table @Deed
+                                      deed <- Experimental.from $ table @Deed
                                       where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
                                       pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
