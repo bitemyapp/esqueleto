@@ -1,21 +1,20 @@
-{-# LANGUAGE ScopedTypeVariables
-           , FlexibleContexts
-           , RankNTypes
-           , TypeFamilies
-           , OverloadedStrings
-#-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Main (main) where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger (runStderrLoggingT, runNoLoggingT)
+import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
 import Control.Monad.Trans.Reader (ReaderT)
-import Database.Persist.Sqlite (withSqliteConn)
-import Database.Sqlite (SqliteException)
+import qualified Control.Monad.Trans.Resource as R
 import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.SQLite (random_)
-import qualified Control.Monad.Trans.Resource as R
+import Database.Persist.Sqlite (withSqliteConn)
+import Database.Sqlite (SqliteException)
 import Test.Hspec
 
 import Common.Test
@@ -169,7 +168,7 @@ main = do
     describe "Test SQLite locking" $ do
       testLocking withConn
 
-    fdescribe "SQLite specific tests" $ do
+    describe "SQLite specific tests" $ do
       testAscRandom random_ run
       testRandomMath run
       testSqliteRandom

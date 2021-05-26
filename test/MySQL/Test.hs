@@ -24,6 +24,7 @@ import Database.Persist.MySQL
        , defaultConnectInfo
        , withMySQLConn
        )
+
 import System.Environment
 import Test.Hspec
 
@@ -190,7 +191,7 @@ testMysqlUnionWithLimits = do
               pure $ foo ^. FooName
 
 
-        ret <- select $ Experimental.from $ SelectQuery q1 `Union` SelectQuery q2
+        ret <- select $ Experimental.from $ q1 `union_` q2
         liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
 
 

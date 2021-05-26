@@ -1,15 +1,4 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 -- | This module contains a new way (introduced in 3.3.3.0) of using @FROM@ in
 -- Haskell. The old method was a bit finicky and could permit runtime errors,
@@ -29,10 +18,24 @@ module Database.Esqueleto.Experimental
 
       -- * Documentation
 
-      From(..)
-    , on
-    , from
+    -- ** Basic Queries
+      from
+    , table
+    , Table(..)
+    , SubQuery(..)
+    , selectQuery
+
+    -- ** Joins
     , (:&)(..)
+    , on
+    , innerJoin
+    , innerJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , crossJoin
+    , crossJoinLateral
 
       -- ** Set Operations
       -- $sql-set-operations
@@ -50,16 +53,16 @@ module Database.Esqueleto.Experimental
     , with
     , withRecursive
 
-      -- * Internals
-    , ToFrom(..)
+      -- ** Internals
+    , From(..)
     , ToMaybe(..)
     , ToAlias(..)
     , ToAliasT
     , ToAliasReference(..)
     , ToAliasReferenceT
-    , ValidOnClauseValue
-    -- * The Normal Stuff
+    , ToSqlSetOperation(..)
 
+    -- * The Normal Stuff
     , where_
     , groupBy
     , orderBy
@@ -172,6 +175,7 @@ module Database.Esqueleto.Experimental
     , DistinctOn
     , LockingKind(..)
     , SqlString
+
       -- ** Joins
     , InnerJoin(..)
     , CrossJoin(..)
@@ -180,7 +184,8 @@ module Database.Esqueleto.Experimental
     , FullOuterJoin(..)
     , JoinKind(..)
     , OnClauseWithoutMatchingJoinException(..)
-      -- * SQL backend
+
+      -- ** SQL backend
     , SqlQuery
     , SqlExpr
     , SqlEntity
@@ -194,38 +199,36 @@ module Database.Esqueleto.Experimental
     , insertSelectCount
     , (<#)
     , (<&>)
+
     -- ** Rendering Queries
     , renderQueryToText
     , renderQuerySelect
     , renderQueryUpdate
     , renderQueryDelete
     , renderQueryInsertInto
-    -- * Internal.Language
-    -- * RDBMS-specific modules
-    -- $rdbmsSpecificModules
 
-    -- * Helpers
+    -- ** Helpers
     , valkey
     , valJ
     , associateJoin
 
-      -- * Re-exports
+      -- ** Re-exports
       -- $reexports
     , deleteKey
     , module Database.Esqueleto.Internal.PersistentImport
     ) where
 
-import Control.Monad.Trans.Class (lift)
-import qualified Control.Monad.Trans.State as S
-import qualified Control.Monad.Trans.Writer as W
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
-import Data.Kind (Constraint)
-import Data.Proxy (Proxy(..))
-import qualified Data.Text.Lazy.Builder as TLB
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
+
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.From.CommonTableExpression
+import Database.Esqueleto.Experimental.From.Join
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Experimental.ToMaybe
+
 import GHC.TypeLits
 import Database.Persist (EntityNameDB(..))
 
@@ -317,7 +320,7 @@ import Database.Persist (EntityNameDB(..))
 --
 -- @
 -- select $ do
--- people <- from $ Table \@Person
+-- people <- from $ table \@Person
 -- where_ (people ^. PersonName ==. val \"John\")
 -- pure people
 -- @
@@ -345,8 +348,8 @@ import Database.Persist (EntityNameDB(..))
 -- @
 -- select $ do
 -- (people :& blogPosts) <-
---     from $ Table \@Person
---     \`LeftOuterJoin\` Table \@BlogPost
+--     from $ table \@Person
+--     \`leftJoin\` table \@BlogPost
 --     \`on\` (\\(people :& blogPosts) ->
 --             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
 -- where_ (people ^. PersonAge >. val 18)
@@ -377,7 +380,7 @@ import Database.Persist (EntityNameDB(..))
 --
 -- In this version, with each successive 'on' clause, only the tables
 -- we have already joined into are in scope, so we must pattern match
--- accordingly. In this case, in the second 'InnerJoin', we do not use
+-- accordingly. In this case, in the second 'innerJoin', we do not use
 -- the first `Person` reference, so we use @_@ as a placeholder to
 -- ignore it. This prevents a possible runtime error where a table
 -- is referenced before it appears in the sequence of 'JOIN's.
@@ -385,11 +388,11 @@ import Database.Persist (EntityNameDB(..))
 -- @
 -- select $ do
 -- (people1 :& followers :& people2) <-
---     from $ Table \@Person
---     \`InnerJoin` Table \@Follow
+--     from $ table \@Person
+--     \`innerJoin` table \@Follow
 --     \`on\` (\\(people1 :& followers) ->
 --             people1 ^. PersonId ==. followers ^. FollowFollowed)
---     \`InnerJoin` Table \@Person
+--     \`innerJoin` table \@Person
 --     \`on\` (\\(_ :& followers :& people2) ->
 --             followers ^. FollowFollower ==. people2 ^. PersonId)
 -- where_ (people1 ^. PersonName ==. val \"John\")
@@ -421,8 +424,8 @@ import Database.Persist (EntityNameDB(..))
 -- peopleWithPosts <-
 --   from $ do
 --     (people :& blogPosts) <-
---       from $ Table \@Person
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Person
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(p :& bP) ->
 --               p ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     groupBy (people ^. PersonId)
@@ -452,8 +455,8 @@ import Database.Persist (EntityNameDB(..))
 -- (authors, blogPosts) <- from $
 --   (do
 --     (author :& blogPost) <-
---       from $ Table \@Person
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Person
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(a :& bP) ->
 --               a ^. PersonId ==. bP ^. BlogPostAuthorId)
 --     where_ (author ^. PersonId ==. val currentPersonId)
@@ -462,11 +465,11 @@ import Database.Persist (EntityNameDB(..))
 --   \`union_\`
 --   (do
 --     (follow :& blogPost :& author) <-
---       from $ Table \@Follow
---       \`InnerJoin\` Table \@BlogPost
+--       from $ table \@Follow
+--       \`innerJoin\` table \@BlogPost
 --       \`on\` (\\(f :& bP) ->
 --               f ^. FollowFollowed ==. bP ^. BlogPostAuthorId)
---       \`InnerJoin\` Table \@Person
+--       \`innerJoin\` table \@Person
 --       \`on\` (\\(_ :& bP :& a) ->
 --               bP ^. BlogPostAuthorId ==. a ^. PersonId)
 --     where_ (follow ^. FollowFollower ==. val currentPersonId)
@@ -485,14 +488,14 @@ import Database.Persist (EntityNameDB(..))
 -- @
 -- select $ do
 -- (salesPerson :& maxSaleAmount :& maxSaleCustomerName) <-
---   from $ Table \@SalesPerson
---   \`CrossJoin\` (\\salesPerson -> do
---         sales <- from $ Table \@Sale
+--   from $ table \@SalesPerson
+--   \`crossJoinLateral\` (\\salesPerson -> do
+--         sales <- from $ table \@Sale
 --         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
 --         pure $ max_ (sales ^. SaleAmount)
 --         )
---   \`CrossJoin\` (\\(salesPerson :& maxSaleAmount) -> do
---         sales <- from $ Table \@Sale
+--   \`crossJoinLateral\` (\\(salesPerson :& maxSaleAmount) -> do
+--         sales <- from $ table \@Sale
 --         where_ $ sales ^. SaleSalesPersonId ==. salesPerson ^. SalesPersonId
 --              &&. sales ^. SaleAmount ==. maxSaleAmount
 --         pure $ sales ^. SaleCustomerName)
@@ -527,27 +530,6 @@ import Database.Persist (EntityNameDB(..))
 --   AS max_sale_customer;
 -- @
 
--- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
--- that have been joined together.
---
--- The precedence behavior can be demonstrated by:
---
--- @
--- a :& b :& c == ((a :& b) :& c)
--- @
---
--- See the examples at the beginning of this module to see how this
--- operator is used in 'JOIN' operations.
-data (:&) a b = a :& b
-infixl 2 :&
-
-data SqlSetOperation a
-    = SqlSetUnion (SqlSetOperation a) (SqlSetOperation a)
-    | SqlSetUnionAll (SqlSetOperation a) (SqlSetOperation a)
-    | SqlSetExcept (SqlSetOperation a) (SqlSetOperation a)
-    | SqlSetIntersect (SqlSetOperation a) (SqlSetOperation a)
-    | SelectQueryP NeedParens (SqlQuery a)
-
 -- $sql-set-operations
 --
 -- Data type that represents SQL set operations. This includes
@@ -561,12 +543,12 @@ data SqlSetOperation a
 -- @
 -- select $ from $
 --   (do
---      a <- from Table @A
+--      a <- from $ table @A
 --      pure $ a ^. ASomeCol
 --   )
 --   \`union_\`
 --   (do
---      b <- from Table @B
+--      b <- from $ table @B
 --      pure $ b ^. BSomeCol
 --   )
 -- @
@@ -581,846 +563,3 @@ data SqlSetOperation a
 -- )
 -- @
 --
-
-{-# DEPRECATED Union "/Since: 3.4.0.0/ - Use the 'union_' function instead of the 'Union' data constructor" #-}
-data Union a b = a `Union` b
-
--- | @UNION@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
-union_ :: a -> b -> Union a b
-union_ = Union
-
-{-# DEPRECATED UnionAll "/Since: 3.4.0.0/ - Use the 'unionAll_' function instead of the 'UnionAll' data constructor" #-}
-data UnionAll a b = a `UnionAll` b
-
--- | @UNION@ @ALL@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
-unionAll_ :: a -> b -> UnionAll a b
-unionAll_ = UnionAll
-
-{-# DEPRECATED Except "/Since: 3.4.0.0/ - Use the 'except_' function instead of the 'Except' data constructor" #-}
-data Except a b = a `Except` b
-
--- | @EXCEPT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
-except_ :: a -> b -> Except a b
-except_ = Except
-
-{-# DEPRECATED Intersect "/Since: 3.4.0.0/ - Use the 'intersect_' function instead of the 'Intersect' data constructor" #-}
-data Intersect a b = a `Intersect` b
-
--- | @INTERSECT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
-intersect_ :: a -> b -> Intersect a b
-intersect_ = Intersect
-
-class SetOperationT a ~ b => ToSetOperation a b | a -> b where
-    type SetOperationT a
-    toSetOperation :: a -> SqlSetOperation b
-instance ToSetOperation (SqlSetOperation a) a where
-    type SetOperationT (SqlSetOperation a) = a
-    toSetOperation = id
-instance ToSetOperation (SqlQuery a) a where
-    type SetOperationT (SqlQuery a) = a
-    toSetOperation = SelectQueryP Never
-instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Union a b) c where
-    type SetOperationT (Union a b) = SetOperationT a
-    toSetOperation (Union a b) = SqlSetUnion (toSetOperation a) (toSetOperation b)
-instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (UnionAll a b) c where
-    type SetOperationT (UnionAll a b) = SetOperationT a
-    toSetOperation (UnionAll a b) = SqlSetUnionAll (toSetOperation a) (toSetOperation b)
-instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Except a b) c where
-    type SetOperationT (Except a b) = SetOperationT a
-    toSetOperation (Except a b) = SqlSetExcept (toSetOperation a) (toSetOperation b)
-instance (ToSetOperation a c, ToSetOperation b c) => ToSetOperation (Intersect a b) c where
-    type SetOperationT (Intersect a b) = SetOperationT a
-    toSetOperation (Intersect a b) = SqlSetIntersect (toSetOperation a) (toSetOperation b)
-
-{-# DEPRECATED SelectQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SelectQuery@" #-}
-pattern SelectQuery :: SqlQuery a -> SqlSetOperation a
-pattern SelectQuery q = SelectQueryP Never q
-
--- | Data type that represents the syntax of a 'JOIN' tree. In practice,
--- only the @Table@ constructor is used directly when writing queries. For example,
---
--- @
--- select $ from $ Table \@People
--- @
-data From a where
-    Table
-        :: PersistEntity ent
-        => From (SqlExpr (Entity ent))
-    SubQuery
-        :: ( SqlSelect a r
-           , ToAlias a
-           , ToAliasReference a
-           )
-        => SqlQuery a
-        -> From a
-    FromCte
-        :: Ident
-        -> a
-        -> From a
-    SqlSetOperation
-        :: ( SqlSelect a r
-           , ToAlias a
-           , ToAliasReference a
-           )
-        => SqlSetOperation a
-        -> From a
-    InnerJoinFrom
-        :: From a
-        -> (From b, (a :& b) -> SqlExpr (Value Bool))
-        -> From (a :& b)
-    InnerJoinFromLateral
-        :: ( SqlSelect b r
-           , ToAlias b
-           , ToAliasReference b
-           )
-        => From a
-        -> ((a -> SqlQuery b), (a :& b) -> SqlExpr (Value Bool))
-        -> From (a :& b)
-    CrossJoinFrom
-        :: From a
-        -> From b
-        -> From (a :& b)
-    CrossJoinFromLateral
-        :: ( SqlSelect b r
-           , ToAlias b
-           , ToAliasReference b
-           )
-        => From a
-        -> (a -> SqlQuery b)
-        -> From (a :& b)
-    LeftJoinFrom
-        :: ToMaybe b
-        => From a
-        -> (From b, (a :& ToMaybeT b) -> SqlExpr (Value Bool))
-        -> From (a :& ToMaybeT b)
-    LeftJoinFromLateral
-        :: ( SqlSelect b r
-           , ToAlias b
-           , ToAliasReference b
-           , ToMaybe b
-           )
-        => From a
-        -> ((a -> SqlQuery b), (a :& ToMaybeT b) -> SqlExpr (Value Bool))
-        -> From (a :& ToMaybeT b)
-    RightJoinFrom
-        :: ToMaybe a
-        => From a
-        -> (From b, (ToMaybeT a :& b) -> SqlExpr (Value Bool))
-        -> From (ToMaybeT a :& b)
-    FullJoinFrom
-        :: (ToMaybe a, ToMaybe b )
-        => From a
-        -> (From b, (ToMaybeT a :& ToMaybeT b) -> SqlExpr (Value Bool))
-        -> From (ToMaybeT a :& ToMaybeT b)
-
--- | Constraint for `on`. Ensures that only types that require an `on` can be used on
--- the left hand side. This was previously reusing the ToFrom class which was actually
--- a bit too lenient as it allowed to much.
---
--- @since 3.4.0.0
-type family ValidOnClauseValue a :: Constraint where
-  ValidOnClauseValue (From a) = ()
-  ValidOnClauseValue (SqlQuery a) = ()
-  ValidOnClauseValue (SqlSetOperation a) = ()
-  ValidOnClauseValue (a -> SqlQuery b) = ()
-  ValidOnClauseValue _ = TypeError ('Text "Illegal use of ON")
-
--- | An @ON@ clause that describes how two tables are related. This should be
--- used as an infix operator after a 'JOIN'. For example,
---
--- @
--- select $
--- from $ Table \@Person
--- \`InnerJoin\` Table \@BlogPost
--- \`on\` (\\(p :& bP) ->
---         p ^. PersonId ==. bP ^. BlogPostAuthorId)
--- @
-on :: ValidOnClauseValue a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
-on = (,)
-infix 9 `on`
-
-data Lateral
-data NotLateral
-
-type family IsLateral a where
-    IsLateral (a -> SqlQuery b) = Lateral
-    IsLateral a = NotLateral
-
-type family ErrorOnLateral a :: Constraint where
-  ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
-  ErrorOnLateral _ = ()
-
-{-- Type class magic to allow the use of the `InnerJoin` family of data constructors in from --}
-class ToFrom a where
-    type ToFromT a
-    toFrom :: a -> From (ToFromT a)
-
--- @since 3.4.0.1
-type family FromOnClause a where
-    FromOnClause (a, b -> SqlExpr (Value Bool)) = b
-    FromOnClause a = TypeError ('Text "Missing ON clause")
-
-instance {-# OVERLAPPABLE #-} ToFrom (InnerJoin a b) where
-    type ToFromT (InnerJoin a b) = FromOnClause b
-    toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (LeftOuterJoin a b) where
-    type ToFromT (LeftOuterJoin a b) = FromOnClause b
-    toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (FullOuterJoin a b) where
-    type ToFromT (FullOuterJoin a b) = FromOnClause b
-    toFrom = undefined
-instance {-# OVERLAPPABLE #-} ToFrom (RightOuterJoin a b) where
-    type ToFromT (RightOuterJoin a b) = FromOnClause b
-    toFrom = undefined
-
-instance ToFrom (From a) where
-    type ToFromT (From a) = a
-    toFrom = id
-
-instance
-    ( ToAlias a
-    , ToAliasReference a
-    , SqlSelect a r
-    )
-  =>
-    ToFrom (SqlQuery a)
-  where
-    type ToFromT (SqlQuery a) = a
-    toFrom = SubQuery
-
-instance
-    ( SqlSelect c r
-    , ToAlias c
-    , ToAliasReference c
-    , ToSetOperation a c
-    , ToSetOperation b c
-    , c ~ SetOperationT a
-    )
-  =>
-    ToFrom (Union a b)
-  where
-    type ToFromT (Union a b) = SetOperationT a
-    toFrom u = SqlSetOperation $ toSetOperation u
-
-instance
-    ( SqlSelect c r
-    , ToAlias c
-    , ToAliasReference c
-    , ToSetOperation a c
-    , ToSetOperation b c
-    , c ~ SetOperationT a
-    )
-  =>
-    ToFrom (UnionAll a b)
-  where
-    type ToFromT (UnionAll a b) = SetOperationT a
-    toFrom u = SqlSetOperation $ toSetOperation u
-
-instance
-    ( SqlSelect c r
-    , ToAlias c
-    , ToAliasReference c
-    , ToSetOperation a c
-    , ToSetOperation b c
-    , c ~ SetOperationT a
-    )
-  =>
-    ToFrom (Intersect a b)
-  where
-    type ToFromT (Intersect a b) = SetOperationT a
-    toFrom u = SqlSetOperation $ toSetOperation u
-
-instance
-    ( SqlSelect c r
-    , ToAlias c
-    , ToAliasReference c
-    , ToSetOperation a c
-    , ToSetOperation b c
-    , c ~ SetOperationT a
-    )
-  =>
-    ToFrom (Except a b)
-  where
-    type ToFromT (Except a b) = SetOperationT a
-    toFrom u = SqlSetOperation $ toSetOperation u
-
-instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlSetOperation a) where
-    type ToFromT (SqlSetOperation a) = a
-    -- If someone uses just a plain SelectQuery it should behave like a normal subquery
-    toFrom (SelectQueryP _ q) = SubQuery q
-    -- Otherwise use the SqlSetOperation
-    toFrom q = SqlSetOperation q
-
-class ToInnerJoin lateral lhs rhs res where
-    toInnerJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
-
-instance ( SqlSelect b r
-         , ToAlias b
-         , ToAliasReference b
-         , ToFrom a
-         , ToFromT a ~ a'
-         ) => ToInnerJoin Lateral a (a' -> SqlQuery b) (a' :& b) where
-             toInnerJoin _ lhs q on' = InnerJoinFromLateral (toFrom lhs) (q, on')
-
-instance (ToFrom a, ToFromT a ~ a', ToFrom b, ToFromT b ~ b')
-  => ToInnerJoin NotLateral a b (a' :& b') where
-      toInnerJoin _ lhs rhs on' = InnerJoinFrom (toFrom lhs) (toFrom rhs, on')
-
-instance (ToInnerJoin (IsLateral b) a b b') => ToFrom (InnerJoin a (b, b' -> SqlExpr (Value Bool))) where
-    type ToFromT (InnerJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
-    toFrom (InnerJoin lhs (rhs, on')) = toInnerJoin (toProxy rhs) lhs rhs on'
-        where
-            toProxy :: b -> Proxy (IsLateral b)
-            toProxy _ = Proxy
-
--- @since 3.4.0.1
-type family FromCrossJoin a b where
-    FromCrossJoin a (b -> SqlQuery c) = ToFromT a :& c
-    FromCrossJoin a b = ToFromT a :& ToFromT b
-
-instance ( ToFrom a
-         , ToFrom b
-         , ToFromT (CrossJoin a b) ~ (ToFromT a :& ToFromT b)
-         ) => ToFrom (CrossJoin a b) where
-    type ToFromT (CrossJoin a b) = FromCrossJoin a b
-    toFrom (CrossJoin lhs rhs) = CrossJoinFrom (toFrom lhs) (toFrom rhs)
-
-instance {-# OVERLAPPING #-}
-         ( ToFrom a
-         , ToFromT a ~ a'
-         , SqlSelect b r
-         , ToAlias b
-         , ToAliasReference b
-         ) => ToFrom (CrossJoin a (a' -> SqlQuery b)) where
-    type ToFromT (CrossJoin a (a' -> SqlQuery b)) = FromCrossJoin a (a' -> SqlQuery b)
-    toFrom (CrossJoin lhs q) = CrossJoinFromLateral (toFrom lhs) q
-
-class ToLeftJoin lateral lhs rhs res where
-    toLeftJoin :: Proxy lateral -> lhs -> rhs -> (res -> SqlExpr (Value Bool)) -> From res
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , SqlSelect b r
-         , ToAlias b
-         , ToAliasReference b
-         , ToMaybe b
-         , mb ~ ToMaybeT b
-         ) => ToLeftJoin Lateral a (a' -> SqlQuery b) (a' :& mb) where
-            toLeftJoin _ lhs q on' = LeftJoinFromLateral (toFrom lhs) (q, on')
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , ToFrom b
-         , ToFromT b ~ b'
-         , ToMaybe b'
-         , mb ~ ToMaybeT b'
-         ) => ToLeftJoin NotLateral a b (a' :& mb) where
-            toLeftJoin _ lhs rhs on' = LeftJoinFrom (toFrom lhs) (toFrom rhs, on')
-
-instance ( ToLeftJoin (IsLateral b) a b b'
-         ) => ToFrom (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) where
-            type ToFromT (LeftOuterJoin a (b, b' -> SqlExpr (Value Bool))) = FromOnClause (b, b' -> SqlExpr(Value Bool))
-            toFrom (LeftOuterJoin lhs (rhs, on')) =
-                toLeftJoin (toProxy rhs) lhs rhs on'
-              where
-                toProxy :: b -> Proxy (IsLateral b)
-                toProxy _ = Proxy
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , ToFrom b
-         , ToFromT b ~ b'
-         , ToMaybe a'
-         , ma ~ ToMaybeT a'
-         , ToMaybe b'
-         , mb ~ ToMaybeT b'
-         , ErrorOnLateral b
-         ) => ToFrom (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) where
-            type ToFromT (FullOuterJoin a (b, (ma :& mb) -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& mb) -> SqlExpr(Value Bool))
-            toFrom (FullOuterJoin lhs (rhs, on')) = FullJoinFrom (toFrom lhs) (toFrom rhs, on')
-
-instance ( ToFrom a
-         , ToFromT a ~ a'
-         , ToMaybe a'
-         , ma ~ ToMaybeT a'
-         , ToFrom b
-         , ToFromT b ~ b'
-         , ErrorOnLateral b
-         ) => ToFrom (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) where
-            type ToFromT (RightOuterJoin a (b, (ma :& b') -> SqlExpr (Value Bool))) = FromOnClause (b, (ma :& b') -> SqlExpr(Value Bool))
-            toFrom (RightOuterJoin lhs (rhs, on')) = RightJoinFrom (toFrom lhs) (toFrom rhs,  on')
-
-type family Nullable a where
-    Nullable (Maybe a) = a
-    Nullable a =  a
-
-class ToMaybe a where
-    type ToMaybeT a
-    toMaybe :: a -> ToMaybeT a
-
-instance ToMaybe (SqlExpr (Maybe a)) where
-    type ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
-    toMaybe = id
-
-instance ToMaybe (SqlExpr (Entity a)) where
-    type ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
-    toMaybe = EMaybe
-
-instance ToMaybe (SqlExpr (Value a)) where
-    type ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))
-    toMaybe = veryUnsafeCoerceSqlExprValue
-
-instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
-    type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
-    toMaybe (a :& b) = (toMaybe a :& toMaybe b)
-
-instance (ToMaybe a, ToMaybe b) => ToMaybe (a,b) where
-    type ToMaybeT (a, b) = (ToMaybeT a, ToMaybeT b)
-    toMaybe (a, b) = (toMaybe a, toMaybe b)
-
-instance ( ToMaybe a , ToMaybe b , ToMaybe c) => ToMaybe (a,b,c) where
-    type ToMaybeT (a, b, c) = (ToMaybeT a, ToMaybeT b, ToMaybeT c)
-    toMaybe = to3 . toMaybe . from3
-
-instance ( ToMaybe a , ToMaybe b , ToMaybe c , ToMaybe d) => ToMaybe (a,b,c,d) where
-    type ToMaybeT (a, b, c, d) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d)
-    toMaybe = to4 . toMaybe . from4
-
-instance ( ToMaybe a , ToMaybe b , ToMaybe c , ToMaybe d , ToMaybe e) => ToMaybe (a,b,c,d,e) where
-    type ToMaybeT (a, b, c, d, e) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e)
-    toMaybe = to5 . toMaybe . from5
-
-instance ( ToMaybe a
-         , ToMaybe b
-         , ToMaybe c
-         , ToMaybe d
-         , ToMaybe e
-         , ToMaybe f
-         ) => ToMaybe (a,b,c,d,e,f) where
-    type ToMaybeT (a, b, c, d, e, f) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f)
-    toMaybe = to6 . toMaybe . from6
-
-instance ( ToMaybe a
-         , ToMaybe b
-         , ToMaybe c
-         , ToMaybe d
-         , ToMaybe e
-         , ToMaybe f
-         , ToMaybe g
-         ) => ToMaybe (a,b,c,d,e,f,g) where
-    type ToMaybeT (a, b, c, d, e, f, g) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g)
-    toMaybe = to7 . toMaybe . from7
-
-instance ( ToMaybe a
-         , ToMaybe b
-         , ToMaybe c
-         , ToMaybe d
-         , ToMaybe e
-         , ToMaybe f
-         , ToMaybe g
-         , ToMaybe h
-         ) => ToMaybe (a,b,c,d,e,f,g,h) where
-     type ToMaybeT (a, b, c, d, e, f, g, h) = (ToMaybeT a, ToMaybeT b, ToMaybeT c, ToMaybeT d, ToMaybeT e, ToMaybeT f, ToMaybeT g, ToMaybeT h)
-     toMaybe = to8 . toMaybe . from8
-
--- | 'FROM' clause, used to bring entities into scope.
---
--- Internally, this function uses the `From` datatype and the
--- `ToFrom` typeclass. Unlike the old `Database.Esqueleto.from`,
--- this does not take a function as a parameter, but rather
--- a value that represents a 'JOIN' tree constructed out of
--- instances of `ToFrom`. This implementation eliminates certain
--- types of runtime errors by preventing the construction of
--- invalid SQL (e.g. illegal nested-@from@).
-from :: ToFrom a  => a -> SqlQuery (ToFromT a)
-from parts = do
-    (a, clause) <- runFrom $ toFrom parts
-    Q $ W.tell mempty{sdFromClause=[clause]}
-    pure a
-  where
-    runFrom :: From a -> SqlQuery (a, FromClause)
-    runFrom e@Table = do
-        let ed = entityDef $ getVal e
-        ident <- newIdentFor . DBName . unEntityNameDB $ getEntityDBName ed
-        let entity = EEntity ident
-        pure $ (entity, FromStart ident ed)
-          where
-            getVal :: From (SqlExpr (Entity ent)) -> Proxy ent
-            getVal = const Proxy
-    runFrom (SubQuery subquery) =
-        fromSubQuery NormalSubQuery subquery
-
-    runFrom (FromCte ident ref) =
-        pure (ref, FromIdent ident)
-
-    runFrom (SqlSetOperation operation) = do
-        (aliasedOperation, ret) <- aliasQueries operation
-        ident <- newIdentFor (DBName "u")
-        ref <- toAliasReference ident ret
-        pure (ref, FromQuery ident (operationToSql aliasedOperation) NormalSubQuery)
-
-      where
-        aliasQueries o =
-            case o of
-                SelectQueryP p q -> do
-                    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ q
-                    prevState <- Q $ lift S.get
-                    aliasedRet <- toAlias ret
-                    Q $ lift $ S.put prevState
-                    let p' =
-                          case p of
-                            Parens -> Parens
-                            Never ->
-                              if (sdLimitClause sideData) /= mempty
-                                  || length (sdOrderByClause sideData) > 0 then
-                                Parens
-                              else
-                                Never
-                    pure (SelectQueryP p' $ Q $ W.WriterT $ pure (aliasedRet, sideData), aliasedRet)
-                SqlSetUnion     o1 o2 -> do
-                    (o1', ret) <- aliasQueries o1
-                    (o2', _  ) <- aliasQueries o2
-                    pure (SqlSetUnion o1' o2', ret)
-                SqlSetUnionAll  o1 o2 -> do
-                    (o1', ret) <- aliasQueries o1
-                    (o2', _  ) <- aliasQueries o2
-                    pure (SqlSetUnionAll o1' o2', ret)
-                SqlSetExcept    o1 o2 -> do
-                    (o1', ret) <- aliasQueries o1
-                    (o2', _  ) <- aliasQueries o2
-                    pure (SqlSetExcept o1' o2', ret)
-                SqlSetIntersect o1 o2 -> do
-                    (o1', ret) <- aliasQueries o1
-                    (o2', _  ) <- aliasQueries o2
-                    pure (SqlSetIntersect o1' o2', ret)
-
-        operationToSql o info =
-            case o of
-                SelectQueryP p q  ->
-                    let (builder, values) = toRawSql SELECT info q
-                    in (parensM p builder, values)
-                SqlSetUnion     o1 o2 -> doSetOperation "UNION"     info o1 o2
-                SqlSetUnionAll  o1 o2 -> doSetOperation "UNION ALL" info o1 o2
-                SqlSetExcept    o1 o2 -> doSetOperation "EXCEPT"    info o1 o2
-                SqlSetIntersect o1 o2 -> doSetOperation "INTERSECT" info o1 o2
-
-        doSetOperation operationText info o1 o2 =
-            let (q1, v1) = operationToSql o1 info
-                (q2, v2) = operationToSql o2 info
-            in (q1 <> " " <> operationText <> " " <> q2, v1 <> v2)
-
-    runFrom (InnerJoinFrom leftPart (rightPart, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
-    runFrom (InnerJoinFromLateral leftPart (q, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom InnerJoinKind rightFrom (Just (on' ret)))
-    runFrom (CrossJoinFrom leftPart rightPart) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
-    runFrom (CrossJoinFromLateral leftPart q) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-        let ret = leftVal :& rightVal
-        pure $ (ret, FromJoin leftFrom CrossJoinKind rightFrom Nothing)
-    runFrom (LeftJoinFrom leftPart (rightPart, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = leftVal :& (toMaybe rightVal)
-        pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
-    runFrom (LeftJoinFromLateral leftPart (q, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- fromSubQuery LateralSubQuery (q leftVal)
-        let ret = leftVal :& (toMaybe rightVal)
-        pure $ (ret, FromJoin leftFrom LeftOuterJoinKind rightFrom (Just (on' ret)))
-    runFrom (RightJoinFrom leftPart (rightPart, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = (toMaybe leftVal) :& rightVal
-        pure $ (ret, FromJoin leftFrom RightOuterJoinKind rightFrom (Just (on' ret)))
-    runFrom (FullJoinFrom leftPart (rightPart, on')) = do
-        (leftVal, leftFrom) <- runFrom leftPart
-        (rightVal, rightFrom) <- runFrom rightPart
-        let ret = (toMaybe leftVal) :& (toMaybe rightVal)
-        pure $ (ret, FromJoin leftFrom FullOuterJoinKind rightFrom (Just (on' ret)))
-
-fromSubQuery
-    ::
-    ( SqlSelect a r
-    , ToAlias a
-    , ToAliasReference a
-    )
-    => SubQueryType -> SqlQuery a -> SqlQuery (a, FromClause)
-fromSubQuery subqueryType subquery = do
-    -- We want to update the IdentState without writing the query to side data
-    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
-    aliasedValue <- toAlias ret
-    -- Make a fake query with the aliased results, this allows us to ensure that the query is only run once
-    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
-    -- Add the FromQuery that renders the subquery to our side data
-    subqueryAlias <- newIdentFor (DBName "q")
-    -- Pass the aliased results of the subquery to the outer query
-    -- create aliased references from the outer query results (e.g value from subquery will be `subquery`.`value`),
-    -- this is probably overkill as the aliases should already be unique but seems to be good practice.
-    ref <- toAliasReference subqueryAlias aliasedValue
-    pure (ref , FromQuery subqueryAlias (\info -> toRawSql SELECT info aliasedQuery) subqueryType)
-
--- | @WITH@ clause used to introduce a [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression).
--- CTEs are supported in most modern SQL engines and can be useful
--- in performance tuning. In Esqueleto, CTEs should be used as a
--- subquery memoization tactic. When writing plain SQL, CTEs
--- are sometimes used to organize the SQL code, in Esqueleto, this
--- is better achieved through function that return 'SqlQuery' values.
---
--- @
--- select $ do
--- cte <- with subQuery
--- cteResult <- from cte
--- where_ $ cteResult ...
--- pure cteResult
--- @
---
--- __WARNING__: In some SQL engines using a CTE can diminish performance.
--- In these engines the CTE is treated as an optimization fence. You should
--- always verify that using a CTE will in fact improve your performance
--- over a regular subquery.
---
--- /Since: 3.4.0.0/
-with :: ( ToAlias a
-        , ToAliasReference a
-        , SqlSelect a r
-        ) => SqlQuery a -> SqlQuery (From a)
-with query = do
-    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
-    aliasedValue <- toAlias ret
-    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
-    ident <- newIdentFor (DBName "cte")
-    let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
-    Q $ W.tell mempty{sdCteClause = [clause]}
-    ref <- toAliasReference ident aliasedValue
-    pure $ FromCte ident ref
-
--- | @WITH@ @RECURSIVE@ allows one to make a recursive subquery, which can
--- reference itself. Like @WITH@, this is supported in most modern SQL engines.
--- Useful for hierarchical, self-referential data, like a tree of data.
---
--- @
--- select $ do
--- cte <- withRecursive
---          (do $
---              person <- from $ Table \@Person
---              where_ $ person ^. PersonId ==. val personId
---              pure person
---          )
---          unionAll_
---          (\\self -> do $
---              (p :& f :& p2 :& pSelf) <- from self
---                       \`InnerJoin\` $ Table \@Follow
---                       \`on\` (\\(p :& f) ->
---                               p ^. PersonId ==. f ^. FollowFollower)
---                       \`InnerJoin\` $ Table \@Person
---                       \`on\` (\\(p :& f :& p2) ->
---                               f ^. FollowFollowed ==. p2 ^. PersonId)
---                       \`LeftOuterJoin\` self
---                       \`on\` (\\(_ :& _ :& p2 :& pSelf) ->
---                               just (p2 ^. PersonId) ==. pSelf ?. PersonId)
---              where_ $ isNothing (pSelf ?. PersonId)
---              groupBy (p2 ^. PersonId)
---              pure p2
---          )
--- from cte
--- @
---
--- /Since: 3.4.0.0/
-withRecursive :: ( ToAlias a
-                 , ToAliasReference a
-                 , SqlSelect a r
-                 , RecursiveCteUnion unionKind
-                 )
-              => SqlQuery a
-              -> unionKind
-              -> (From a -> SqlQuery a)
-              -> SqlQuery (From a)
-withRecursive baseCase unionKind recursiveCase = do
-    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ baseCase
-    aliasedValue <- toAlias ret
-    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
-    ident <- newIdentFor (DBName "cte")
-    ref <- toAliasReference ident aliasedValue
-    let refFrom = FromCte ident ref
-    let recursiveQuery = recursiveCase refFrom
-    let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
-                 (\info -> (toRawSql SELECT info aliasedQuery)
-                        <> (unionKeyword unionKind, mempty)
-                        <> (toRawSql SELECT info recursiveQuery)
-                 )
-    Q $ W.tell mempty{sdCteClause = [clause]}
-    pure refFrom
-
-{-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
-type ToAliasT a = a
-
--- Tedious tuple magic
-class ToAlias a where
-    toAlias :: a -> SqlQuery a
-
-instance ToAlias (SqlExpr (Value a)) where
-    toAlias v@(EAliasedValue _ _) = pure v
-    toAlias v = do
-        ident <- newIdentFor (DBName "v")
-        pure $ EAliasedValue ident v
-
-instance ToAlias (SqlExpr (Entity a)) where
-    toAlias v@(EAliasedEntityReference _ _) = pure v
-    toAlias v@(EAliasedEntity _ _) = pure v
-    toAlias (EEntity tableIdent) = do
-       ident <- newIdentFor (DBName "v")
-       pure $ EAliasedEntity ident tableIdent
-
-instance ToAlias (SqlExpr (Maybe (Entity a))) where
-    toAlias (EMaybe e) = EMaybe <$> toAlias e
-
-instance (ToAlias a, ToAlias b) => ToAlias (a,b) where
-    toAlias (a,b) = (,) <$> toAlias a <*> toAlias b
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         ) => ToAlias (a,b,c) where
-    toAlias x = to3 <$> (toAlias $ from3 x)
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         , ToAlias d
-         ) => ToAlias (a,b,c,d) where
-    toAlias x = to4 <$> (toAlias $ from4 x)
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         , ToAlias d
-         , ToAlias e
-         ) => ToAlias (a,b,c,d,e) where
-    toAlias x = to5 <$> (toAlias $ from5 x)
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         , ToAlias d
-         , ToAlias e
-         , ToAlias f
-         ) => ToAlias (a,b,c,d,e,f) where
-    toAlias x = to6 <$> (toAlias $ from6 x)
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         , ToAlias d
-         , ToAlias e
-         , ToAlias f
-         , ToAlias g
-         ) => ToAlias (a,b,c,d,e,f,g) where
-    toAlias x = to7 <$> (toAlias $ from7 x)
-
-instance ( ToAlias a
-         , ToAlias b
-         , ToAlias c
-         , ToAlias d
-         , ToAlias e
-         , ToAlias f
-         , ToAlias g
-         , ToAlias h
-         ) => ToAlias (a,b,c,d,e,f,g,h) where
-    toAlias x = to8 <$> (toAlias $ from8 x)
-
-{-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
-type ToAliasReferenceT a = a
-
--- more tedious tuple magic
-class ToAliasReference a where
-    toAliasReference :: Ident -> a -> SqlQuery a
-
-instance ToAliasReference (SqlExpr (Value a)) where
-    toAliasReference aliasSource (EAliasedValue aliasIdent _) = pure $ EValueReference aliasSource (\_ -> aliasIdent)
-    toAliasReference _           v@(ERaw _ _)                 = toAlias v
-    toAliasReference _           v@(ECompositeKey _)          = toAlias v
-    toAliasReference s             (EValueReference _ b)      = pure $ EValueReference s b
-
-instance ToAliasReference (SqlExpr (Entity a)) where
-    toAliasReference aliasSource (EAliasedEntity ident _) = pure $ EAliasedEntityReference aliasSource ident
-    toAliasReference _ e@(EEntity _) = toAlias e
-    toAliasReference s   (EAliasedEntityReference _ b) = pure $ EAliasedEntityReference s b
-
-instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
-    toAliasReference s (EMaybe e) = EMaybe <$> toAliasReference s e
-
-
-instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where
-    toAliasReference ident (a,b) = (,) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         ) => ToAliasReference (a,b,c) where
-    toAliasReference ident x = fmap to3 $ toAliasReference ident $ from3 x
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         ) => ToAliasReference (a,b,c,d) where
-    toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         ) => ToAliasReference (a,b,c,d,e) where
-    toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         ) => ToAliasReference (a,b,c,d,e,f) where
-    toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         , ToAliasReference g
-         ) => ToAliasReference (a,b,c,d,e,f,g) where
-    toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
-
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         , ToAliasReference g
-         , ToAliasReference h
-         ) => ToAliasReference (a,b,c,d,e,f,g,h) where
-    toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
-
-class RecursiveCteUnion a where
-    unionKeyword :: a -> TLB.Builder
-
-instance RecursiveCteUnion (a -> b -> Union a b) where
-    unionKeyword _ = "\nUNION\n"
-
-instance RecursiveCteUnion (a -> b -> UnionAll a b) where
-    unionKeyword _ = "\nUNION ALL\n"

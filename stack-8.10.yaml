@@ -6,7 +6,6 @@ packages:
 
 extra-deps:
 - lift-type-0.1.0.1
-- attoparsec-0.14.1
 - persistent-2.13.0.0
 - persistent-sqlite-2.13.0.0
 - persistent-mysql-2.13.0.0

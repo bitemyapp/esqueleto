@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
@@ -387,7 +387,7 @@ testSubSelect run = do
                     v `shouldBe` [Value 1]
 
     describe "subSelectList" $ do
-        it "is safe on empty databases as well as good databases" $ do
+        it "is safe on empty databases as well as good databases" $ run $ do
             let query =
                     from $ \n -> do
                     where_ $ n ^. NumbersInt `in_` do
@@ -396,16 +396,15 @@ testSubSelect run = do
                             where_ $ n' ^. NumbersInt >=. val 3
                             pure (n' ^. NumbersInt)
                     pure n
+            empty <- select query
 
-            empty <- run $ do
-                select query
-
-            full <- run $ do
+            full <- do
                 setup
                 select query
 
-            empty `shouldBe` []
-            full `shouldSatisfy` (not . null)
+            liftIO $ do
+                empty `shouldBe` []
+                full `shouldSatisfy` (not . null)
 
     describe "subSelectMaybe" $ do
         it "is equivalent to joinV . subSelect" $ do
@@ -890,12 +889,14 @@ testSelectSubQuery run = describe "select subquery" $ do
         l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
         let l1WithDeeds = do d <- l1Deeds
                              pure (l1e, Just d)
-        ret <- select $ Experimental.from $ do
-          (lords :& deeds) <-
-              Experimental.from $ Table @Lord
-              `LeftOuterJoin` Table @Deed
-              `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
-          pure (lords, deeds)
+        let q = Experimental.from $ do
+                  (lords :& deeds) <-
+                      Experimental.from $ Table @Lord
+                      `LeftOuterJoin` Table @Deed
+                      `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+                  pure (lords, deeds)
+
+        ret <- select q
         liftIO $ ret `shouldMatchList` ((l3e, Nothing) : l1WithDeeds)
 
     it "lets you order by alias" $ run $ do
@@ -1080,17 +1081,6 @@ testSelectWhere run = describe "select where_" $ do
                         ( val $ PointKey 1 2
                         , val $ PointKey 5 6 )
                 liftIO $ ret `shouldBe` [()]
-            it "works when using ECompositeKey constructor" $ run $ do
-                insert_ $ Point 1 2 ""
-                ret <-
-                  select $
-                  from $ \p -> do
-                  where_ $
-                    p ^. PointId
-                      `between`
-                        ( EI.ECompositeKey $ const ["3", "4"]
-                        , EI.ECompositeKey $ const ["5", "6"] )
-                liftIO $ ret `shouldBe` []
 
     it "works with avg_" $ run $ do
         _ <- insert' p1
@@ -1868,9 +1858,10 @@ testRenderSql run = do
       (c, expr) <- run $ do
         conn <- ask
         let Right c = P.mkEscapeChar conn
+        let user = EI.unsafeSqlEntity (EI.I "user")
+            blogPost = EI.unsafeSqlEntity (EI.I "blog_post")
         pure $ (,) c $ EI.renderExpr conn $
-          EI.EEntity (EI.I "user") ^. PersonId
-          ==. EI.EEntity (EI.I "blog_post") ^. BlogPostAuthorId
+          user ^. PersonId ==. blogPost ^. BlogPostAuthorId
       expr
         `shouldBe`
           Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
@@ -1881,23 +1872,6 @@ testRenderSql run = do
     it "renders ? for a val" $ do
       expr <- run $ ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
       expr `shouldBe` "? = ?"
-
-  describe "EEntity Ident behavior" $ do
-      let render :: SqlExpr (Entity val) -> Text.Text
-          render (EI.EEntity (EI.I ident)) = ident
-          render _ = error "guess we gotta handle this in the test suite now"
-      it "renders sensibly" $ run $ do
-          _ <- insert $ Foo 2
-          _ <- insert $ Foo 3
-          _ <- insert $ Person "hello" Nothing Nothing 3
-          results <- select $
-              from $ \(a `LeftOuterJoin` b) -> do
-              on $ a ^. FooName ==. b ^. PersonFavNum
-              pure (val (render a), val (render b))
-          liftIO $
-              head results
-              `shouldBe`
-              (Value "Foo", Value "Person")
 
   describe "ExprParser" $ do
     let parse parser = AP.parseOnly (parser '#')
