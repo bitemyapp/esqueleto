@@ -16,6 +16,10 @@
           either import `Database.Esqueleto.Legacy` to keep the old behavior or
           to import `Database.Esqueleto.Experimental` to opt in to the new
           behavior.
+        - Deleted the deprecated modules
+          `Database.Esqueleto.Internal.{Language,Sql}`. Please use
+          `Database.Esqueleto.Internal.Internal` instead, or ideally post what
+          you need from the library so we can support you safely.
 
 3.4.2.2
 =======
