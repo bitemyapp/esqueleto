@@ -20,6 +20,7 @@
           `Database.Esqueleto.Internal.{Language,Sql}`. Please use
           `Database.Esqueleto.Internal.Internal` instead, or ideally post what
           you need from the library so we can support you safely.
+        - Support GHC 9
 
 3.4.2.2
 =======
