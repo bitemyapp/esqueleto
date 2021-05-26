@@ -33,7 +33,7 @@ jobs:
     strategy:
       matrix:
         cabal: ["3.4"]
-        ghc: ["8.6.5", "8.8.4", "8.10.4"]
+        ghc: ["8.6.5", "8.8.4", "8.10.4", "9.0.1"]
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
@@ -71,6 +71,6 @@ jobs:
             ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
             ${{ runner.os }}-${{ matrix.ghc }}-
       - run: cabal v2-build --disable-optimization -j $CONFIG
-      - run: cabal v2-test --disable-optimization -j $CONFIG
+      - run: cabal v2-test --disable-optimization -j $CONFIG --test-options "--fail-on-focus"
       - run: cabal v2-haddock -j $CONFIG
       - run: cabal v2-sdist

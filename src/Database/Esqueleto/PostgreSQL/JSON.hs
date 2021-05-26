@@ -136,9 +136,8 @@ module Database.Esqueleto.PostgreSQL.JSON
     ) where
 
 import Data.Text (Text)
-import Database.Esqueleto.Internal.Language hiding ((-.), (?.), (||.))
+import Database.Esqueleto.Internal.Internal hiding ((-.), (?.), (||.))
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Sql
 import Database.Esqueleto.PostgreSQL.JSON.Instances
 
 infixl 6 ->., ->>., #>., #>>.

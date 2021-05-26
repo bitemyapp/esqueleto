@@ -29,9 +29,8 @@ source-repository head
 library
     exposed-modules:
         Database.Esqueleto
+        Database.Esqueleto.Legacy
         Database.Esqueleto.Experimental
-        Database.Esqueleto.Internal.Language
-        Database.Esqueleto.Internal.Sql
         Database.Esqueleto.Internal.Internal
         Database.Esqueleto.Internal.ExprParser
         Database.Esqueleto.MySQL
@@ -76,7 +75,6 @@ library
         -Wpartial-fields
         -Wmissing-home-modules
         -Widentities
-        -Wredundant-constraints
         -Wcpp-undef
         -Wcpp-undef
         -Wmonomorphism-restriction

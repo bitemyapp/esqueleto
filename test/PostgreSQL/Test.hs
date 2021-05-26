@@ -35,7 +35,7 @@ import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.Experimental hiding (from, on, random_)
 import qualified Database.Esqueleto.Experimental as Experimental
-import qualified Database.Esqueleto.Internal.Sql as ES
+import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
@@ -272,7 +272,7 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
@@ -289,7 +289,7 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ L.sort ret `shouldBe` [Nothing, Just 17, Just 36]
 
@@ -310,7 +310,7 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
@@ -329,7 +329,7 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
       liftIO $ ret `shouldBe` [Just 17, Just 36, Nothing]
@@ -354,13 +354,13 @@ testStringAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ (L.sort $ words ret) `shouldBe` L.sort (map personName people)
 
     it "works with zero rows" $ run $ do
       [Value ret] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ ret `shouldBe` Nothing
 
@@ -378,7 +378,7 @@ testStringAggWith = do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
                    []
       liftIO $ (L.sort $ words ret) `shouldBe`
@@ -401,7 +401,7 @@ testStringAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return $ EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
                     [desc $ p ^. PersonName]
       liftIO $ (words ret)
@@ -422,7 +422,7 @@ testStringAggWith = do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
                    [desc $ p ^. PersonName]
       liftIO $ (words ret) `shouldBe`
@@ -439,12 +439,12 @@ testAggregateFunctions = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
+        select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
     it "works on zero rows" $ run $ do
       [Value ret] <-
-        select . from $ \p -> return (EP.arrayAgg (p ^. PersonName))
+        select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` Nothing
   describe "arrayAggWith" testArrayAggWith
   describe "stringAgg" $ do
@@ -459,7 +459,7 @@ testAggregateFunctions = do
         liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
     it "works on zero rows" $ run $ do
       [Value ret] <-
-        select . from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
+        select $ from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
       liftIO $ ret `shouldBe` Nothing
   describe "stringAggWith" testStringAggWith
 
@@ -471,7 +471,7 @@ testAggregateFunctions = do
                    , Person "4" (Just 8)  Nothing 2
                    , Person "5" (Just 9)  Nothing 2
                    ]
-      ret <- select . from $ \(person :: SqlExpr (Entity Person)) -> do
+      ret <- select $ from $ \(person :: SqlExpr (Entity Person)) -> do
         groupBy (person ^. PersonFavNum)
         return . EP.arrayRemoveNull . EP.maybeArray . EP.arrayAgg
           $ person ^. PersonAge
@@ -481,7 +481,7 @@ testAggregateFunctions = do
   describe "maybeArray" $ do
     it "Coalesces NULL into an empty array" $ run $ do
       [Value ret] <-
-        select . from $ \p ->
+        select $ from $ \p ->
           return (EP.maybeArray $ EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` []
 
@@ -1134,19 +1134,22 @@ testFilterWhere =
       -- Person "Mitch"  Nothing   Nothing   5
       _ <- insert p5
 
-      usersByAge <- (fmap . fmap) (\(Value a, Value b, Value c) -> (a, b, c)) <$> select $ from $ \users -> do
-        groupBy $ users ^. PersonAge
-        return
-          ( users ^. PersonAge
-          -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = 2
-          -- Just 36: [John { favNum = 1 } (excluded)] = 0
-          -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = 2
-          , count (users ^. PersonId) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
-          -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = 0
-          -- Just 36: [John { favNum = 1 }] = 1
-          -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = 0
-          , count (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
-          )
+      usersByAge <- fmap coerce <$> do
+          select $ from $ \users -> do
+            groupBy $ users ^. PersonAge
+            return
+              ( users ^. PersonAge :: SqlExpr (Value (Maybe Int))
+              -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = 2
+              -- Just 36: [John { favNum = 1 } (excluded)] = 0
+              -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = 2
+              , count (users ^. PersonId) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
+                :: SqlExpr (Value Int)
+              -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = 0
+              -- Just 36: [John { favNum = 1 }] = 1
+              -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = 0
+              , count (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
+                :: SqlExpr (Value Int)
+              )
 
       liftIO $ usersByAge `shouldMatchList`
         ( [ (Nothing, 2, 0)
@@ -1167,19 +1170,20 @@ testFilterWhere =
       -- Person "Mitch"  Nothing   Nothing   5
       _ <- insert p5
 
-      usersByAge <- (fmap . fmap) (\(Value a, Value b, Value c) -> (a, b, c)) <$> select $ from $ \users -> do
-        groupBy $ users ^. PersonAge
-        return
-          ( users ^. PersonAge
-          -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = Just 7
-          -- Just 36: [John { favNum = 1 } (excluded)] = Nothing
-          -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = Just 7
-          , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
-          -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = Nothing
-          -- Just 36: [John { favNum = 1 }] = Just 1
-          -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = Nothing
-          , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
-          )
+      usersByAge <- fmap (\(Value a, Value b, Value c) -> (a, b, c)) <$> do
+          select $ from $ \users -> do
+            groupBy $ users ^. PersonAge
+            return
+              ( users ^. PersonAge
+              -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = Just 7
+              -- Just 36: [John { favNum = 1 } (excluded)] = Nothing
+              -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = Just 7
+              , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
+              -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = Nothing
+              -- Just 36: [John { favNum = 1 }] = Just 1
+              -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = Nothing
+              , sum_ (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
+              )
 
       liftIO $ usersByAge `shouldMatchList`
         ( [ (Nothing, Just 7, Nothing)
@@ -1197,7 +1201,7 @@ testCommonTableExpressions = do
         void $ select $ do
           limitedLordsCte <-
             Experimental.with $ do
-              lords <- Experimental.from $ Experimental.Table @Lord
+              lords <- Experimental.from $ Experimental.table @Lord
               limit 10
               pure lords
           lords <- Experimental.from limitedLordsCte
@@ -1260,9 +1264,9 @@ testLateralQuery = do
       _ <- run $ do
         select $ do
             l :& c <-
-              Experimental.from $ Table @Lord
+              Experimental.from $ table @Lord
               `CrossJoin` \lord -> do
-                    deed <- Experimental.from $ Table @Deed
+                    deed <- Experimental.from $ table @Deed
                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                     pure $ countRows @Int
             pure (l, c)
@@ -1271,11 +1275,11 @@ testLateralQuery = do
     it "supports INNER JOIN LATERAL" $ do
       run $ do
         let subquery lord = do
-                            deed <- Experimental.from $ Table @Deed
+                            deed <- Experimental.from $ table @Deed
                             where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                             pure $ countRows @Int
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `InnerJoin` subquery
                           `Experimental.on` (const $ val True)
           pure (l, c)
@@ -1287,9 +1291,9 @@ testLateralQuery = do
     it "supports LEFT JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `LeftOuterJoin` (\lord -> do
-                                    deed <- Experimental.from $ Table @Deed
+                                    deed <- Experimental.from $ table @Deed
                                     where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
                                     pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
@@ -1303,9 +1307,9 @@ testLateralQuery = do
     it "compile error on RIGHT JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `RightOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ Table @Deed
+                                      deed <- Experimental.from $ table @Deed
                                       where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
                                       pure $ countRows @Int)
                           `Experimental.on` (const $ val True)
@@ -1316,9 +1320,9 @@ testLateralQuery = do
     it "compile error on FULL OUTER JOIN LATERAL" $ do
       run $ do
         res <- select $ do
-          l :& c <- Experimental.from $ Table @Lord
+          l :& c <- Experimental.from $ table @Lord
                           `FullOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ Table @Deed
+                                      deed <- Experimental.from $ table @Deed
                                       where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
                                       pure $ countRows @Int)
                           `Experimental.on` (const $ val True)

@@ -1,37 +1,31 @@
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Database.Esqueleto.Experimental.From.Join
     where
 
-import           Data.Bifunctor                                       (first)
-import           Data.Kind                                            (Constraint)
-import           Data.Proxy
-import qualified Data.Text.Lazy.Builder                               as TLB
-import           Database.Esqueleto.Experimental.From
-import           Database.Esqueleto.Experimental.From.SqlSetOperation
-import           Database.Esqueleto.Experimental.ToAlias
-import           Database.Esqueleto.Experimental.ToAliasReference
-import           Database.Esqueleto.Experimental.ToMaybe
-import           Database.Esqueleto.Internal.Internal                 hiding
-                                                                      (From (..),
-                                                                       from,
-                                                                       fromJoin,
-                                                                       on)
-import           Database.Esqueleto.Internal.PersistentImport         (Entity (..),
-                                                                       EntityField,
-                                                                       PersistEntity,
-                                                                       PersistField)
-import           GHC.TypeLits
+import Data.Bifunctor (first)
+import Data.Kind (Constraint)
+import Data.Proxy
+import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Experimental.From
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Experimental.ToMaybe
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), from, fromJoin, on)
+import GHC.TypeLits
 
 -- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
 -- that have been joined together.
@@ -110,7 +104,7 @@ type family HasOnClause actual expected :: Constraint where
 --         p ^. PersonId ==. bp ^. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 innerJoin :: ( ToFrom a a'
              , ToFrom b b'
              , HasOnClause rhs (a' :& b')
@@ -132,7 +126,7 @@ innerJoin lhs (rhs, on') = From $ do
 --
 -- See example 6
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 innerJoinLateral :: ( ToFrom a a'
                     , HasOnClause rhs (a' :& b)
                     , SqlSelect b r
@@ -157,7 +151,7 @@ innerJoinLateral lhs (rhsFn, on') = From $ do
 -- \`crossJoin\` table \@BlogPost
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 crossJoin :: ( ToFrom a a'
              , ToFrom b b'
              ) => a -> b -> From (a' :& b')
@@ -176,7 +170,7 @@ crossJoin lhs rhs = From $ do
 --
 -- See example 6
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 crossJoinLateral :: ( ToFrom a a'
                     , SqlSelect b r
                     , ToAlias b
@@ -205,7 +199,7 @@ crossJoinLateral lhs rhsFn = From $ do
 --         p ^. PersonId ==. bp ?. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 leftJoin :: ( ToFrom a a'
             , ToFrom b b'
             , ToMaybe b'
@@ -229,7 +223,7 @@ leftJoin lhs (rhs, on') = From $ do
 --
 -- See example 6 for how to use LATERAL
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 leftJoinLateral :: ( ToFrom a a'
                    , SqlSelect b r
                    , HasOnClause rhs (a' :& ToMaybeT b)
@@ -261,7 +255,7 @@ leftJoinLateral lhs (rhsFn, on') = From $ do
 --         p ?. PersonId ==. bp ^. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 rightJoin :: ( ToFrom a a'
              , ToFrom b b'
              , ToMaybe a'
@@ -289,7 +283,7 @@ rightJoin lhs (rhs, on') = From $ do
 --         p ?. PersonId ==. bp ?. BlogPostAuthorId)
 -- @
 --
--- /Since: 3.5.0.0/
+-- @since 3.5.0.0
 fullOuterJoin :: ( ToFrom a a'
                  , ToFrom b b'
                  , ToMaybe a'

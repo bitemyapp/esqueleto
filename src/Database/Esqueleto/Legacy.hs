@@ -3,7 +3,17 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 
--- | The @esqueleto@ EDSL (embedded domain specific language).
+-- | WARNING
+--
+-- This module is introduced in version @3.5.0.0@ to provide a smooth migration
+-- experience from this legacy syntax to the new and improved syntax. If you've
+-- imported this module, it means you've decided to use the old syntax for
+-- a little bit longer, rather than migrate to the new stuff. That's fine!
+--
+-- But you should know that this module, and all of the legacy syntax, will be
+-- completely removed from the library in version @4.0.0.0@.
+--
+-- The @esqueleto@ EDSL (embedded domain specific language).
 -- This module replaces @Database.Persist@, so instead of
 -- importing that module you should just import this one:
 --
@@ -31,16 +41,7 @@
 --
 -- Other than identifier name clashes, @esqueleto@ does not
 -- conflict with @persistent@ in any way.
---
--- Note that the facilities for @JOIN@ have been significantly improved in the
--- "Database.Esqueleto.Experimental" module. The definition of 'from' and 'on'
--- in this module will be replaced with those at the 4.0.0.0 version, so you are
--- encouraged to migrate to the new method.
---
--- This module has an attached WARNING message indicating that the Experimental
--- syntax will become the default. If you want to continue using the old syntax,
--- please refer to "Database.Esqueleto.Legacy" as a drop-in replacement.
-module Database.Esqueleto {-# WARNING "This module will switch over to the Experimental syntax in an upcoming major version release. Please migrate to the Database.Esqueleto.Legacy module to continue using the old syntax, or translate to the new and improved syntax in Database.Esqueleto.Experimental." #-}
+module Database.Esqueleto.Legacy
   ( -- * Setup
     -- $setup
 
@@ -128,7 +129,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
-import Database.Esqueleto.Legacy
+import Database.Esqueleto.Internal.Internal
 import Database.Esqueleto.Internal.PersistentImport
 
 

@@ -93,7 +93,7 @@ import qualified Data.Text as Text
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
-import qualified Database.Esqueleto.Internal.Sql as EI
+import qualified Database.Esqueleto.Internal.Internal as EI
 import qualified UnliftIO.Resource as R
 
 -- Test schema
@@ -769,7 +769,7 @@ testSelectJoin run = do
         insert_ $ Frontcover number ""
         articleId <- insert $ Article "title" number
         articleMetaE <- insert' (ArticleMetadata articleId)
-        result <- select . from $ \articleMetadata -> do
+        result <- select $ from $ \articleMetadata -> do
           where_ $ (articleMetadata ^. ArticleMetadataId) ==. (val ((ArticleMetadataKey articleId)))
           pure articleMetadata
         liftIO $ [articleMetaE] `shouldBe` result
@@ -863,7 +863,7 @@ testSelectJoin run = do
     it "respects the associativity of joins" $
       run $ do
           void $ insert p1
-          ps <- select . from $
+          ps <- select $ from $
                     \((p :: SqlExpr (Entity Person))
                      `LeftOuterJoin`
                       ((_q :: SqlExpr (Entity Person))
@@ -1321,7 +1321,7 @@ testSelectDistinct run = do
           liftIO $ ret `shouldBe` [ Value t1, Value t2, Value t3 ]
 
     it "works on a simple example (select . distinct)" $
-      selDistTest (select . distinct)
+      selDistTest (\a -> select $ distinct a)
 
     it "works on a simple example (distinct (return ()))" $
       selDistTest (\act -> select $ distinct (return ()) >> act)
