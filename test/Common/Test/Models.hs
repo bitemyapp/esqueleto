@@ -22,10 +22,10 @@
 
 module Common.Test.Models where
 
+import Data.Time
+import Database.Esqueleto.Experimental
 import Database.Persist.Sql
 import Database.Persist.TH
-import Database.Esqueleto.Experimental
-import Data.Time
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   Foo

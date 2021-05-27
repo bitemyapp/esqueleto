@@ -25,13 +25,13 @@ module Common.Test.Import
     , module X
     ) where
 
-import Test.Hspec as X
-import Database.Esqueleto.Experimental as X
+import Common.Test.Models as X
 import Control.Monad.Catch (MonadCatch)
+import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
+import Database.Esqueleto.Experimental as X
+import Test.Hspec as X
 import UnliftIO as X
 import qualified UnliftIO.Resource as R
-import Control.Monad.Logger (MonadLoggerIO(..), MonadLogger(..))
-import Common.Test.Models as X
 
 type RunDbMonad m =
     ( MonadUnliftIO m

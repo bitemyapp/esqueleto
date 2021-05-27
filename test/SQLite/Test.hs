@@ -19,9 +19,6 @@ import Test.Hspec
 
 import Common.Test
 
-
-
-
 testSqliteRandom :: Spec
 testSqliteRandom = do
   it "works with random_" $
