@@ -6,6 +6,8 @@
 
 module SQLite.Test where
 
+import Common.Test.Import hiding (from, on)
+
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
@@ -19,158 +21,124 @@ import Test.Hspec
 
 import Common.Test
 
-testSqliteRandom :: Spec
+testSqliteRandom :: SpecDb
 testSqliteRandom = do
-  it "works with random_" $
-    run $ do
-      _ <- select $ return (random_ :: SqlExpr (Value Int))
-      return ()
+    itDb "works with random_" $ do
+        _ <- select $ return (random_ :: SqlExpr (Value Int))
+        asserting noExceptions
 
-
-
-
-
-testSqliteSum :: Spec
+testSqliteSum :: SpecDb
 testSqliteSum = do
-  it "works with sum_" $
-    run $ do
-      _ <- insert' p1
-      _ <- insert' p2
-      _ <- insert' p3
-      _ <- insert' p4
-      ret <- select $
-             from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
-      liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
+    itDb "works with sum_" $ do
+        _ <- insert' p1
+        _ <- insert' p2
+        _ <- insert' p3
+        _ <- insert' p4
+        ret <- select $
+               from $ \p->
+               return $ joinV $ sum_ (p ^. PersonAge)
+        asserting $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
 
 
 
 
 
-testSqliteTwoAscFields :: Spec
+testSqliteTwoAscFields :: SpecDb
 testSqliteTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
-             return p
-      -- in SQLite and MySQL, its the reverse
-      liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
+    itDb "works with two ASC fields (one call)" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
+               return p
+        -- in SQLite and MySQL, its the reverse
+        asserting $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
 
-
-
-
-
-testSqliteOneAscOneDesc :: Spec
+testSqliteOneAscOneDesc :: SpecDb
 testSqliteOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [desc (p ^. PersonAge)]
-             orderBy [asc (p ^. PersonName)]
-             return p
-      liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+    itDb "works with one ASC and one DESC field (two calls)" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [desc (p ^. PersonAge)]
+               orderBy [asc (p ^. PersonName)]
+               return p
+        asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
-
-
-
-
-testSqliteCoalesce :: Spec
+testSqliteCoalesce :: SpecDb
 testSqliteCoalesce = do
-  it "throws an exception on SQLite with <2 arguments" $
-    run (select $
-         from $ \p -> do
-         return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int))))
-    `shouldThrow` (\(_ :: SqliteException) -> True)
+    itDb "throws an exception on SQLite with <2 arguments" $ do
+        eres <- try $ select $
+               from $ \p -> do
+               return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
+        asserting $ case eres of
+            Left (_ :: SqliteException) ->
+                pure ()
+            Right _ ->
+                expectationFailure "Expected SqliteException with <2 args to coalesce"
 
-
-
-
-
-testSqliteUpdate :: Spec
+testSqliteUpdate :: SpecDb
 testSqliteUpdate = do
-  it "works on a simple example" $
-    run $ do
-      p1k <- insert p1
-      p2k <- insert p2
-      p3k <- insert p3
-      let anon = "Anonymous"
-      ()  <- update $ \p -> do
-             set p [ PersonName =. val anon
-                   , PersonAge *=. just (val 2) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      n   <- updateCount $ \p -> do
-             set p [ PersonAge +=. just (val 1) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $
-             from $ \p -> do
-             orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
-             return p
-      -- SQLite: nulls appear first, update returns matched rows.
-      liftIO $ n `shouldBe` 2
-      liftIO $ ret `shouldBe` [ Entity p2k (Person anon Nothing (Just 37) 2)
-                              , Entity p1k (Person anon (Just 73) Nothing 1)
-                              , Entity p3k p3 ]
+    itDb "works on a simple example" $ do
+        p1k <- insert p1
+        p2k <- insert p2
+        p3k <- insert p3
+        let anon = "Anonymous"
+        ()  <- update $ \p -> do
+               set p [ PersonName =. val anon
+                     , PersonAge *=. just (val 2) ]
+               where_ (p ^. PersonName !=. val "Mike")
+        n   <- updateCount $ \p -> do
+               set p [ PersonAge +=. just (val 1) ]
+               where_ (p ^. PersonName !=. val "Mike")
+        ret <- select $
+               from $ \p -> do
+               orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
+               return p
+        -- SQLite: nulls appear first, update returns matched rows.
+        asserting $ do
+            n `shouldBe` 2
+            ret `shouldMatchList`
+                [ Entity p2k (Person anon Nothing (Just 37) 2)
+                , Entity p1k (Person anon (Just 73) Nothing 1)
+                , Entity p3k p3
+                ]
 
-
-
-
-
-nameContains :: (BaseBackend backend ~ SqlBackend,
-                 BackendCompatible SqlBackend backend,
-                 MonadIO m, SqlString s,
-                 IsPersistBackend backend, PersistQueryRead backend,
-                 PersistUniqueRead backend)
-             => (SqlExpr (Value [Char])
-             -> SqlExpr (Value s)
-             -> SqlExpr (Value Bool))
-             -> s
-             -> [Entity Person]
-             -> ReaderT backend m ()
-nameContains f t expected = do
-  ret <- select $
-         from $ \p -> do
-         where_ (f
-                  (p ^. PersonName)
-                  ((%) ++. val t ++. (%)))
-         orderBy [asc (p ^. PersonName)]
-         return p
-  liftIO $ ret `shouldBe` expected
-
-testSqliteTextFunctions :: Spec
+testSqliteTextFunctions :: SpecDb
 testSqliteTextFunctions = do
-  describe "text functions" $ do
-    it "like, (%) and (++.) work on a simple example" $
-       run $ do
-         [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
-         nameContains like "h"  [p1e, p2e]
-         nameContains like "i"  [p4e, p3e]
-         nameContains like "iv" [p4e]
-
-main :: IO ()
-main = do
-  hspec spec
+    describe "text functions" $ do
+        itDb "like, (%) and (++.) work on a simple example" $ do
+            let query :: String -> SqlPersistT IO [Entity Person]
+                query t =
+                    select $
+                    from $ \p -> do
+                    where_ (like
+                             (p ^. PersonName)
+                             ((%) ++. val t ++. (%)))
+                    orderBy [asc (p ^. PersonName)]
+                    return p
+            [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+            r0 <- query "h"
+            r1 <- query "i"
+            r2 <- query "iv"
+            asserting $ do
+                r0 `shouldBe` [p1e, p2e]
+                r1 `shouldBe` [p4e, p3e]
+                r2 `shouldBe` [p4e]
 
 spec :: Spec
-spec = do
-    tests run
-
-    describe "Test SQLite locking" $ do
-      testLocking withConn
+spec = beforeAll undefined $ do
+    tests
 
     describe "SQLite specific tests" $ do
-      testAscRandom random_ run
-      testRandomMath run
+      testAscRandom random_
+      testRandomMath
       testSqliteRandom
       testSqliteSum
       testSqliteTwoAscFields

@@ -195,13 +195,10 @@ testMysqlUnionWithLimits = do
         liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
 
 spec :: Spec
-spec = do
-    tests run
+spec = beforeAll undefined $ do
+    tests
 
-    describe "Test MySQL locking" $ do
-        testLocking withConn
-
-    describe "MySQL specific tests" $ do
+    beforeWith (\_ -> pure ()) $ describe "MySQL specific tests" $ do
         -- definitely doesn't work at the moment
         -- testMysqlRandom
         testMysqlSum
@@ -263,4 +260,3 @@ isCI =  do
     return $ case lookup "TRAVIS" env <|> lookup "CI" env of
         Just "true" -> True
         _ -> False
-

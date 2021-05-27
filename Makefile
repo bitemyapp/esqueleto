@@ -21,7 +21,11 @@ test-ghci:
 	stack ghci esqueleto:test:sqlite
 
 test-ghcid:
-	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto:test:sqlite"
+	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto --test" \
+		--test "main" \
+		--warnings \
+		--restart "stack.yaml"
+
 
 init-pgsql:
 	sudo -u postgres -- createuser -s esqutest

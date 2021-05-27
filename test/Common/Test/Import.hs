@@ -29,10 +29,11 @@ import Control.Monad.Fail
 import Common.Test.Models as X
 import Control.Monad.Catch (MonadCatch)
 import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
-import Database.Esqueleto.Experimental as X
+import Database.Esqueleto.Experimental as X hiding (random_)
 import Test.Hspec as X
 import UnliftIO as X
 import qualified UnliftIO.Resource as R
+import Control.Monad
 
 type RunDbMonad m =
     ( MonadUnliftIO m
@@ -45,3 +46,27 @@ type RunDbMonad m =
 type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a
 
 type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+
+type SpecDb = SpecWith ConnectionPool
+
+newtype Asserting = Asserting (IO ())
+
+asserting :: Applicative f => IO () -> SqlPersistT f Asserting
+asserting a = pure $ Asserting a
+
+noExceptions :: Expectation
+noExceptions = pure ()
+
+itDb
+    :: (HasCallStack)
+    => String
+    -> SqlPersistT IO Asserting
+    -> SpecDb
+itDb message action = do
+    it message $ \connection -> do
+        Asserting tests <- testDb connection action
+        tests
+
+testDb :: ConnectionPool -> SqlPersistT IO a -> IO a
+testDb conn action =
+    liftIO $ runSqlPool action conn

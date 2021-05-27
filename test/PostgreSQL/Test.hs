@@ -1396,14 +1396,11 @@ selectJSON f = select $ from $ \v -> do
 
 spec :: Spec
 spec = do
-    tests run
-
-    describe "Test PostgreSQL locking" $ do
-        testLocking withConn
+    beforeAll (undefined :: IO ConnectionPool) tests
 
     describe "PostgreSQL specific tests" $ do
-        testAscRandom random_ run
-        testRandomMath run
+        testAscRandom random_
+        testRandomMath
         testSelectDistinctOn
         testPostgresModule
         testPostgresqlOneAscOneDesc
