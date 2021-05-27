@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Main (main) where
+module MySQL.Test where
 
 import Control.Applicative
 import Control.Monad (void)
@@ -194,28 +194,23 @@ testMysqlUnionWithLimits = do
         ret <- select $ Experimental.from $ q1 `union_` q2
         liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
 
-
-main :: IO ()
-main = do
-  hspec $ do
+spec :: Spec
+spec = do
     tests run
 
     describe "Test MySQL locking" $ do
-      testLocking withConn
+        testLocking withConn
 
     describe "MySQL specific tests" $ do
-      -- definitely doesn't work at the moment
-      -- testMysqlRandom
-      testMysqlSum
-      testMysqlTwoAscFields
-      testMysqlOneAscOneDesc
-      testMysqlCoalesce
-      testMysqlUpdate
-      testMysqlTextFunctions
-      testMysqlUnionWithLimits
-
-
-
+        -- definitely doesn't work at the moment
+        -- testMysqlRandom
+        testMysqlSum
+        testMysqlTwoAscFields
+        testMysqlOneAscOneDesc
+        testMysqlCoalesce
+        testMysqlUpdate
+        testMysqlTextFunctions
+        testMysqlUnionWithLimits
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act

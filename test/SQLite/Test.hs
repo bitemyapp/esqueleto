@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Main (main) where
+module SQLite.Test where
 
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -162,7 +162,10 @@ testSqliteTextFunctions = do
 
 main :: IO ()
 main = do
-  hspec $ do
+  hspec spec
+
+spec :: Spec
+spec = do
     tests run
 
     describe "Test SQLite locking" $ do

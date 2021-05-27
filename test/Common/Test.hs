@@ -64,6 +64,8 @@ module Common.Test
     , Key(..)
     ) where
 
+import Common.Test.Import hiding (from, on)
+
 import Control.Monad (forM_, replicateM, replicateM_, void)
 import Control.Monad.Catch (MonadCatch)
 import Control.Monad.Reader (ask)
@@ -96,167 +98,9 @@ import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
 import qualified UnliftIO.Resource as R
 
+import Common.Test.Select
+
 -- Test schema
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
-  Foo
-    name Int
-    Primary name
-    deriving Show Eq Ord
-  Bar
-    quux FooId
-    deriving Show Eq Ord
-  Baz
-    blargh FooId
-    deriving Show Eq
-  Shoop
-    baz BazId
-    deriving Show Eq
-  Asdf
-    shoop ShoopId
-    deriving Show Eq
-  Another
-    why BazId
-  YetAnother
-    argh ShoopId
-
-  Person
-    name String
-    age Int Maybe
-    weight Int Maybe
-    favNum Int
-    deriving Eq Show Ord
-  BlogPost
-    title String
-    authorId PersonId
-    deriving Eq Show
-  Comment
-    body String
-    blog BlogPostId
-    deriving Eq Show
-  CommentReply
-    body String
-    comment CommentId
-  Profile
-    name String
-    person PersonId
-    deriving Eq Show
-  Reply
-    guy PersonId
-    body String
-    deriving Eq Show
-
-  Lord
-    county String maxlen=100
-    dogs Int Maybe
-    Primary county
-    deriving Eq Show
-
-  Deed
-    contract String maxlen=100
-    ownerId LordId maxlen=100
-    Primary contract
-    deriving Eq Show
-
-  Follow
-    follower PersonId
-    followed PersonId
-    deriving Eq Show
-
-  CcList
-    names [String]
-
-  Frontcover
-    number Int
-    title String
-    Primary number
-    deriving Eq Show
-  Article
-    title String
-    frontcoverNumber Int
-    Foreign Frontcover fkfrontcover frontcoverNumber
-    deriving Eq Show
-  ArticleMetadata
-    articleId ArticleId
-    Primary articleId
-    deriving Eq Show
-  Tag
-    name String maxlen=100
-    Primary name
-    deriving Eq Show
-  ArticleTag
-    articleId ArticleId
-    tagId     TagId maxlen=100
-    Primary   articleId tagId
-    deriving Eq Show
-  Article2
-    title String
-    frontcoverId FrontcoverId
-    deriving Eq Show
-  Point
-    x Int
-    y Int
-    name String
-    Primary x y
-    deriving Eq Show
-  Circle
-    centerX Int
-    centerY Int
-    name String
-    Foreign Point fkpoint centerX centerY
-    deriving Eq Show
-  Numbers
-    int    Int
-    double Double
-    deriving Eq Show
-
-  JoinOne
-    name    String
-    deriving Eq Show
-
-  JoinTwo
-    joinOne JoinOneId
-    name    String
-    deriving Eq Show
-
-  JoinThree
-    joinTwo JoinTwoId
-    name    String
-    deriving Eq Show
-
-  JoinFour
-    name    String
-    joinThree JoinThreeId
-    deriving Eq Show
-
-  JoinOther
-    name    String
-    deriving Eq Show
-
-  JoinMany
-    name      String
-    joinOther JoinOtherId
-    joinOne   JoinOneId
-    deriving Eq Show
-
-  DateTruncTest
-    created   UTCTime
-    deriving Eq Show
-|]
-
--- Unique Test schema
-share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
-  OneUnique
-    name String
-    value Int
-    UniqueValue value
-    deriving Eq Show
-|]
-
-
-instance ToBaseId ArticleMetadata where
-    type BaseEnt ArticleMetadata = Article
-    toBaseIdWitness articleId = ArticleMetadataKey articleId
-
 -- | this could be achieved with S.fromList, but not all lists
 --   have Ord instances
 sameElementsAs :: Eq a => [a] -> [a] -> Bool
@@ -304,29 +148,6 @@ u3 = OneUnique "Third" 0
 
 u4 :: OneUnique
 u4 = OneUnique "First" 2
-
-testSelect :: Run -> Spec
-testSelect run = do
-    describe "select" $ do
-        it "works for a single value" $
-            run $ do
-                ret <- select $ return $ val (3 :: Int)
-                liftIO $ ret `shouldBe` [ Value 3 ]
-
-        it "works for a pair of a single value and ()" $
-            run $ do
-                ret <- select $ return (val (3 :: Int), ())
-                liftIO $ ret `shouldBe` [ (Value 3, ()) ]
-
-        it "works for a single ()" $
-            run $ do
-                ret <- select $ return ()
-                liftIO $ ret `shouldBe` [ () ]
-
-        it "works for a single NULL value" $
-            run $ do
-                ret <- select $ return nothing
-                liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
 
 testSubSelect :: Run -> Spec
 testSubSelect run = do
@@ -2463,28 +2284,28 @@ listsEqualOn a b f = map f a `shouldBe` map f b
 
 tests :: Run -> Spec
 tests run = do
-  describe "Tests that are common to all backends" $ do
-    testSelect run
-    testSubSelect run
-    testSelectSource run
-    testSelectFrom run
-    testSelectJoin run
-    testSelectSubQuery run
-    testSelectWhere run
-    testSelectOrderBy run
-    testSelectDistinct run
-    testCoasleceDefault run
-    testDelete run
-    testUpdate run
-    testListOfValues run
-    testListFields run
-    testInsertsBySelect run
-    testMathFunctions run
-    testCase run
-    testCountingRows run
-    testRenderSql run
-    testOnClauseOrder run
-    testExperimentalFrom run
+    describe "Esqueleto" $ do
+        testSelect run
+        testSubSelect run
+        testSelectSource run
+        testSelectFrom run
+        testSelectJoin run
+        testSelectSubQuery run
+        testSelectWhere run
+        testSelectOrderBy run
+        testSelectDistinct run
+        testCoasleceDefault run
+        testDelete run
+        testUpdate run
+        testListOfValues run
+        testListFields run
+        testInsertsBySelect run
+        testMathFunctions run
+        testCase run
+        testCountingRows run
+        testRenderSql run
+        testOnClauseOrder run
+        testExperimentalFrom run
 
 
 insert' :: ( Functor m
@@ -2495,20 +2316,6 @@ insert' :: ( Functor m
         => val -> ReaderT backend m (Entity val)
 insert' v = flip Entity v <$> insert v
 
-
-type RunDbMonad m = ( MonadUnliftIO m
-                    , MonadIO m
-                    , MonadLoggerIO m
-                    , MonadLogger m
-                    , MonadCatch m )
-
-#if __GLASGOW_HASKELL__ >= 806
-type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a
-#else
-type Run = forall a. (forall m. (RunDbMonad m) => SqlPersistT (R.ResourceT m) a) -> IO a
-#endif
-
-type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 
 -- With SQLite and in-memory databases, a separate connection implies a
 -- separate database. With 'actual databases', the data is persistent and

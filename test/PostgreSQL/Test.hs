@@ -8,7 +8,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
-module Main (main) where
+
+module PostgreSQL.Test where
 
 import Control.Arrow ((&&&))
 import Control.Monad (void, when)
@@ -1393,40 +1394,39 @@ selectJSON f = select $ from $ \v -> do
 
 
 
-main :: IO ()
-main = do
-    hspec $ do
-        tests run
+spec :: Spec
+spec = do
+    tests run
 
-        describe "Test PostgreSQL locking" $ do
-            testLocking withConn
+    describe "Test PostgreSQL locking" $ do
+        testLocking withConn
 
-        describe "PostgreSQL specific tests" $ do
-            testAscRandom random_ run
-            testRandomMath run
-            testSelectDistinctOn
-            testPostgresModule
-            testPostgresqlOneAscOneDesc
-            testPostgresqlTwoAscFields
-            testPostgresqlSum
-            testPostgresqlRandom
-            testPostgresqlUpdate
-            testPostgresqlCoalesce
-            testPostgresqlTextFunctions
-            testInsertUniqueViolation
-            testUpsert
-            testInsertSelectWithConflict
-            testFilterWhere
-            testCommonTableExpressions
-            describe "PostgreSQL JSON tests" $ do
-                -- NOTE: We only clean the table once, so we
-                -- can use its contents across all JSON tests
-                it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
-                    void $ runMigrationSilent migrateJSON
-                    cleanJSON
-                testJSONInsertions
-                testJSONOperators
-            testLateralQuery
+    describe "PostgreSQL specific tests" $ do
+        testAscRandom random_ run
+        testRandomMath run
+        testSelectDistinctOn
+        testPostgresModule
+        testPostgresqlOneAscOneDesc
+        testPostgresqlTwoAscFields
+        testPostgresqlSum
+        testPostgresqlRandom
+        testPostgresqlUpdate
+        testPostgresqlCoalesce
+        testPostgresqlTextFunctions
+        testInsertUniqueViolation
+        testUpsert
+        testInsertSelectWithConflict
+        testFilterWhere
+        testCommonTableExpressions
+        describe "PostgreSQL JSON tests" $ do
+            -- NOTE: We only clean the table once, so we
+            -- can use its contents across all JSON tests
+            it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
+                void $ runMigrationSilent migrateJSON
+                cleanJSON
+            testJSONInsertions
+            testJSONOperators
+        testLateralQuery
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
@@ -1445,14 +1445,12 @@ verbose :: Bool
 verbose = False
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
+run_worker act = withConn $ runSqlConn (migrateIt >> act >>= \a ->  transactionUndo >> pure a)
 
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
   void $ runMigrationSilent migrateUnique
-  cleanDB
-  cleanUniques
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn f = do
