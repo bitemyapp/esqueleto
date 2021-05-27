@@ -1445,12 +1445,14 @@ verbose :: Bool
 verbose = False
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act >>= \a ->  transactionUndo >> pure a)
+run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
   void $ runMigrationSilent migrateUnique
+  cleanDB
+  cleanUniques
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn f = do
