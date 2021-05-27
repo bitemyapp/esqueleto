@@ -80,105 +80,49 @@ library
         -Wmonomorphism-restriction
     default-language: Haskell2010
 
-test-suite mysql
+test-suite specs
     type: exitcode-stdio-1.0
-    main-is: MySQL/Test.hs
+    main-is: Spec.hs
     other-modules:
         Common.Test
-        Paths_esqueleto
-    hs-source-dirs:
-        test
-    ghc-options: -Wall
-    build-depends:
-        base >=4.8 && <5.0
-      , attoparsec
-      , blaze-html
-      , bytestring
-      , conduit >=1.3
-      , containers
-      , esqueleto
-      , exceptions
-      , hspec
-      , monad-logger
-      , mtl
-      , mysql
-      , mysql-simple
-      , persistent
-      , persistent-mysql
-      , resourcet >=1.2
-      , tagged >=0.2
-      , text >=0.11 && <1.3
-      , time
-      , transformers >=0.2
-      , unliftio
-      , unordered-containers >=0.2
-    default-language: Haskell2010
-
-test-suite postgresql
-    type: exitcode-stdio-1.0
-    main-is: PostgreSQL/Test.hs
-    other-modules:
-        Common.Test
+        Common.Test.Models
+        Common.Test.Import
+        Common.Test.Select
         PostgreSQL.MigrateJSON
-        Paths_esqueleto
+        SQLite.Test
+        PostgreSQL.Test
+        MySQL.Test
+    default-extensions:
+        RankNTypes
     hs-source-dirs:
         test
     ghc-options: -Wall -threaded
     build-depends:
         base >=4.8 && <5.0
       , aeson
-      , attoparsec
-      , blaze-html
-      , bytestring
-      , conduit >=1.3
-      , containers
-      , esqueleto
-      , exceptions
-      , hspec
-      , monad-logger
-      , mtl
-      , persistent
-      , persistent-postgresql
-      , postgresql-libpq
       , postgresql-simple
-      , resourcet >=1.2
-      , tagged >=0.2
-      , text >=0.11 && <1.3
-      , time
-      , transformers >=0.2
-      , unliftio
-      , unordered-containers >=0.2
-      , vector
-    default-language: Haskell2010
-
-test-suite sqlite
-    type: exitcode-stdio-1.0
-    main-is: SQLite/Test.hs
-    other-modules:
-        Common.Test
-        Paths_esqueleto
-    hs-source-dirs:
-        test
-    ghc-options: -Wall -threaded
-    build-depends:
-        base >=4.8 && <5.0
       , attoparsec
       , blaze-html
       , bytestring
-      , conduit >=1.3
+      , conduit 
       , containers
       , esqueleto
       , exceptions
       , hspec
+      , hspec-core
       , monad-logger
       , mtl
+      , mysql
+      , mysql-simple
       , persistent
+      , persistent-mysql
       , persistent-sqlite
-      , resourcet >=1.2
-      , tagged >=0.2
-      , text >=0.11 && <1.3
+      , persistent-postgresql
+      , resourcet 
+      , tagged 
+      , text 
       , time
-      , transformers >=0.2
+      , transformers 
       , unliftio
-      , unordered-containers >=0.2
+      , unordered-containers 
     default-language: Haskell2010
