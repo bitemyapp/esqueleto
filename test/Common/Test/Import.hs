@@ -25,6 +25,7 @@ module Common.Test.Import
     , module X
     ) where
 
+import Control.Monad.Fail
 import Common.Test.Models as X
 import Control.Monad.Catch (MonadCatch)
 import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
