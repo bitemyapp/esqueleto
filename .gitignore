@@ -6,4 +6,5 @@ stack.yaml.lock
 .cabal-sandbox/
 cabal.sandbox.config
 .hspec-failures
+*.sqlite*
 cabal.project.freeze

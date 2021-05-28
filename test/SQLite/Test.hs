@@ -15,7 +15,7 @@ import Control.Monad.Trans.Reader (ReaderT)
 import qualified Control.Monad.Trans.Resource as R
 import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.SQLite (random_)
-import Database.Persist.Sqlite (withSqliteConn)
+import Database.Persist.Sqlite (withSqliteConn, createSqlitePool)
 import Database.Sqlite (SqliteException)
 import Test.Hspec
 
@@ -132,8 +132,8 @@ testSqliteTextFunctions = do
                 r1 `shouldBe` [p4e, p3e]
                 r2 `shouldBe` [p4e]
 
-spec :: Spec
-spec = beforeAll undefined $ do
+spec :: HasCallStack => Spec
+spec = beforeAll mkConnectionPool $ do
     tests
 
     describe "SQLite specific tests" $ do
@@ -146,6 +146,20 @@ spec = beforeAll undefined $ do
       testSqliteCoalesce
       testSqliteUpdate
       testSqliteTextFunctions
+
+mkConnectionPool :: IO ConnectionPool
+mkConnectionPool = do
+    conn <-
+        if verbose
+        then runStderrLoggingT $
+            createSqlitePool ".esqueleto-test.sqlite" 4
+        else runNoLoggingT $
+            createSqlitePool ".esqueleto-test.sqlite" 4
+    flip runSqlPool conn $ do
+        migrateIt
+
+    pure conn
+
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
@@ -161,9 +175,10 @@ verbose = False
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
-migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
+migrateIt :: MonadUnliftIO m => SqlPersistT m ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
+  cleanDB
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn =

@@ -10,7 +10,7 @@ import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
+import Control.Monad.Trans.Reader (ReaderT, mapReaderT)
 import qualified Control.Monad.Trans.Resource as R
 import Database.Esqueleto
 import Database.Esqueleto.Experimental hiding (from, on)
@@ -23,6 +23,7 @@ import Database.Persist.MySQL
        , connectUser
        , defaultConnectInfo
        , withMySQLConn
+       , createMySQLPool
        )
 
 import System.Environment
@@ -195,7 +196,7 @@ testMysqlUnionWithLimits = do
         liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
 
 spec :: Spec
-spec = beforeAll undefined $ do
+spec = beforeAll mkConnectionPool $ do
     tests
 
     beforeWith (\_ -> pure ()) $ describe "MySQL specific tests" $ do
@@ -217,19 +218,53 @@ run =
   then runVerbose
   else runSilent
 
-
 verbose :: Bool
 verbose = False
-
 
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
-
-migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
+migrateIt :: R.MonadUnliftIO m => SqlPersistT m ()
 migrateIt = do
-  void $ runMigrationSilent migrateAll
+  mapReaderT R.runResourceT $ void $ runMigrationSilent migrateAll
   cleanDB
+
+mkConnectionPool :: IO ConnectionPool
+mkConnectionPool = do
+    ci <- isCI
+    let connInfo
+            | ci =
+                defaultConnectInfo
+                    { connectHost     = "127.0.0.1"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 33306
+                    }
+            | otherwise =
+                defaultConnectInfo
+                    { connectHost     = "localhost"
+                    , connectUser     = "travis"
+                    , connectPassword = "esqutest"
+                    , connectDatabase = "esqutest"
+                    , connectPort     = 3306
+                    }
+    pool <-
+        if verbose
+        then
+            runStderrLoggingT $
+                createMySQLPool connInfo 4
+        else
+            runNoLoggingT $
+                createMySQLPool connInfo 4
+
+
+    flip runSqlPool pool $ do
+        migrateIt
+        cleanDB
+
+    pure pool
+
 
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a

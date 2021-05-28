@@ -16,6 +16,8 @@
 
 module PostgreSQL.MigrateJSON where
 
+import Common.Test.Import hiding (Value, from, on)
+
 import Control.Monad.Trans.Resource (ResourceT)
 import Data.Aeson (Value)
 import Database.Esqueleto (SqlExpr, delete, from)
@@ -34,6 +36,6 @@ Json
 |]
 
 cleanJSON
-  :: (forall m. RunDbMonad m
-  => SqlPersistT (ResourceT m) ())
+    :: forall m. MonadIO m
+    => SqlPersistT m ()
 cleanJSON = delete $ from $ \(_ :: SqlExpr (Entity Json)) -> return ()

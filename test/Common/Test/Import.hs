@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -25,7 +25,6 @@ module Common.Test.Import
     , module X
     ) where
 
-import Control.Monad.Fail
 import Common.Test.Models as X
 import Control.Monad.Catch (MonadCatch)
 import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
@@ -34,6 +33,9 @@ import Test.Hspec as X
 import UnliftIO as X
 import qualified UnliftIO.Resource as R
 import Control.Monad
+import Test.QuickCheck.Monadic
+import Test.QuickCheck
+import Control.Monad.Reader
 
 type RunDbMonad m =
     ( MonadUnliftIO m
@@ -49,10 +51,8 @@ type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 
 type SpecDb = SpecWith ConnectionPool
 
-newtype Asserting = Asserting (IO ())
-
-asserting :: Applicative f => IO () -> SqlPersistT f Asserting
-asserting a = pure $ Asserting a
+asserting :: MonadIO f => IO () -> SqlPersistT f ()
+asserting a = liftIO a
 
 noExceptions :: Expectation
 noExceptions = pure ()
@@ -60,13 +60,24 @@ noExceptions = pure ()
 itDb
     :: (HasCallStack)
     => String
-    -> SqlPersistT IO Asserting
+    -> SqlPersistT IO x
     -> SpecDb
 itDb message action = do
     it message $ \connection -> do
-        Asserting tests <- testDb connection action
-        tests
+        void $ testDb connection action
+
+propDb
+    :: (HasCallStack, Testable a)
+    => String
+    -> ((SqlPersistT IO () -> IO ()) -> a )
+    -> SpecDb
+propDb message action = do
+    it message $ \connection -> do
+        property (action (testDb connection))
 
 testDb :: ConnectionPool -> SqlPersistT IO a -> IO a
 testDb conn action =
-    liftIO $ runSqlPool action conn
+    liftIO $ flip runSqlPool conn $ do
+        a <- action
+        transactionUndo
+        pure a

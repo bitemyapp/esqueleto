@@ -1127,9 +1127,11 @@ testSelectDistinct :: SpecDb
 testSelectDistinct = do
   describe "SELECT DISTINCT" $ do
     let selDistTest
-          :: (   SqlQuery (SqlExpr (Value String))
-              -> SqlPersistT IO [Value String])
-          -> SqlPersistT IO Asserting
+          ::
+          ( SqlQuery (SqlExpr (Value String))
+              -> SqlPersistT IO [Value String]
+              )
+          -> SqlPersistT IO ()
         selDistTest q = do
           p1k <- insert p1
           let (t1, t2, t3) = ("a", "b", "c")
@@ -2321,8 +2323,8 @@ insert' v = flip Entity v <$> insert v
 -- thus must be cleaned after each test.
 -- TODO: there is certainly a better way...
 cleanDB
-  :: (forall m. RunDbMonad m
-  => SqlPersistT (R.ResourceT m) ())
+    :: forall m. _
+    => SqlPersistT m ()
 cleanDB = do
   delete $ from $ \(_ :: SqlExpr (Entity Bar))  -> return ()
   delete $ from $ \(_ :: SqlExpr (Entity Foo))  -> return ()
@@ -2361,10 +2363,10 @@ cleanDB = do
 
 
 cleanUniques
-  :: (forall m. RunDbMonad m
-  => SqlPersistT (R.ResourceT m) ())
+    :: forall m. MonadIO m
+    => SqlPersistT m ()
 cleanUniques =
-  delete $ from $ \(_ :: SqlExpr (Entity OneUnique))    -> return ()
+    delete $ from $ \(_ :: SqlExpr (Entity OneUnique))    -> return ()
 
 selectRethrowingQuery
   :: (MonadIO m, EI.SqlSelect a r, MonadUnliftIO m)

@@ -13,10 +13,9 @@ module PostgreSQL.Test where
 
 import Control.Arrow ((&&&))
 import Control.Monad (void, when)
-import Control.Monad.Catch
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
-import Control.Monad.Trans.Reader (ReaderT, ask)
+import Control.Monad.Trans.Reader (ReaderT, ask, mapReaderT)
 import qualified Control.Monad.Trans.Resource as R
 import Data.Aeson hiding (Value)
 import qualified Data.Aeson as A (Value)
@@ -41,157 +40,128 @@ import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import Database.Persist.Postgresql (withPostgresqlConn)
+import Database.Persist.Postgresql (withPostgresqlConn, createPostgresqlPool)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
 import Test.Hspec.QuickCheck
 
 import Common.Test
+import Common.Test.Import hiding (from, on)
 import PostgreSQL.MigrateJSON
 
+returningType :: forall a m . m a -> m a
+returningType a = a
 
-
-testPostgresqlCoalesce :: Spec
+testPostgresqlCoalesce :: SpecDb
 testPostgresqlCoalesce = do
-  it "works on PostgreSQL and MySQL with <2 arguments" $
-    run $ do
-      _ :: [Value (Maybe Int)] <-
-        select $
-        from $ \p -> do
-        return (coalesce [p ^. PersonAge])
-      return ()
+    itDb "works on PostgreSQL and MySQL with <2 arguments" $ do
+        void $ returningType @[Value (Maybe Int)] $
+            select $
+            from $ \p -> do
+            return (coalesce [p ^. PersonAge])
+        asserting noExceptions
 
-nameContains :: (BaseBackend backend ~ SqlBackend,
-                 BackendCompatible SqlBackend backend,
-                 MonadIO m, SqlString s,
-                 IsPersistBackend backend, PersistQueryRead backend,
-                 PersistUniqueRead backend)
-             => (SqlExpr (Value [Char])
-             -> SqlExpr (Value s)
-             -> SqlExpr (Value Bool))
-             -> s
-             -> [Entity Person]
-             -> ReaderT backend m ()
-nameContains f t expected = do
-  ret <- select $
-         from $ \p -> do
-         where_ (f
-                  (p ^. PersonName)
-                  ((%) ++. val t ++. (%)))
-         orderBy [asc (p ^. PersonName)]
-         return p
-  liftIO $ ret `shouldBe` expected
-
-
-testPostgresqlTextFunctions :: Spec
+testPostgresqlTextFunctions :: SpecDb
 testPostgresqlTextFunctions = do
-  describe "text functions" $ do
-    it "like, (%) and (++.) work on a simple example" $
-       run $ do
-         [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
-         nameContains like "h"  [p1e, p2e]
-         nameContains like "i"  [p4e, p3e]
-         nameContains like "iv" [p4e]
+    describe "text functions" $ do
+        itDb "like, (%) and (++.) work on a simple example" $ do
+            let nameContains t =
+                    select $
+                    from $ \p -> do
+                    where_
+                        (like
+                        (p ^. PersonName)
+                        ((%) ++. val t ++. (%)))
+                    orderBy [asc (p ^. PersonName)]
+                    return p
+            [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
+            h <- nameContains "h"
+            i <- nameContains "i"
+            iv <- nameContains "iv"
+            asserting $ do
+                h `shouldBe` [p1e, p2e]
+                i `shouldBe` [p4e, p3e]
+                iv `shouldBe` [p4e]
 
-    it "ilike, (%) and (++.) work on a simple example on PostgreSQL" $
-      run $ do
-        [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-        let nameContains' t expected = do
-              ret <- select $
+        itDb "ilike, (%) and (++.) work on a simple example on PostgreSQL" $ do
+            [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
+            let nameContains t = do
+                    select $
                      from $ \p -> do
                      where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
                      orderBy [asc (p ^. PersonName)]
                      return p
-              liftIO $ ret `shouldBe` expected
-        nameContains' "mi" [p3e, p5e]
-        nameContains' "JOHN" [p1e]
+            mi <- nameContains "mi"
+            john <- nameContains "JOHN"
+            asserting $ do
+                mi `shouldBe` [p3e, p5e]
+                john `shouldBe` [p1e]
 
-
-
-
-
-testPostgresqlUpdate :: Spec
+testPostgresqlUpdate :: SpecDb
 testPostgresqlUpdate = do
-  it "works on a simple example" $
-    run $ do
-      p1k <- insert p1
-      p2k <- insert p2
-      p3k <- insert p3
-      let anon = "Anonymous"
-      ()  <- update $ \p -> do
-             set p [ PersonName =. val anon
-                   , PersonAge *=. just (val 2) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      n   <- updateCount $ \p -> do
-             set p [ PersonAge +=. just (val 1) ]
-             where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $
-             from $ \p -> do
-             orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
-             return p
-      -- PostgreSQL: nulls are bigger than data, and update returns
-      --             matched rows, not actually changed rows.
-      liftIO $ n `shouldBe` 2
-      liftIO $ ret `shouldBe` [ Entity p1k (Person anon (Just 73) Nothing 1)
-                              , Entity p2k (Person anon Nothing (Just 37) 2)
-                              , Entity p3k p3 ]
+    itDb "works on a simple example" $ do
+        p1k <- insert p1
+        p2k <- insert p2
+        p3k <- insert p3
+        let anon = "Anonymous"
+        ()  <- update $ \p -> do
+               set p [ PersonName =. val anon
+                     , PersonAge *=. just (val 2) ]
+               where_ (p ^. PersonName !=. val "Mike")
+        n   <- updateCount $ \p -> do
+               set p [ PersonAge +=. just (val 1) ]
+               where_ (p ^. PersonName !=. val "Mike")
+        ret <- select $
+               from $ \p -> do
+               orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
+               return p
+        -- PostgreSQL: nulls are bigger than data, and update returns
+        --             matched rows, not actually changed rows.
+        asserting $ do
+            n `shouldBe` 2
+            ret `shouldBe`
+                [ Entity p1k (Person anon (Just 73) Nothing 1)
+                , Entity p2k (Person anon Nothing (Just 37) 2)
+                , Entity p3k p3
+                ]
 
-
-
-
-
-testPostgresqlRandom :: Spec
+testPostgresqlRandom :: SpecDb
 testPostgresqlRandom = do
-  it "works with random_" $
-    run $ do
-      _ <- select $ return (random_ :: SqlExpr (Value Double))
-      return ()
+    itDb "works with random_" $ do
+        _ <- select $ return (random_ :: SqlExpr (Value Double))
+        asserting noExceptions
 
-
-
-
-
-testPostgresqlSum :: Spec
+testPostgresqlSum :: SpecDb
 testPostgresqlSum = do
-  it "works with sum_" $
-    run $ do
-      _ <- insert' p1
-      _ <- insert' p2
-      _ <- insert' p3
-      _ <- insert' p4
-      ret <- select $
-             from $ \p->
-             return $ joinV $ sum_ (p ^. PersonAge)
-      liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
+    itDb "works with sum_" $ do
+        _ <- insert' p1
+        _ <- insert' p2
+        _ <- insert' p3
+        _ <- insert' p4
+        ret <- select $
+               from $ \p->
+               return $ joinV $ sum_ (p ^. PersonAge)
+        asserting $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
 
-
-
-
-
-testPostgresqlTwoAscFields :: Spec
+testPostgresqlTwoAscFields :: SpecDb
 testPostgresqlTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
-      p1e <- insert' p1
-      p2e <- insert' p2
-      p3e <- insert' p3
-      p4e <- insert' p4
-      ret <- select $
-             from $ \p -> do
-             orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
-             return p
-      -- in PostgreSQL nulls are bigger than everything
-      liftIO $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
+    itDb "works with two ASC fields (one call)" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
+               return p
+        -- in PostgreSQL nulls are bigger than everything
+        asserting $ ret `shouldBe` [ p4e, p3e, p1e , p2e ]
 
-
-
-
-
-testPostgresqlOneAscOneDesc :: Spec
+testPostgresqlOneAscOneDesc :: SpecDb
 testPostgresqlOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
+  itDb "works with one ASC and one DESC field (two calls)" $
+     do
       p1e <- insert' p1
       p2e <- insert' p2
       p3e <- insert' p3
@@ -201,17 +171,13 @@ testPostgresqlOneAscOneDesc = do
              orderBy [desc (p ^. PersonAge)]
              orderBy [asc (p ^. PersonName)]
              return p
-      liftIO $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
+      asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
 
-
-
-
-
-testSelectDistinctOn :: Spec
+testSelectDistinctOn :: SpecDb
 testSelectDistinctOn = do
   describe "SELECT DISTINCT ON" $ do
-    it "works on a simple example" $ do
-      run $ do
+    itDb "works on a simple example" $ do
+       do
         [p1k, p2k, _] <- mapM insert [p1, p2, p3]
         [_, bpB, bpC] <- mapM insert'
           [ BlogPost "A" p1k
@@ -225,7 +191,7 @@ testSelectDistinctOn = do
         liftIO $ ret `shouldBe` L.sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
 
     let slightlyLessSimpleTest q =
-          run $ do
+           do
             [p1k, p2k, _] <- mapM insert [p1, p2, p3]
             [bpA, bpB, bpC] <- mapM insert'
               [ BlogPost "A" p1k
@@ -237,20 +203,20 @@ testSelectDistinctOn = do
             let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
             liftIO $ ret `shouldBe` L.sortBy (comparing cmp) [bpA, bpB, bpC]
 
-    it "works on a slightly less simple example (two distinctOn calls, orderBy)" $
+    itDb "works on a slightly less simple example (two distinctOn calls, orderBy)" $
       slightlyLessSimpleTest $ \bp act ->
         distinctOn [don (bp ^. BlogPostAuthorId)] $
         distinctOn [don (bp ^. BlogPostTitle)] $ do
           orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
           act
 
-    it "works on a slightly less simple example (one distinctOn call, orderBy)" $ do
+    itDb "works on a slightly less simple example (one distinctOn call, orderBy)" $ do
       slightlyLessSimpleTest $ \bp act ->
         distinctOn [don (bp ^. BlogPostAuthorId), don (bp ^. BlogPostTitle)] $ do
           orderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
           act
 
-    it "works on a slightly less simple example (distinctOnOrderBy)" $ do
+    itDb "works on a slightly less simple example (distinctOnOrderBy)" $ do
       slightlyLessSimpleTest $ \bp ->
         distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
 
@@ -258,10 +224,10 @@ testSelectDistinctOn = do
 
 
 
-testArrayAggWith :: Spec
+testArrayAggWith :: SpecDb
 testArrayAggWith = do
   describe "ALL, no ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
@@ -269,7 +235,7 @@ testArrayAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` []
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -278,7 +244,7 @@ testArrayAggWith = do
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
   describe "DISTINCT, no ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
@@ -286,7 +252,7 @@ testArrayAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` []
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -295,7 +261,7 @@ testArrayAggWith = do
       liftIO $ L.sort ret `shouldBe` [Nothing, Just 17, Just 36]
 
   describe "ALL, ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge)
                     [ asc $ p ^. PersonName
@@ -307,7 +273,7 @@ testArrayAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` []
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -316,7 +282,7 @@ testArrayAggWith = do
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
   describe "DISTINCT, ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
@@ -326,7 +292,7 @@ testArrayAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` []
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -339,10 +305,10 @@ testArrayAggWith = do
 
 
 
-testStringAggWith :: Spec
+testStringAggWith :: SpecDb
 testStringAggWith = do
   describe "ALL, no ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.stringAggWith EP.AggModeAll (p ^. PersonName)
                      (val " ") [])
@@ -351,7 +317,7 @@ testStringAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -359,14 +325,14 @@ testStringAggWith = do
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ (L.sort $ words ret) `shouldBe` L.sort (map personName people)
 
-    it "works with zero rows" $ run $ do
+    itDb "works with zero rows" $  do
       [Value ret] <-
         select $ from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ ret `shouldBe` Nothing
 
   describe "DISTINCT, no ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") []
@@ -375,7 +341,7 @@ testStringAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -386,7 +352,7 @@ testStringAggWith = do
         (L.sort . L.nub $ map personName people)
 
   describe "ALL, ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
                     [ asc $ p ^. PersonName
@@ -398,7 +364,7 @@ testStringAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -409,7 +375,7 @@ testStringAggWith = do
         `shouldBe` (L.reverse . L.sort $ map personName people)
 
   describe "DISTINCT, ORDER BY" $ do
-    it "creates sane SQL" $ run $ do
+    itDb "creates sane SQL" $  do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") [desc $ p ^. PersonName]
@@ -419,7 +385,7 @@ testStringAggWith = do
         \FROM \"Person\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
-    it "works on an example" $ run $ do
+    itDb "works on an example" $  do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
@@ -433,24 +399,24 @@ testStringAggWith = do
 
 
 
-testAggregateFunctions :: Spec
+testAggregateFunctions :: SpecDb
 testAggregateFunctions = do
   describe "arrayAgg" $ do
-    it "looks sane" $ run $ do
+    itDb "looks sane" $  do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
         select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
-    it "works on zero rows" $ run $ do
+    itDb "works on zero rows" $  do
       [Value ret] <-
         select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` Nothing
   describe "arrayAggWith" testArrayAggWith
   describe "stringAgg" $ do
-    it "looks sane" $
-      run $ do
+    itDb "looks sane" $
+       do
         let people = [p1, p2, p3, p4, p5]
         mapM_ insert people
         [Value (Just ret)] <-
@@ -458,14 +424,14 @@ testAggregateFunctions = do
           from $ \p -> do
           return (EP.stringAgg (p ^. PersonName) (val " "))
         liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
-    it "works on zero rows" $ run $ do
+    itDb "works on zero rows" $  do
       [Value ret] <-
         select $ from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
       liftIO $ ret `shouldBe` Nothing
   describe "stringAggWith" testStringAggWith
 
   describe "array_remove (NULL)" $ do
-    it "removes NULL from arrays from nullable fields" $ run $ do
+    itDb "removes NULL from arrays from nullable fields" $  do
       mapM_ insert [ Person "1" Nothing   Nothing 1
                    , Person "2" (Just 7)  Nothing 1
                    , Person "3" (Nothing) Nothing 1
@@ -480,127 +446,121 @@ testAggregateFunctions = do
         `shouldBe` [[7], [8,9]]
 
   describe "maybeArray" $ do
-    it "Coalesces NULL into an empty array" $ run $ do
+    itDb "Coalesces NULL into an empty array" $  do
       [Value ret] <-
         select $ from $ \p ->
           return (EP.maybeArray $ EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` []
 
-
-
-
-
-testPostgresModule :: Spec
+testPostgresModule :: SpecDb
 testPostgresModule = do
-  describe "date_trunc" $ modifyMaxSuccess (`div` 10) $ do
-    prop "works" $ \listOfDateParts -> run $ do
-      let
-        utcTimes =
-          map
-            (\(y, m, d, s) ->
-              fromInteger s
-                `addUTCTime`
-                  UTCTime (fromGregorian (2000 + y) m d) 0
-            )
-          listOfDateParts
-        truncateDate
-          :: SqlExpr (Value String)  -- ^ .e.g (val "day")
-          -> SqlExpr (Value UTCTime) -- ^ input field
-          -> SqlExpr (Value UTCTime) -- ^ truncated date
-        truncateDate datePart expr =
-          ES.unsafeSqlFunction "date_trunc" (datePart, expr)
-        vals =
-          zip (map (DateTruncTestKey . fromInteger) [1..]) utcTimes
-      for_ vals $ \(idx, utcTime) -> do
-        insertKey idx (DateTruncTest utcTime)
+    describe "date_trunc" $ modifyMaxSuccess (`div` 10) $ do
+        propDb "works" $ \run listOfDateParts -> run $ do
+            let
+                utcTimes =
+                    map
+                      (\(y, m, d, s) ->
+                        fromInteger s
+                          `addUTCTime`
+                            UTCTime (fromGregorian (2000 + y) m d) 0
+                      )
+                    listOfDateParts
+                truncateDate
+                    :: SqlExpr (Value String)  -- ^ .e.g (val "day")
+                    -> SqlExpr (Value UTCTime) -- ^ input field
+                    -> SqlExpr (Value UTCTime) -- ^ truncated date
+                truncateDate datePart expr =
+                    ES.unsafeSqlFunction "date_trunc" (datePart, expr)
+                vals =
+                    zip (map (DateTruncTestKey . fromInteger) [1..]) utcTimes
+            for_ vals $ \(idx, utcTime) -> do
+                insertKey idx (DateTruncTest utcTime)
 
-      -- Necessary to get the test to pass; see the discussion in
-      -- https://github.com/bitemyapp/esqueleto/pull/180
-      rawExecute "SET TIME ZONE 'UTC'" []
-      ret <-
-        fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
-        select $
-        from $ \dt -> do
-        pure
-          ( dt ^. DateTruncTestId
-          , ( dt ^. DateTruncTestCreated
-            , truncateDate (val "day") (dt ^. DateTruncTestCreated)
-            )
-          )
+            -- Necessary to get the test to pass; see the discussion in
+            -- https://github.com/bitemyapp/esqueleto/pull/180
+            rawExecute "SET TIME ZONE 'UTC'" []
+            ret <-
+                fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
+                select $
+                from $ \dt -> do
+                pure
+                  ( dt ^. DateTruncTestId
+                  , ( dt ^. DateTruncTestCreated
+                    , truncateDate (val "day") (dt ^. DateTruncTestCreated)
+                    )
+                  )
 
-      liftIO $ for_ vals $ \(idx, utcTime) -> do
-        case Map.lookup idx ret of
-          Nothing ->
-            expectationFailure "index not found"
-          Just (original, truncated) -> do
-            utcTime `shouldBe` original
-            if utctDay utcTime == utctDay truncated
-              then
-                utctDay utcTime `shouldBe` utctDay truncated
-              else
-                -- use this if/else to get a better error message
-                utcTime `shouldBe` truncated
+            asserting $ for_ vals $ \(idx, utcTime) -> do
+              case Map.lookup idx ret of
+                Nothing ->
+                  expectationFailure "index not found"
+                Just (original, truncated) -> do
+                  utcTime `shouldBe` original
+                  if utctDay utcTime == utctDay truncated
+                    then
+                      utctDay utcTime `shouldBe` utctDay truncated
+                    else
+                      -- use this if/else to get a better error message
+                      utcTime `shouldBe` truncated
 
-  describe "PostgreSQL module" $ do
-    describe "Aggregate functions" testAggregateFunctions
-    it "chr looks sane" $
-      run $ do
-        [Value (ret :: String)] <- select $ return (EP.chr (val 65))
-        liftIO $ ret `shouldBe` "A"
+    describe "PostgreSQL module" $ do
+        describe "Aggregate functions" testAggregateFunctions
+        itDb "chr looks sane" $ do
+            [Value (ret :: String)] <- select $ return (EP.chr (val 65))
+            liftIO $ ret `shouldBe` "A"
 
-    it "allows unit for functions" $ do
-      vals <- run $ do
-        let
-          fn :: SqlExpr (Value UTCTime)
-          fn = ES.unsafeSqlFunction "now" ()
-        select $ pure fn
-      vals `shouldSatisfy` ((1 ==) . length)
+        itDb "allows unit for functions" $ do
+            let
+                fn :: SqlExpr (Value UTCTime)
+                fn = ES.unsafeSqlFunction "now" ()
+            vals <- select $ pure fn
+            liftIO $ vals `shouldSatisfy` ((1 ==) . length)
 
-    it "works with now" $
-      run $ do
-        nowDb <- select $ return EP.now_
-        nowUtc <- liftIO getCurrentTime
-        let oneSecond = realToFrac (1 :: Double)
+        itDb "works with now" $
+           do
+            nowDb <- select $ return EP.now_
+            nowUtc <- liftIO getCurrentTime
+            let oneSecond = realToFrac (1 :: Double)
 
-        -- | Check the result is not null
-        liftIO $ nowDb `shouldSatisfy` (not . null)
+            -- | Check the result is not null
+            liftIO $ nowDb `shouldSatisfy` (not . null)
 
-        -- | Unpack the now value
-        let (Value now: _) = nowDb
+            -- | Unpack the now value
+            let (Value now: _) = nowDb
 
-        -- | Get the time diff and check it's less than a second
-        liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< oneSecond)
+            -- | Get the time diff and check it's less than a second
+            liftIO $ diffUTCTime nowUtc now `shouldSatisfy` (< oneSecond)
 
-testJSONInsertions :: Spec
+testJSONInsertions :: SpecDb
 testJSONInsertions =
   describe "JSON Insertions" $ do
-    it "adds scalar values" $ do
-      run $ do
+    itDb "adds scalar values" $ do
+       do
         insertIt Null
         insertIt $ Bool True
         insertIt $ Number 1
         insertIt $ String "test"
-    it "adds arrays" $ do
-      run $ do
+    itDb "adds arrays" $ do
+       do
         insertIt $ toJSON ([] :: [A.Value])
         insertIt $ toJSON [Number 1, Bool True, Null]
         insertIt $ toJSON [String "test",object ["a" .= Number 3.14], Null, Bool True]
-    it "adds objects" $ do
-      run $ do
+    itDb "adds objects" $ do
+       do
         insertIt $ object ["a" .= (1 :: Int), "b" .= False]
         insertIt $ object ["a" .= object ["b" .= object ["c" .= String "message"]]]
   where insertIt :: MonadIO m => A.Value -> SqlPersistT m ()
         insertIt = insert_ . Json . JSONB
 
 
-testJSONOperators :: Spec
+testJSONOperators :: SpecDb
 testJSONOperators =
   describe "JSON Operators" $ do
     testArrowOperators
     testFilterOperators
     testConcatDeleteOperators
 
-testArrowOperators :: Spec
+testArrowOperators :: SpecDb
 testArrowOperators =
   describe "Arrow Operators" $ do
     testArrowJSONB
@@ -608,67 +568,69 @@ testArrowOperators =
     testHashArrowJSONB
     testHashArrowText
 
-testArrowJSONB :: Spec
+testArrowJSONB :: SpecDb
 testArrowJSONB =
-  describe "Single Arrow (JSONB)" $ do
-    it "creates sane SQL" $
-      createSaneSQL @JSONValue
-        (jsonbVal (object ["a" .= True]) ->. "a")
-        "SELECT (? -> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":true}"
-        , PersistText "a" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [1 :: Int,2,3]]
-      createSaneSQL @JSONValue
-        (jsonbVal obj ->. "a" ->. 1)
-        "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
-        , PersistText "a"
-        , PersistInt64 1 ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v ->. "b" ==. jsonbVal (Bool False)
-      y <- selectJSONwhere $ \v -> v ->. 1 ==. jsonbVal (Bool True)
-      z <- selectJSONwhere $ \v -> v ->. "a" ->. "b" ->. "c" ==. jsonbVal (String "message")
-      liftIO $ length x `shouldBe` 1
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 1
+    describe "Single Arrow (JSONB)" $ do
+        itDb "creates sane SQL" $
+            createSaneSQL @JSONValue
+                (jsonbVal (object ["a" .= True]) ->. "a")
+                "SELECT (? -> ?)\nFROM \"Json\"\n"
+                [ PersistLiteralEscaped "{\"a\":true}"
+                , PersistText "a"
+                ]
+        itDb "creates sane SQL (chained)" $ do
+            let obj = object ["a" .= [1 :: Int,2,3]]
+            createSaneSQL @JSONValue
+              (jsonbVal obj ->. "a" ->. 1)
+              "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
+              [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
+              , PersistText "a"
+              , PersistInt64 1 ]
+        itDb "works as expected" $  do
+          x <- selectJSONwhere $ \v -> v ->. "b" ==. jsonbVal (Bool False)
+          y <- selectJSONwhere $ \v -> v ->. 1 ==. jsonbVal (Bool True)
+          z <- selectJSONwhere $ \v -> v ->. "a" ->. "b" ->. "c" ==. jsonbVal (String "message")
+          asserting $ do
+              length x `shouldBe` 1
+              length y `shouldBe` 1
+              length z `shouldBe` 1
 
-testArrowText :: Spec
+testArrowText :: SpecDb
 testArrowText =
-  describe "Single Arrow (Text)" $ do
-    it "creates sane SQL" $
-      createSaneSQL
-        (jsonbVal (object ["a" .= True]) ->>. "a")
-        "SELECT (? ->> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":true}"
-        , PersistText "a" ]
-    it "creates sane SQL (chained)" $ do
-      let obj = object ["a" .= [1 :: Int,2,3]]
-      createSaneSQL
-        (jsonbVal obj ->. "a" ->>. 1)
-        "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
-        [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
-        , PersistText "a"
-        , PersistInt64 1 ]
-    it "works as expected" $ run $ do
-      x <- selectJSONwhere $ \v -> v ->>. "b" ==. just (val "false")
-      y <- selectJSONwhere $ \v -> v ->>. 1 ==. just (val "true")
-      z <- selectJSONwhere $ \v -> v ->. "a" ->. "b" ->>. "c" ==. just (val "message")
-      liftIO $ length x `shouldBe` 1
-      liftIO $ length y `shouldBe` 1
-      liftIO $ length z `shouldBe` 1
+    describe "Single Arrow (Text)" $ do
+        itDb "creates sane SQL" $
+          createSaneSQL
+            (jsonbVal (object ["a" .= True]) ->>. "a")
+            "SELECT (? ->> ?)\nFROM \"Json\"\n"
+            [ PersistLiteralEscaped "{\"a\":true}"
+            , PersistText "a" ]
+        itDb "creates sane SQL (chained)" $ do
+          let obj = object ["a" .= [1 :: Int,2,3]]
+          createSaneSQL
+            (jsonbVal obj ->. "a" ->>. 1)
+            "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
+            [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
+            , PersistText "a"
+            , PersistInt64 1 ]
+        itDb "works as expected" $  do
+          x <- selectJSONwhere $ \v -> v ->>. "b" ==. just (val "false")
+          y <- selectJSONwhere $ \v -> v ->>. 1 ==. just (val "true")
+          z <- selectJSONwhere $ \v -> v ->. "a" ->. "b" ->>. "c" ==. just (val "message")
+          liftIO $ length x `shouldBe` 1
+          liftIO $ length y `shouldBe` 1
+          liftIO $ length z `shouldBe` 1
 
-testHashArrowJSONB :: Spec
+testHashArrowJSONB :: SpecDb
 testHashArrowJSONB =
   describe "Double Arrow (JSONB)" $ do
-    it "creates sane SQL" $ do
+    itDb "creates sane SQL" $ do
       let list = ["a","b","c"]
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= True]) #>. list)
         "SELECT (? #> ?)\nFROM \"Json\"\n"
         [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
-    it "creates sane SQL (chained)" $ do
+    itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj #>. ["a","1"] #>. ["b"])
@@ -676,7 +638,7 @@ testHashArrowJSONB =
         [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
-    it "works as expected" $ run $ do
+    itDb "works as expected" $  do
       x <- selectJSONwhere $ \v -> v #>. ["a","b","c"] ==. jsonbVal (String "message")
       y <- selectJSONwhere $ \v -> v #>. ["1","a"] ==. jsonbVal (Number 3.14)
       z <- selectJSONwhere $ \v -> v #>. ["1"] #>. ["a"] ==. jsonbVal (Number 3.14)
@@ -684,17 +646,17 @@ testHashArrowJSONB =
       liftIO $ length y `shouldBe` 1
       liftIO $ length z `shouldBe` 1
 
-testHashArrowText :: Spec
+testHashArrowText :: SpecDb
 testHashArrowText =
   describe "Double Arrow (Text)" $ do
-    it "creates sane SQL" $ do
+    itDb "creates sane SQL" $ do
       let list = ["a","b","c"]
       createSaneSQL
         (jsonbVal (object ["a" .= True]) #>>. list)
         "SELECT (? #>> ?)\nFROM \"Json\"\n"
         [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
-    it "creates sane SQL (chained)" $ do
+    itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","1"] #>>. ["b"])
@@ -702,7 +664,7 @@ testHashArrowText =
         [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
-    it "works as expected" $ run $ do
+    itDb "works as expected" $  do
       x <- selectJSONwhere $ \v -> v #>>. ["a","b","c"] ==. just (val "message")
       y <- selectJSONwhere $ \v -> v #>>. ["1","a"] ==. just (val "3.14")
       z <- selectJSONwhere $ \v -> v #>. ["1"] #>>. ["a"] ==. just (val "3.14")
@@ -711,7 +673,7 @@ testHashArrowText =
       liftIO $ length z `shouldBe` 1
 
 
-testFilterOperators :: Spec
+testFilterOperators :: SpecDb
 testFilterOperators =
   describe "Filter Operators" $ do
     testInclusion
@@ -719,10 +681,10 @@ testFilterOperators =
     testQMarkAny
     testQMarkAll
 
-testInclusion :: Spec
+testInclusion :: SpecDb
 testInclusion = do
     describe "@>" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -731,7 +693,7 @@ testInclusion = do
                 [ PersistLiteralEscaped encoded
                 , PersistLiteralEscaped "{\"a\":false}"
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -741,7 +703,7 @@ testInclusion = do
                 , PersistText "a"
                 , PersistLiteralEscaped "{\"b\":true}"
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
           x <- selectJSONwhere $ \v -> v @>. jsonbVal (Number 1)
           y <- selectJSONwhere $ \v -> v @>. jsonbVal (toJSON [object ["a" .= Number 3.14]])
           z <- selectJSONwhere $ \v -> v ->. 1 @>. jsonbVal (object ["a" .= Number 3.14])
@@ -749,7 +711,7 @@ testInclusion = do
           liftIO $ length y `shouldBe` 1
           liftIO $ length z `shouldBe` 1
     describe "<@" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -758,7 +720,7 @@ testInclusion = do
                 [ PersistLiteralEscaped "{\"a\":false}"
                 , PersistLiteralEscaped encoded
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 obj' = object ["b" .= True, "c" .= Null]
                 encoded = BSL.toStrict $ encode obj'
@@ -769,7 +731,7 @@ testInclusion = do
                 , PersistText "a"
                 , PersistLiteralEscaped encoded
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
             x <- selectJSONwhere $ \v -> v <@. jsonbVal (toJSON [Number 1])
             y <- selectJSONwhere $ \v -> v <@. jsonbVal (object ["a" .= (1 :: Int), "b" .= False, "c" .= Null])
             z <- selectJSONwhere $ \v -> v #>. ["a","b"] <@. jsonbVal (object ["b" .= False, "c" .= String "message"])
@@ -777,10 +739,10 @@ testInclusion = do
             liftIO $ length y `shouldBe` 1
             liftIO $ length z `shouldBe` 1
 
-testQMark :: Spec
+testQMark :: SpecDb
 testQMark = do
     describe "Question Mark" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -789,7 +751,7 @@ testQMark = do
               [ PersistLiteralEscaped encoded
               , PersistText "a"
               ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -799,7 +761,7 @@ testQMark = do
                 , persistTextArray ["a","0"]
                 , PersistText "b"
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
             x <- selectJSONwhere (JSON.?. "a")
             y <- selectJSONwhere (JSON.?. "test")
             z <- selectJSONwhere $ \v -> v ->. "a" JSON.?. "b"
@@ -807,10 +769,10 @@ testQMark = do
             liftIO $ length y `shouldBe` 2
             liftIO $ length z `shouldBe` 1
 
-testQMarkAny :: Spec
+testQMarkAny :: SpecDb
 testQMarkAny = do
     describe "Question Mark (Any)" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = (object ["a" .= False, "b" .= True])
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -819,7 +781,7 @@ testQMarkAny = do
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","c"]
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -829,7 +791,7 @@ testQMarkAny = do
                 , persistTextArray ["a","0"]
                 , persistTextArray ["b","c"]
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
           x <- selectJSONwhere (?|. ["b","test"])
           y <- selectJSONwhere (?|. ["a"])
           z <- selectJSONwhere $ \v -> v ->. (-3) ?|. ["a"]
@@ -839,10 +801,10 @@ testQMarkAny = do
           liftIO $ length z `shouldBe` 1
           liftIO $ length w `shouldBe` 0
 
-testQMarkAll :: Spec
+testQMarkAll :: SpecDb
 testQMarkAll = do
     describe "Question Mark (All)" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -851,7 +813,7 @@ testQMarkAll = do
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","c"]
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
@@ -861,7 +823,7 @@ testQMarkAll = do
                 , persistTextArray ["a","0"]
                 , persistTextArray ["b","c"]
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
             x <- selectJSONwhere (?&. ["test"])
             y <- selectJSONwhere (?&. ["a","b"])
             z <- selectJSONwhere $ \v -> v ->. "a" ?&. ["b"]
@@ -871,7 +833,7 @@ testQMarkAll = do
             liftIO $ length z `shouldBe` 1
             liftIO $ length w `shouldBe` 9
 
-testConcatDeleteOperators :: Spec
+testConcatDeleteOperators :: SpecDb
 testConcatDeleteOperators = do
   describe "Concatenation Operator" testConcatenationOperator
   describe "Deletion Operators" $ do
@@ -879,10 +841,10 @@ testConcatDeleteOperators = do
     testMinusOperatorV10
     testHashMinusOperator
 
-testConcatenationOperator :: Spec
+testConcatenationOperator :: SpecDb
 testConcatenationOperator = do
     describe "Concatenation" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let objAB = object ["a" .= False, "b" .= True]
                 objC = object ["c" .= Null]
             createSaneSQL @JSONValue
@@ -892,7 +854,7 @@ testConcatenationOperator = do
                 [ PersistLiteralEscaped $ BSL.toStrict $ encode objAB
                 , PersistLiteralEscaped $ BSL.toStrict $ encode objC
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
@@ -902,7 +864,7 @@ testConcatenationOperator = do
                 , PersistText "a"
                 , PersistLiteralEscaped "[null]"
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
           x <- selectJSON $ \v -> do
               where_ $ v @>. jsonbVal (object [])
               where_ $ v JSON.||. jsonbVal (object ["x" .= True])
@@ -921,10 +883,10 @@ testConcatenationOperator = do
           liftIO $ length z `shouldBe` 2
           liftIO $ length w `shouldBe` 7
 
-testMinusOperator :: Spec
+testMinusOperator :: SpecDb
 testMinusOperator =
     describe "Minus Operator" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
@@ -933,7 +895,7 @@ testMinusOperator =
                 [ PersistLiteralEscaped encoded
                 , PersistText "a"
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
@@ -943,7 +905,7 @@ testMinusOperator =
                 , PersistText "a"
                 , PersistInt64 0
                 ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
             x <- selectJSON $ \v -> do
                 where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
                 where_ $ v JSON.-. 0 @>. jsonbVal (toJSON [Bool True])
@@ -966,10 +928,10 @@ testMinusOperator =
             ||. v @>. jsonbVal (toJSON ([] :: [Int]))
         where_ $ f v
 
-testMinusOperatorV10 :: Spec
+testMinusOperatorV10 :: SpecDb
 testMinusOperatorV10 = do
     describe "Minus Operator (PSQL >= v10)" $ do
-        it "creates sane SQL" $ do
+        itDb "creates sane SQL" $ do
             let obj = object ["a" .= False, "b" .= True]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
@@ -978,7 +940,7 @@ testMinusOperatorV10 = do
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","b"]
                 ]
-        it "creates sane SQL (chained)" $ do
+        itDb "creates sane SQL (chained)" $ do
             let obj = object ["a" .= [object ["b" .= True]]]
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
@@ -988,7 +950,7 @@ testMinusOperatorV10 = do
               , persistTextArray ["a","0"]
               , persistTextArray ["b"]
               ]
-        it "works as expected" $ run $ do
+        itDb "works as expected" $  do
             x <- selectJSON $ \v -> do
                 where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
                 where_ $ v --. ["test","a"] @>. jsonbVal (toJSON [String "test"])
@@ -1010,16 +972,16 @@ testMinusOperatorV10 = do
                ||. v @>. jsonbVal (toJSON ([] :: [Int]))
         where_ $ f v
 
-testHashMinusOperator :: Spec
+testHashMinusOperator :: SpecDb
 testHashMinusOperator =
   describe "Hash-Minus Operator" $ do
-    it "creates sane SQL" $
+    itDb "creates sane SQL" $
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) #-. ["a"])
         "SELECT (? #- ?)\nFROM \"Json\"\n"
         [ PersistLiteralEscaped (BSL.toStrict $ encode $ object ["a" .= False, "b" .= True])
         , persistTextArray ["a"] ]
-    it "creates sane SQL (chained)" $ do
+    itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" #-. ["0","b"])
@@ -1027,7 +989,7 @@ testHashMinusOperator =
         [ PersistLiteralEscaped (BSL.toStrict $ encode obj)
         , PersistText "a"
         , persistTextArray ["0","b"] ]
-    it "works as expected" $ run $ do
+    itDb "works as expected" $  do
       x <- selectJSON $ \v -> do
           where_ $ v @>. jsonbVal (toJSON ([] :: [Int]))
           where_ $ v #-. ["1","a"] @>. jsonbVal (toJSON [object []])
@@ -1047,13 +1009,22 @@ testHashMinusOperator =
           where_ $ v @>. jsonbVal (object [])
           where_ $ f v
 
-testInsertUniqueViolation :: Spec
+testInsertUniqueViolation :: SpecDb
 testInsertUniqueViolation =
-  describe "Unique Violation on Insert" $
-    it "Unique throws exception" $ run (do
-      _ <- insert u1
-      _ <- insert u2
-      insert u3) `shouldThrow` (==) exception
+    describe "Unique Violation on Insert" $
+        itDb "Unique throws exception" $ do
+            eres <-
+                try $ do
+                    _ <- insert u1
+                    _ <- insert u2
+                    insert u3
+            liftIO $ case eres of
+                Left err | err == exception ->
+                    pure ()
+                _ ->
+                    expectationFailure $ "Expected a SQL exception, got: " <>
+                        show eres
+
   where
     exception = SqlError {
       sqlState = "23505",
@@ -1062,13 +1033,13 @@ testInsertUniqueViolation =
       sqlErrorDetail = "Key (value)=(0) already exists.",
       sqlErrorHint = ""}
 
-testUpsert :: Spec
+testUpsert :: SpecDb
 testUpsert =
   describe "Upsert test" $ do
-    it "Upsert can insert like normal" $ run $ do
+    itDb "Upsert can insert like normal" $  do
       u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u1e `shouldBe` u1
-    it "Upsert performs update on collision" $ run $ do
+    itDb "Upsert performs update on collision" $  do
       u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u1e `shouldBe` u1
       u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
@@ -1076,10 +1047,10 @@ testUpsert =
       u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
-testInsertSelectWithConflict :: Spec
+testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
   describe "insertSelectWithConflict test" $ do
-    it "Should do Nothing when no updates set" $ run $ do
+    itDb "Should do Nothing when no updates set" $  do
       _ <- insert p1
       _ <- insert p2
       _ <- insert p3
@@ -1098,7 +1069,7 @@ testInsertSelectWithConflict =
       let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
       liftIO $ map entityVal uniques1 `shouldBe` test
       liftIO $ map entityVal uniques2 `shouldBe` test
-    it "Should update a value if given an update on conflict" $ run $ do
+    itDb "Should update a value if given an update on conflict" $  do
         _ <- insert p1
         _ <- insert p2
         _ <- insert p3
@@ -1120,10 +1091,10 @@ testInsertSelectWithConflict =
         liftIO $ map entityVal uniques1 `shouldBe` test
         liftIO $ map entityVal uniques2 `shouldBe` test2
 
-testFilterWhere :: Spec
+testFilterWhere :: SpecDb
 testFilterWhere =
   describe "filterWhere" $ do
-    it "adds a filter clause to count aggregation" $ run $ do
+    itDb "adds a filter clause to count aggregation" $  do
       -- Person "John"   (Just 36) Nothing   1
       _ <- insert p1
       -- Person "Rachel" Nothing   (Just 37) 2
@@ -1159,7 +1130,7 @@ testFilterWhere =
           ] :: [(Maybe Int, Int, Int)]
         )
 
-    it "adds a filter clause to sum aggregation" $ run $ do
+    itDb "adds a filter clause to sum aggregation" $  do
       -- Person "John"   (Just 36) Nothing   1
       _ <- insert p1
       -- Person "Rachel" Nothing   (Just 37) 2
@@ -1193,27 +1164,46 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
-testCommonTableExpressions :: Spec
+testCommonTableExpressions :: SpecDb
 testCommonTableExpressions = do
-  describe "You can run them" $ do
-    it "will run" $ do
-      run $ do
+    describe "You can run them" $ do
+        itDb "will run" $ do
+            void $ select $ do
+                limitedLordsCte <-
+                    Experimental.with $ do
+                        lords <- Experimental.from $ Experimental.table @Lord
+                        limit 10
+                        pure lords
+                lords <- Experimental.from limitedLordsCte
+                orderBy [asc $ lords ^. LordId]
+                pure lords
 
-        void $ select $ do
-          limitedLordsCte <-
-            Experimental.with $ do
-              lords <- Experimental.from $ Experimental.table @Lord
-              limit 10
-              pure lords
-          lords <- Experimental.from limitedLordsCte
-          orderBy [asc $ lords ^. LordId]
-          pure lords
+            asserting noExceptions
 
-      True `shouldBe` True
+    itDb "can do multiple recursive queries" $ do
+        let
+            oneToTen =
+                Experimental.withRecursive
+                    (pure $ val (1 :: Int))
+                    Experimental.unionAll_
+                    (\self -> do
+                        v <- Experimental.from self
+                        where_ $ v <. val 10
+                        pure $ v +. val 1
+                    )
 
-  it "can do multiple recursive queries" $ do
-    vals <- run $ do
-      let oneToTen = Experimental.withRecursive
+        vals <- select $ do
+            cte <- oneToTen
+            cte2 <- oneToTen
+            res1 <- Experimental.from cte
+            res2 <- Experimental.from cte2
+            pure (res1, res2)
+        asserting $ vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
+
+    itDb "passing previous query works" $ do
+        let
+            oneToTen =
+                Experimental.withRecursive
                      (pure $ val (1 :: Int))
                      Experimental.unionAll_
                      (\self -> do
@@ -1222,124 +1212,69 @@ testCommonTableExpressions = do
                          pure $ v +. val 1
                      )
 
-      select $ do
-        cte <- oneToTen
-        cte2 <- oneToTen
-        res1 <- Experimental.from cte
-        res2 <- Experimental.from cte2
-        pure (res1, res2)
-    vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
-
-  it "passing previous query works" $
-    let
-      oneToTen =
-        Experimental.withRecursive
-           (pure $ val (1 :: Int))
-           Experimental.unionAll_
-           (\self -> do
-               v <- Experimental.from self
-               where_ $ v <. val 10
-               pure $ v +. val 1
-           )
-
-      oneMore q =
-        Experimental.with $ do
-          v <- Experimental.from q
-          pure $ v +. val 1
-    in do
-    vals <- run $ do
-
-      select $ do
-        cte <- oneToTen
-        cte2 <- oneMore cte
-        res <- Experimental.from cte2
-        pure res
-    vals `shouldBe` fmap Value [2..11]
+            oneMore q =
+                Experimental.with $ do
+                    v <- Experimental.from q
+                    pure $ v +. val 1
+        vals <- select $ do
+            cte <- oneToTen
+            cte2 <- oneMore cte
+            res <- Experimental.from cte2
+            pure res
+        asserting $ vals `shouldBe` fmap Value [2..11]
 
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
-testLateralQuery :: Spec
+testLateralQuery :: SpecDb
 testLateralQuery = do
-  describe "Lateral queries" $ do
-    it "supports CROSS JOIN LATERAL" $ do
-      _ <- run $ do
-        select $ do
-            l :& c <-
-              Experimental.from $ table @Lord
-              `CrossJoin` \lord -> do
-                    deed <- Experimental.from $ table @Deed
-                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                    pure $ countRows @Int
-            pure (l, c)
-      True `shouldBe` True
+    describe "Lateral queries" $ do
+        itDb "supports CROSS JOIN LATERAL" $ do
+          _ <-  do
+            select $ do
+                l :& c <-
+                  Experimental.from $ table @Lord
+                  `CrossJoin` \lord -> do
+                        deed <- Experimental.from $ table @Deed
+                        where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                        pure $ countRows @Int
+                pure (l, c)
+          liftIO $ True `shouldBe` True
 
-    it "supports INNER JOIN LATERAL" $ do
-      run $ do
-        let subquery lord = do
-                            deed <- Experimental.from $ table @Deed
-                            where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                            pure $ countRows @Int
-        res <- select $ do
-          l :& c <- Experimental.from $ table @Lord
-                          `InnerJoin` subquery
-                          `Experimental.on` (const $ val True)
-          pure (l, c)
+        itDb "supports INNER JOIN LATERAL" $ do
+            let subquery lord = do
+                                deed <- Experimental.from $ table @Deed
+                                where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                pure $ countRows @Int
+            res <- select $ do
+              l :& c <- Experimental.from $ table @Lord
+                              `InnerJoin` subquery
+                              `Experimental.on` (const $ val True)
+              pure (l, c)
 
-        let _ = res :: [(Entity Lord, Value Int)]
-        pure ()
-      True `shouldBe` True
+            let _ = res :: [(Entity Lord, Value Int)]
+            asserting noExceptions
 
-    it "supports LEFT JOIN LATERAL" $ do
-      run $ do
-        res <- select $ do
-          l :& c <- Experimental.from $ table @Lord
-                          `LeftOuterJoin` (\lord -> do
-                                    deed <- Experimental.from $ table @Deed
-                                    where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                                    pure $ countRows @Int)
-                          `Experimental.on` (const $ val True)
-          pure (l, c)
+        itDb "supports LEFT JOIN LATERAL" $ do
+            res <- select $ do
+                l :& c <- Experimental.from $ table @Lord
+                                `LeftOuterJoin` (\lord -> do
+                                          deed <- Experimental.from $ table @Deed
+                                          where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
+                                          pure $ countRows @Int)
+                                `Experimental.on` (const $ val True)
+                pure (l, c)
 
-        let _ = res :: [(Entity Lord, Value (Maybe Int))]
-        pure ()
-      True `shouldBe` True
-
-  {--
-    it "compile error on RIGHT JOIN LATERAL" $ do
-      run $ do
-        res <- select $ do
-          l :& c <- Experimental.from $ table @Lord
-                          `RightOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ table @Deed
-                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
-                                      pure $ countRows @Int)
-                          `Experimental.on` (const $ val True)
-          pure (l, c)
-
-        let _ = res :: [(Maybe (Entity Lord), Value Int)]
-        pure ()
-    it "compile error on FULL OUTER JOIN LATERAL" $ do
-      run $ do
-        res <- select $ do
-          l :& c <- Experimental.from $ table @Lord
-                          `FullOuterJoin` (\lord -> do
-                                      deed <- Experimental.from $ table @Deed
-                                      where_ $ lord ?. LordId ==. just (deed ^. DeedOwnerId)
-                                      pure $ countRows @Int)
-                          `Experimental.on` (const $ val True)
-          pure (l, c)
-
-        let _ = res :: [(Maybe (Entity Lord), Value (Maybe Int))]
-        pure ()
-    --}
+            let _ = res :: [(Entity Lord, Value (Maybe Int))]
+            asserting noExceptions
 
 type JSONValue = Maybe (JSONB A.Value)
 
-createSaneSQL :: (PersistField a) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> IO ()
-createSaneSQL act q vals = run $ do
+createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
+createSaneSQL act q vals = do
     (query, args) <- showQuery ES.SELECT $ fromValue act
-    liftIO $ query `shouldBe` q
-    liftIO $ args `shouldBe` vals
+    liftIO $ do
+        query `shouldBe` q
+        args `shouldBe` vals
 
 fromValue :: (PersistField a) => SqlExpr (Value a) -> SqlQuery (SqlExpr (Value a))
 fromValue act = from $ \x -> do
@@ -1349,7 +1284,11 @@ fromValue act = from $ \x -> do
 persistTextArray :: [T.Text] -> PersistValue
 persistTextArray = PersistArray . fmap PersistText
 
-sqlFailWith :: (HasCallStack, MonadCatch m, MonadIO m, Show a) => ByteString -> SqlPersistT (R.ResourceT m) a -> SqlPersistT (R.ResourceT m) ()
+sqlFailWith
+    :: (HasCallStack, MonadUnliftIO m, Show a)
+    => ByteString
+    -> SqlPersistT m a
+    -> SqlPersistT m ()
 sqlFailWith errState f = do
     eres <- try f
     case eres of
@@ -1395,8 +1334,8 @@ selectJSON f = select $ from $ \v -> do
 
 
 spec :: Spec
-spec = do
-    beforeAll (undefined :: IO ConnectionPool) tests
+spec = beforeAll mkConnectionPool $ do
+    tests
 
     describe "PostgreSQL specific tests" $ do
         testAscRandom random_
@@ -1418,7 +1357,7 @@ spec = do
         describe "PostgreSQL JSON tests" $ do
             -- NOTE: We only clean the table once, so we
             -- can use its contents across all JSON tests
-            it "MIGRATE AND CLEAN JSON TABLE" $ run $ do
+            itDb "MIGRATE AND CLEAN JSON TABLE" $  do
                 void $ runMigrationSilent migrateJSON
                 cleanJSON
             testJSONInsertions
@@ -1444,12 +1383,12 @@ verbose = False
 run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
 run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
-migrateIt :: RunDbMonad m => SqlPersistT (R.ResourceT m) ()
-migrateIt = do
-  void $ runMigrationSilent migrateAll
-  void $ runMigrationSilent migrateUnique
-  cleanDB
-  cleanUniques
+migrateIt :: _ => SqlPersistT m ()
+migrateIt = mapReaderT runNoLoggingT $ do
+    void $ runMigrationSilent migrateAll
+    void $ runMigrationSilent migrateUnique
+    cleanDB
+    cleanUniques
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn f = do
@@ -1460,8 +1399,8 @@ withConn f = do
             case ea' of
                 Left (SomeException se1) ->
                     if show se == show se1
-                    then throwM se
-                    else throwM se1
+                    then throwIO se
+                    else throwIO se1
                 Right a ->
                     pure a
         Right a ->
@@ -1472,6 +1411,30 @@ withConn f = do
           withPostgresqlConn
           "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
           f
+
+mkConnectionPool :: IO ConnectionPool
+mkConnectionPool = do
+    verbose' <- lookupEnv "VERBOSE" >>= \case
+        Nothing ->
+            return verbose
+        Just x
+            | map Char.toLower x == "true" -> return True
+            | null x -> return True
+            | otherwise -> return False
+    pool <- if verbose'
+        then
+            runStderrLoggingT $
+                createPostgresqlPool
+                "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+                4
+        else
+            runNoLoggingT $
+                createPostgresqlPool
+                "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+                4
+    flip runSqlPool pool $ do
+        migrateIt
+    pure pool
 
 -- | Show the SQL generated by a query
 showQuery :: (Monad m, ES.SqlSelect a r, BackendCompatible SqlBackend backend)
