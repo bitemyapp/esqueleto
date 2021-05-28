@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -25,23 +25,63 @@ module Common.Test.Import
     , module X
     ) where
 
-import Control.Monad.Fail
+import System.Environment
+import Control.Applicative
 import Common.Test.Models as X
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
-import Database.Esqueleto.Experimental as X
+import Database.Esqueleto.Experimental as X hiding (random_)
 import Test.Hspec as X
 import UnliftIO as X
-import qualified UnliftIO.Resource as R
+import Control.Monad
+import Test.QuickCheck
+import Data.Text  as X (Text)
+import Control.Monad.Trans.Reader as X (ReaderT, mapReaderT, ask)
 
-type RunDbMonad m =
-    ( MonadUnliftIO m
-    , MonadIO m
-    , MonadLoggerIO m
-    , MonadLogger m
-    , MonadCatch m
-    )
+type SpecDb = SpecWith ConnectionPool
 
-type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a
+asserting :: MonadIO f => IO () -> SqlPersistT f ()
+asserting a = liftIO a
 
-type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+noExceptions :: Expectation
+noExceptions = pure ()
+
+itDb
+    :: (HasCallStack)
+    => String
+    -> SqlPersistT IO x
+    -> SpecDb
+itDb message action = do
+    it message $ \connection -> do
+        void $ testDb connection action
+
+propDb
+    :: (HasCallStack, Testable a)
+    => String
+    -> ((SqlPersistT IO () -> IO ()) -> a )
+    -> SpecDb
+propDb message action = do
+    it message $ \connection -> do
+        property (action (testDb connection))
+
+testDb :: ConnectionPool -> SqlPersistT IO a -> IO a
+testDb conn action =
+    liftIO $ flip runSqlPool conn $ do
+        a <- action
+        transactionUndo
+        pure a
+
+setDatabaseState
+    :: SqlPersistT IO a
+    -> SqlPersistT IO ()
+    -> SpecWith ConnectionPool
+    -> SpecWith ConnectionPool
+setDatabaseState create clean test =
+    beforeWith (\conn -> runSqlPool create conn >> pure conn) $
+    after (\conn -> runSqlPool clean conn) $
+    test
+
+isCI :: IO Bool
+isCI =  do
+    env <- getEnvironment
+    return $ case lookup "TRAVIS" env <|> lookup "CI" env of
+        Just "true" -> True
+        _ -> False

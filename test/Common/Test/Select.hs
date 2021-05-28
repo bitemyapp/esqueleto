@@ -2,25 +2,21 @@ module Common.Test.Select where
 
 import Common.Test.Import
 
-testSelect :: Run -> Spec
-testSelect run = do
+testSelect :: SpecDb
+testSelect = do
     describe "select" $ do
-        it "works for a single value" $
-            run $ do
-                ret <- select $ return $ val (3 :: Int)
-                liftIO $ ret `shouldBe` [ Value 3 ]
+        itDb "works for a single value" $ do
+            ret <- select $ return $ val (3 :: Int)
+            asserting $ ret `shouldBe` [ Value 3 ]
 
-        it "works for a pair of a single value and ()" $
-            run $ do
-                ret <- select $ return (val (3 :: Int), ())
-                liftIO $ ret `shouldBe` [ (Value 3, ()) ]
+        itDb "works for a pair of a single value and ()" $ do
+            ret <- select $ return (val (3 :: Int), ())
+            asserting $ ret `shouldBe` [ (Value 3, ()) ]
 
-        it "works for a single ()" $
-            run $ do
-                ret <- select $ return ()
-                liftIO $ ret `shouldBe` [ () ]
+        itDb "works for a single ()" $ do
+            ret <- select $ return ()
+            asserting $ ret `shouldBe` [ () ]
 
-        it "works for a single NULL value" $
-            run $ do
-                ret <- select $ return nothing
-                liftIO $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]
+        itDb "works for a single NULL value" $ do
+            ret <- select $ return nothing
+            asserting $ ret `shouldBe` [ Value (Nothing :: Maybe Int) ]

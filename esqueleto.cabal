@@ -77,7 +77,6 @@ library
         -Widentities
         -Wcpp-undef
         -Wcpp-undef
-        -Wmonomorphism-restriction
     default-language: Haskell2010
 
 test-suite specs
@@ -100,7 +99,6 @@ test-suite specs
     build-depends:
         base >=4.8 && <5.0
       , aeson
-      , postgresql-simple
       , attoparsec
       , blaze-html
       , bytestring
@@ -116,8 +114,10 @@ test-suite specs
       , mysql-simple
       , persistent
       , persistent-mysql
-      , persistent-sqlite
       , persistent-postgresql
+      , persistent-sqlite
+      , postgresql-simple
+      , QuickCheck
       , resourcet 
       , tagged 
       , text 

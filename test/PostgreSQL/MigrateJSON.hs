@@ -16,15 +16,12 @@
 
 module PostgreSQL.MigrateJSON where
 
-import Control.Monad.Trans.Resource (ResourceT)
-import Data.Aeson (Value)
-import Database.Esqueleto (SqlExpr, delete, from)
-import Database.Esqueleto.PostgreSQL.JSON (JSONB)
-import Database.Persist (Entity)
-import Database.Persist.Sql (SqlPersistT)
-import Database.Persist.TH
+import Common.Test.Import hiding (Value, from, on)
 
-import Common.Test (RunDbMonad)
+import Data.Aeson (Value)
+import Database.Esqueleto.Legacy (from)
+import Database.Esqueleto.PostgreSQL.JSON (JSONB)
+import Database.Persist.TH
 
 -- JSON Table for PostgreSQL
 share [mkPersist sqlSettings, mkMigrate "migrateJSON"] [persistUpperCase|
@@ -34,6 +31,6 @@ Json
 |]
 
 cleanJSON
-  :: (forall m. RunDbMonad m
-  => SqlPersistT (ResourceT m) ())
+    :: forall m. MonadIO m
+    => SqlPersistT m ()
 cleanJSON = delete $ from $ \(_ :: SqlExpr (Entity Json)) -> return ()
