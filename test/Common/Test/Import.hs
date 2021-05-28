@@ -25,29 +25,16 @@ module Common.Test.Import
     , module X
     ) where
 
+import System.Environment
+import Control.Applicative
 import Common.Test.Models as X
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Logger (MonadLogger(..), MonadLoggerIO(..))
 import Database.Esqueleto.Experimental as X hiding (random_)
 import Test.Hspec as X
 import UnliftIO as X
-import qualified UnliftIO.Resource as R
 import Control.Monad
-import Test.QuickCheck.Monadic
 import Test.QuickCheck
-import Control.Monad.Reader
-
-type RunDbMonad m =
-    ( MonadUnliftIO m
-    , MonadIO m
-    , MonadLoggerIO m
-    , MonadLogger m
-    , MonadCatch m
-    )
-
-type Run = forall a. (forall m. (RunDbMonad m, MonadFail m) => SqlPersistT (R.ResourceT m) a) -> IO a
-
-type WithConn m a = RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
+import Data.Text  as X (Text)
+import Control.Monad.Trans.Reader as X (ReaderT, mapReaderT, ask)
 
 type SpecDb = SpecWith ConnectionPool
 
@@ -91,3 +78,10 @@ setDatabaseState create clean test =
     beforeWith (\conn -> runSqlPool create conn >> pure conn) $
     after (\conn -> runSqlPool clean conn) $
     test
+
+isCI :: IO Bool
+isCI =  do
+    env <- getEnvironment
+    return $ case lookup "TRAVIS" env <|> lookup "CI" env of
+        Just "true" -> True
+        _ -> False

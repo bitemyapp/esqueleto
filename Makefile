@@ -22,7 +22,13 @@ test-ghci:
 
 test-ghcid:
 	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto --test" \
-		--test "main" \
+		--warnings \
+		--restart "stack.yaml" \
+		--restart "esqueleto.cabal" \
+		--test main
+
+test-ghcid-build:
+	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto --test" \
 		--warnings \
 		--restart "stack.yaml" \
 		--restart "esqueleto.cabal"

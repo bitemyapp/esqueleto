@@ -1372,24 +1372,8 @@ insertJsonValues = do
     insertIt :: MonadIO m => A.Value -> SqlPersistT m ()
     insertIt = insert_ . Json . JSONB
 
-run, runSilent, runVerbose :: Run
-runSilent  act = runNoLoggingT     $ run_worker act
-runVerbose act = runStderrLoggingT $ run_worker act
-run f = do
-  verbose' <- lookupEnv "VERBOSE" >>= \case
-    Nothing -> return verbose
-    Just x | map Char.toLower x == "true" -> return True
-           | null x -> return True
-           | otherwise -> return False
-  if verbose'
-    then runVerbose f
-    else runSilent f
-
 verbose :: Bool
 verbose = False
-
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 migrateIt :: _ => SqlPersistT m ()
 migrateIt = mapReaderT runNoLoggingT $ do
@@ -1399,28 +1383,6 @@ migrateIt = mapReaderT runNoLoggingT $ do
         migrateJSON
     cleanDB
     cleanUniques
-
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn f = do
-    ea <- try go
-    case ea of
-        Left (SomeException se) -> do
-            ea' <- try go
-            case ea' of
-                Left (SomeException se1) ->
-                    if show se == show se1
-                    then throwIO se
-                    else throwIO se1
-                Right a ->
-                    pure a
-        Right a ->
-            pure a
-  where
-    go =
-      R.runResourceT $
-          withPostgresqlConn
-          "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
-          f
 
 mkConnectionPool :: IO ConnectionPool
 mkConnectionPool = do

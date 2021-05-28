@@ -33,8 +33,6 @@ module Common.Test
     , migrateUnique
     , cleanDB
     , cleanUniques
-    , RunDbMonad
-    , Run
     , updateRethrowingQuery
     , selectRethrowingQuery
     , p1, p2, p3, p4, p5
@@ -68,28 +66,14 @@ module Common.Test
 import Common.Test.Import hiding (from, on)
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
-import Control.Monad.Catch (MonadCatch)
-import Control.Monad.Reader (ask, mapReaderT)
 import Data.Either
-import Data.Time
-#if __GLASGOW_HASKELL__ >= 806
-import Control.Monad.Fail (MonadFail)
-#endif
-import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Logger
-       (MonadLogger(..), MonadLoggerIO(..), NoLoggingT, runNoLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
 import Data.Monoid ((<>))
 import Database.Esqueleto
-import Database.Esqueleto.Experimental hiding (from, on)
 import qualified Database.Esqueleto.Experimental as Experimental
-import Database.Persist.TH
-import Test.Hspec
-import UnliftIO
 
-import Data.Conduit (ConduitT, runConduit, (.|), runConduitRes)
+import Data.Conduit (ConduitT, runConduit, (.|))
 import qualified Data.Conduit.List as CL
 import qualified Data.List as L
 import qualified Data.Set as S
@@ -317,17 +301,23 @@ testSelectSource :: SpecDb
 testSelectSource = do
     describe "selectSource" $ do
         itDb "works for a simple example" $ do
-            let query = selectSource $
-                        from $ \person ->
-                        return person
+            let query
+                    :: ConduitT () (Entity Person) (SqlPersistT (R.ResourceT IO)) ()
+                query =
+                    selectSource $
+                    from $ \person ->
+                    return person
             p1e <- insert' p1
             ret <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
             asserting $ ret `shouldBe` [ p1e ]
 
         itDb "can run a query many times" $ do
-            let query = selectSource $
-                        from $ \person ->
-                        return person
+            let query
+                    :: ConduitT () (Entity Person) (SqlPersistT (R.ResourceT IO)) ()
+                query =
+                    selectSource $
+                    from $ \person ->
+                    return person
             p1e <- insert' p1
             ret0 <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
             ret1 <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
@@ -487,7 +477,7 @@ testSelectFrom = do
 
         itDb "works with non-id primary key" $ do
             let fc = Frontcover number ""
-                number = 101
+                number = 101 :: Int
                 Right thePk = keyFromValues [toPersistValue number]
             fcPk <- insert fc
             [Entity _ ret] <- select $ from return

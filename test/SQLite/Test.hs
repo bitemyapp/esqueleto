@@ -9,15 +9,11 @@ module SQLite.Test where
 import Common.Test.Import hiding (from, on)
 
 import Control.Monad (void)
-import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
-import Control.Monad.Trans.Reader (ReaderT)
-import qualified Control.Monad.Trans.Resource as R
-import Database.Esqueleto hiding (random_)
+import Database.Esqueleto.Legacy hiding (random_)
 import Database.Esqueleto.SQLite (random_)
-import Database.Persist.Sqlite (withSqliteConn, createSqlitePool)
+import Database.Persist.Sqlite (createSqlitePool)
 import Database.Sqlite (SqliteException)
-import Test.Hspec
 
 import Common.Test
 
@@ -89,7 +85,7 @@ testSqliteUpdate = do
         p1k <- insert p1
         p2k <- insert p2
         p3k <- insert p3
-        let anon = "Anonymous"
+        let anon = "Anonymous" :: String
         ()  <- update $ \p -> do
                set p [ PersonName =. val anon
                      , PersonAge *=. just (val 2) ]
@@ -160,26 +156,10 @@ mkConnectionPool = do
 
     pure conn
 
-
-run, runSilent, runVerbose :: Run
-runSilent  act = runNoLoggingT     $ run_worker act
-runVerbose act = runStderrLoggingT $ run_worker act
-run =
-  if verbose
-  then runVerbose
-  else runSilent
-
 verbose :: Bool
 verbose = False
-
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 migrateIt :: MonadUnliftIO m => SqlPersistT m ()
 migrateIt = do
   void $ runMigrationSilent migrateAll
   cleanDB
-
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn =
-  R.runResourceT . withSqliteConn ":memory:"

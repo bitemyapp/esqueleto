@@ -6,6 +6,8 @@
 
 module MySQL.Test where
 
+import Common.Test.Import hiding (from, on)
+
 import Control.Applicative
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(liftIO))
@@ -26,28 +28,13 @@ import Database.Persist.MySQL
        , createMySQLPool
        )
 
-import System.Environment
 import Test.Hspec
 
 import Common.Test
 
-
--- testMysqlRandom :: Spec
--- testMysqlRandom = do
---   -- This is known not to work until
---   -- we can differentiate behavior by database
---   it "works with random_" $
---     run $ do
---       _ <- select $ return (random_ :: SqlExpr (Value Double))
---       return ()
-
-
-
-
-testMysqlSum :: Spec
+testMysqlSum :: SpecDb
 testMysqlSum = do
-  it "works with sum_" $
-    run $ do
+  itDb "works with sum_" $ do
       _ <- insert' p1
       _ <- insert' p2
       _ <- insert' p3
@@ -57,13 +44,9 @@ testMysqlSum = do
              return $ joinV $ sum_ (p ^. PersonAge)
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Double ) ]
 
-
-
-
-testMysqlTwoAscFields :: Spec
+testMysqlTwoAscFields :: SpecDb
 testMysqlTwoAscFields = do
-  it "works with two ASC fields (one call)" $
-    run $ do
+  itDb "works with two ASC fields (one call)" $ do
       p1e <- insert' p1
       p2e <- insert' p2
       p3e <- insert' p3
@@ -74,13 +57,9 @@ testMysqlTwoAscFields = do
              return p
       liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
 
-
-
-
-testMysqlOneAscOneDesc :: Spec
+testMysqlOneAscOneDesc :: SpecDb
 testMysqlOneAscOneDesc = do
-  it "works with one ASC and one DESC field (two calls)" $
-    run $ do
+  itDb "works with one ASC and one DESC field (two calls)" $ do
       p1e <- insert' p1
       p2e <- insert' p2
       p3e <- insert' p3
@@ -95,10 +74,9 @@ testMysqlOneAscOneDesc = do
 
 
 
-testMysqlCoalesce :: Spec
+testMysqlCoalesce :: SpecDb
 testMysqlCoalesce = do
-  it "works on PostgreSQL and MySQL with <2 arguments" $
-    run $ do
+  itDb "works on PostgreSQL and MySQL with <2 arguments" $ do
       _ :: [Value (Maybe Int)] <-
         select $
         from $ \p -> do
@@ -108,10 +86,9 @@ testMysqlCoalesce = do
 
 
 
-testMysqlUpdate :: Spec
+testMysqlUpdate :: SpecDb
 testMysqlUpdate = do
-  it "works on a simple example" $
-    run $ do
+  itDb "works on a simple example" $ do
       p1k <- insert p1
       p2k <- insert p2
       p3k <- insert p3
@@ -134,20 +111,13 @@ testMysqlUpdate = do
                               , Entity p1k (Person anon (Just 73) Nothing 1)
                               , Entity p3k p3 ]
 
-
-
-
-nameContains :: (BaseBackend backend ~ SqlBackend,
-                 BackendCompatible SqlBackend backend,
-                 MonadIO m, SqlString s,
-                 IsPersistBackend backend, PersistQueryRead backend,
-                 PersistUniqueRead backend)
+nameContains :: (SqlString s)
              => (SqlExpr (Value [Char])
              -> SqlExpr (Value s)
              -> SqlExpr (Value Bool))
              -> s
              -> [Entity Person]
-             -> ReaderT backend m ()
+             -> SqlPersistT IO ()
 nameContains f t expected = do
   ret <- select $
          from $ \p -> do
@@ -159,22 +129,20 @@ nameContains f t expected = do
   liftIO $ ret `shouldBe` expected
 
 
-testMysqlTextFunctions :: Spec
+testMysqlTextFunctions :: SpecDb
 testMysqlTextFunctions = do
   describe "text functions" $ do
-    it "like, (%) and (++.) work on a simple example" $
-       run $ do
+    itDb "like, (%) and (++.) work on a simple example" $ do
          [p1e, p2e, p3e, p4e] <- mapM insert' [p1, p2, p3, p4]
          nameContains like "h"  [p1e, p2e]
          nameContains like "i"  [p4e, p3e]
          nameContains like "iv" [p4e]
 
 
-testMysqlUnionWithLimits :: Spec
+testMysqlUnionWithLimits :: SpecDb
 testMysqlUnionWithLimits = do
   describe "MySQL Union" $ do
-    it "supports limit/orderBy by parenthesizing" $ do
-      run $ do
+    itDb "supports limit/orderBy by parenthesizing" $ do
         mapM_ (insert . Foo) [1..6]
 
         let q1 = do
@@ -199,7 +167,7 @@ spec :: Spec
 spec = beforeAll mkConnectionPool $ do
     tests
 
-    beforeWith (\_ -> pure ()) $ describe "MySQL specific tests" $ do
+    describe "MySQL specific tests" $ do
         -- definitely doesn't work at the moment
         -- testMysqlRandom
         testMysqlSum
@@ -210,19 +178,8 @@ spec = beforeAll mkConnectionPool $ do
         testMysqlTextFunctions
         testMysqlUnionWithLimits
 
-run, runSilent, runVerbose :: Run
-runSilent  act = runNoLoggingT     $ run_worker act
-runVerbose act = runStderrLoggingT $ run_worker act
-run =
-  if verbose
-  then runVerbose
-  else runSilent
-
 verbose :: Bool
 verbose = False
-
-run_worker :: RunDbMonad m => SqlPersistT (R.ResourceT m) a -> m a
-run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 migrateIt :: R.MonadUnliftIO m => SqlPersistT m ()
 migrateIt = do
@@ -264,34 +221,3 @@ mkConnectionPool = do
         cleanDB
 
     pure pool
-
-
-
-withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
-withConn f = do
-    ci <- liftIO isCI
-    let connInfo
-            | ci =
-                defaultConnectInfo
-                    { connectHost     = "127.0.0.1"
-                    , connectUser     = "travis"
-                    , connectPassword = "esqutest"
-                    , connectDatabase = "esqutest"
-                    , connectPort     = 33306
-                    }
-            | otherwise =
-                defaultConnectInfo
-                    { connectHost     = "localhost"
-                    , connectUser     = "travis"
-                    , connectPassword = "esqutest"
-                    , connectDatabase = "esqutest"
-                    , connectPort     = 3306
-                    }
-    R.runResourceT $ withMySQLConn connInfo f
-
-isCI :: IO Bool
-isCI =  do
-    env <- getEnvironment
-    return $ case lookup "TRAVIS" env <|> lookup "CI" env of
-        Just "true" -> True
-        _ -> False
