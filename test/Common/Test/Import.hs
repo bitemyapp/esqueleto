@@ -81,3 +81,13 @@ testDb conn action =
         a <- action
         transactionUndo
         pure a
+
+setDatabaseState
+    :: SqlPersistT IO a
+    -> SqlPersistT IO ()
+    -> SpecWith ConnectionPool
+    -> SpecWith ConnectionPool
+setDatabaseState create clean test =
+    beforeWith (\conn -> runSqlPool create conn >> pure conn) $
+    after (\conn -> runSqlPool clean conn) $
+    test

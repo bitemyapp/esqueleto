@@ -1351,34 +1351,26 @@ spec = beforeAll mkConnectionPool $ do
         testInsertSelectWithConflict
         testFilterWhere
         testCommonTableExpressions
-        beforeWith insertJsonValues
-            $ after deleteJsonValues
+        setDatabaseState insertJsonValues cleanJSON
             $ describe "PostgreSQL JSON tests" $ do
                 testJSONInsertions
                 testJSONOperators
         testLateralQuery
 
-insertJsonValues :: ConnectionPool -> IO ConnectionPool
-insertJsonValues conn = do
-    flip runSqlPool conn $  do
-        insertIt Null
-        insertIt $ Bool True
-        insertIt $ Number 1
-        insertIt $ String "test"
-        insertIt $ toJSON ([] :: [A.Value])
-        insertIt $ toJSON [Number 1, Bool True, Null]
-        insertIt $ toJSON [String "test",object ["a" .= Number 3.14], Null, Bool True]
-        insertIt $ object ["a" .= (1 :: Int), "b" .= False]
-        insertIt $ object ["a" .= object ["b" .= object ["c" .= String "message"]]]
-    pure conn
+insertJsonValues :: SqlPersistT IO ()
+insertJsonValues = do
+    insertIt Null
+    insertIt $ Bool True
+    insertIt $ Number 1
+    insertIt $ String "test"
+    insertIt $ toJSON ([] :: [A.Value])
+    insertIt $ toJSON [Number 1, Bool True, Null]
+    insertIt $ toJSON [String "test",object ["a" .= Number 3.14], Null, Bool True]
+    insertIt $ object ["a" .= (1 :: Int), "b" .= False]
+    insertIt $ object ["a" .= object ["b" .= object ["c" .= String "message"]]]
   where
     insertIt :: MonadIO m => A.Value -> SqlPersistT m ()
     insertIt = insert_ . Json . JSONB
-
-deleteJsonValues :: ActionWith ConnectionPool
-deleteJsonValues conn = do
-    flip runSqlPool conn $
-        cleanJSON
 
 run, runSilent, runVerbose :: Run
 runSilent  act = runNoLoggingT     $ run_worker act
