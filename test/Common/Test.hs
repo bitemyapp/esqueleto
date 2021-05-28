@@ -170,7 +170,6 @@ testSubSelect = do
             setup
             res <- select $ pure $ subSelect query
             eres <- try $ do
-                setup
                 select $ pure $ sub_select query
             asserting $ do
                 res `shouldBe` [Value (Just 1)]
@@ -192,12 +191,13 @@ testSubSelect = do
                     pure (n ^. NumbersInt)
             setup
             res <- select $ pure $ subSelect query
+            transactionUndo
 
             eres <- try $ do
                 select $ pure $ sub_select query
 
             asserting $ do
-                res `shouldBe` [Value Nothing]
+                res `shouldBe` [Value $ Just 1]
                 case eres of
                     Left (_ :: PersistException) ->
                         -- We expect to receive this exception. However, sqlite evidently has
@@ -2007,52 +2007,50 @@ testOnClauseOrder = describe "On Clause Ordering" $ do
           asserting $ forM_ (zip res (drop 1 (cycle res))) $ \(a, b) -> a `shouldBe` b
 
         itDb "many-to-many" $ do
-          ac <- do
             setup
-            select $
-              from $ \(a `InnerJoin` b `InnerJoin` c) -> do
-              on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
-              on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
-              pure (a, c)
+            ac <-
+                select $
+                from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+                on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+                on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+                pure (a, c)
 
-          ca <- do
-            setup
-            select $
-              from $ \(a `InnerJoin` b `InnerJoin` c) -> do
-              on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
-              on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
-              pure (a, c)
+            ca <-
+                select $
+                from $ \(a `InnerJoin` b `InnerJoin` c) -> do
+                on (c ^. JoinOtherId ==. b ^. JoinManyJoinOther)
+                on (a ^. JoinOneId ==. b ^. JoinManyJoinOne)
+                pure (a, c)
 
-          asserting $ listsEqualOn ac ca $ \(Entity _ a, Entity _ b) ->
-            (joinOneName a, joinOtherName b)
+            asserting $ listsEqualOn ac ca $ \(Entity _ a, Entity _ b) ->
+              (joinOneName a, joinOtherName b)
 
         itDb "left joins on order" $ do
-          ca <- do
             setup
-            select $
-              from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
-              on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
-              on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
-              orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
-              pure (a, c)
-          ac <- do
-            setup
-            select $
-              from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
-              on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
-              on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
-              orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
-              pure (a, c)
+            ca <-
+                select $
+                from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+                on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+                on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+                orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+                pure (a, c)
+            ac <-
+                select $
+                from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
+                on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
+                on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
+                orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
+                pure (a, c)
 
-          asserting $ listsEqualOn ac ca $ \(Entity _ a, b) ->
-            (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
+            asserting $ listsEqualOn ac ca $ \(Entity _ a, b) ->
+                (joinOneName a, maybe "NULL" (joinOtherName . entityVal) b)
 
         itDb "doesn't require an on for a crossjoin" $ do
-          void $
-            select $
-            from $ \(a `CrossJoin` b) -> do
-            pure (a :: SqlExpr (Entity JoinOne), b :: SqlExpr (Entity JoinTwo))
-          asserting noExceptions
+            void $
+                select $
+                from $ \(a `CrossJoin` b) -> do
+                pure (a :: SqlExpr (Entity JoinOne), b :: SqlExpr (Entity JoinTwo))
+            asserting noExceptions
 
         itDb "errors with an on for a crossjoin" $ do
             eres <-
@@ -2069,17 +2067,16 @@ testOnClauseOrder = describe "On Clause Ordering" $ do
                         expectationFailure "Expected OnClause exception"
 
         itDb "left joins associativity" $ do
-          ca <- do
-            setup
-            select $
+          setup
+          ca <-
+              select $
               from $ \(a `LeftOuterJoin` (b `InnerJoin` c)) -> do
               on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
               on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
               orderBy [asc $ a ^. JoinOneId, asc $ c ?. JoinOtherId]
               pure (a, c)
-          ca' <- do
-            setup
-            select $
+          ca' <-
+              select $
               from $ \(a `LeftOuterJoin` b `InnerJoin` c) -> do
               on (c ?. JoinOtherId ==. b ?. JoinManyJoinOther)
               on (just (a ^. JoinOneId) ==. b ?. JoinManyJoinOne)
@@ -2280,7 +2277,7 @@ testExperimentalFrom = do
                                               , Value "MIKE"
                                               ]
 
-listsEqualOn :: (Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
+listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
 
 tests :: SpecDb
