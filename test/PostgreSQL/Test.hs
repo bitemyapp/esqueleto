@@ -1385,10 +1385,13 @@ run_worker act = withConn $ runSqlConn (migrateIt >> act)
 
 migrateIt :: _ => SqlPersistT m ()
 migrateIt = mapReaderT runNoLoggingT $ do
-    void $ runMigrationSilent migrateAll
-    void $ runMigrationSilent migrateUnique
+    void $ runMigrationSilent $ do
+        migrateAll
+        migrateUnique
+        migrateJSON
     cleanDB
     cleanUniques
+    cleanJSON
 
 withConn :: RunDbMonad m => (SqlBackend -> R.ResourceT m a) -> m a
 withConn f = do
