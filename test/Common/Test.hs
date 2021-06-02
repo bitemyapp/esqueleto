@@ -297,11 +297,11 @@ testSubSelect = do
                 Right xs ->
                     xs `shouldBe` []
 
-testSelectFirst :: SpecDb
-testSelectFirst =
-    describe "selectFirst" $ do
+testSelectOne :: SpecDb
+testSelectOne =
+    describe "selectOne" $ do
         let personQuery =
-                selectFirst $
+                selectOne $
                     from $ \person -> do
                         where_ $ person ^. PersonFavNum >=. val 1
                         orderBy [asc (person ^. PersonId)]
@@ -2296,7 +2296,7 @@ tests =
     describe "Esqueleto" $ do
         testSelect
         testSubSelect
-        testSelectFirst
+        testSelectOne
         testSelectSource
         testSelectFrom
         testSelectJoin

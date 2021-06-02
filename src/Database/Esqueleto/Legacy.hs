@@ -98,7 +98,7 @@ module Database.Esqueleto.Legacy
   , SqlExpr
   , SqlEntity
   , select
-  , selectFirst
+  , selectOne
   , selectSource
   , delete
   , deleteCount
@@ -131,7 +131,7 @@ module Database.Esqueleto.Legacy
   ) where
 
 import Database.Esqueleto.Internal.Internal
-import Database.Esqueleto.Internal.PersistentImport hiding (selectFirst)
+import Database.Esqueleto.Internal.PersistentImport
 
 
 -- $setup

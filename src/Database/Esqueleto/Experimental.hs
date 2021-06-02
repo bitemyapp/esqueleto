@@ -190,7 +190,7 @@ module Database.Esqueleto.Experimental
     , SqlExpr
     , SqlEntity
     , select
-    , selectFirst
+    , selectOne
     , selectSource
     , delete
     , deleteCount
@@ -220,7 +220,7 @@ module Database.Esqueleto.Experimental
     ) where
 
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
-import Database.Esqueleto.Internal.PersistentImport hiding (selectFirst)
+import Database.Esqueleto.Internal.PersistentImport
 
 import Database.Esqueleto.Experimental.From
 import Database.Esqueleto.Experimental.From.CommonTableExpression

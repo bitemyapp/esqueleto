@@ -97,7 +97,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , SqlExpr
   , SqlEntity
   , select
-  , selectFirst
+  , selectOne
   , selectSource
   , delete
   , deleteCount
@@ -130,7 +130,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   ) where
 
 import Database.Esqueleto.Legacy
-import Database.Esqueleto.Internal.PersistentImport hiding (selectFirst)
+import Database.Esqueleto.Internal.PersistentImport
 
 
 -- $setup
