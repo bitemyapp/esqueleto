@@ -319,8 +319,6 @@ testSelectSingle =
                 res `shouldBe` (Nothing :: Maybe (Value PersonId))
 
 
-
-
 testSelectSource :: SpecDb
 testSelectSource = do
     describe "selectSource" $ do
@@ -2295,10 +2293,11 @@ listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> 
 listsEqualOn a b f = map f a `shouldBe` map f b
 
 tests :: SpecDb
-tests = do
+tests =
     describe "Esqueleto" $ do
         testSelect
         testSubSelect
+        testSelectSingle
         testSelectSource
         testSelectFrom
         testSelectJoin
