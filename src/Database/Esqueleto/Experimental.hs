@@ -190,6 +190,7 @@ module Database.Esqueleto.Experimental
     , SqlExpr
     , SqlEntity
     , select
+    , selectSingle
     , selectSource
     , delete
     , deleteCount

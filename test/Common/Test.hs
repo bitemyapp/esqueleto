@@ -297,6 +297,30 @@ testSubSelect = do
                 Right xs ->
                     xs `shouldBe` []
 
+testSelectSingle :: SpecDb
+testSelectSingle =
+    describe "selectSingle" $ do
+        let personQuery =
+                selectSingle $
+                    from $ \person -> do
+                        where_ $ person ^. PersonFavNum >=. val 1
+                        orderBy [asc (person ^. PersonId)]
+                        return $ person ^. PersonId
+        itDb "returns Just" $ do
+            person <- insert' p1
+            _ <- insert' p2
+            res <- personQuery
+            asserting $
+                res `shouldBe` Just (Value $ entityKey person)
+
+        itDb "returns Nothing" $ do
+            res <- personQuery
+            asserting $
+                res `shouldBe` (Nothing :: Maybe (Value PersonId))
+
+
+
+
 testSelectSource :: SpecDb
 testSelectSource = do
     describe "selectSource" $ do
@@ -2389,4 +2413,3 @@ shouldBeOnClauseWithoutMatchingJoinException ea =
             pure ()
         _ ->
             expectationFailure $ "Expected OnClauseWithMatchingJoinException, got: " <> show ea
-

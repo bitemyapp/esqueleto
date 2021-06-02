@@ -2539,6 +2539,9 @@ select query = do
     conn <- R.ask
     liftIO $ with res $ flip R.runReaderT conn . runSource
 
+selectSingle :: (SqlSelect a r, MonadIO m) => SqlQuery a -> SqlReadT m (Maybe r)
+selectSingle query = fmap Maybe.listToMaybe $ select $ limit 1 >> query
+
 -- | (Internal) Run a 'C.Source' of rows.
 runSource
     :: Monad m
