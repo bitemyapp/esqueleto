@@ -2549,7 +2549,7 @@ select query = do
 -- firstPerson :: MonadIO m => SqlPersistT m (Maybe (Entity Person))
 -- firstPerson =
 --  'selectOne' $ do
---      person <- 'from' $ table @Person
+--      person <- 'from' $ 'table' @Person
 --      return person
 -- @
 --
@@ -2560,7 +2560,7 @@ select query = do
 -- firstPerson :: MonadIO m => SqlPersistT m [Entity Person]
 -- firstPerson =
 --  'select' $ do
---      person <- 'from' $ table @Person
+--      person <- 'from' $ 'table' @Person
 --      'limit' 1
 --      return person
 -- @
