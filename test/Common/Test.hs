@@ -299,9 +299,9 @@ testSubSelect = do
 
 testSelectSingle :: SpecDb
 testSelectSingle =
-    describe "selectSingle" $ do
+    describe "selectFirst" $ do
         let personQuery =
-                selectSingle $
+                selectFirst $
                     from $ \person -> do
                         where_ $ person ^. PersonFavNum >=. val 1
                         orderBy [asc (person ^. PersonId)]
