@@ -297,8 +297,8 @@ testSubSelect = do
                 Right xs ->
                     xs `shouldBe` []
 
-testSelectSingle :: SpecDb
-testSelectSingle =
+testSelectFirst :: SpecDb
+testSelectFirst =
     describe "selectFirst" $ do
         let personQuery =
                 selectFirst $
@@ -317,7 +317,6 @@ testSelectSingle =
             res <- personQuery
             asserting $
                 res `shouldBe` (Nothing :: Maybe (Value PersonId))
-
 
 testSelectSource :: SpecDb
 testSelectSource = do
@@ -2297,7 +2296,7 @@ tests =
     describe "Esqueleto" $ do
         testSelect
         testSubSelect
-        testSelectSingle
+        testSelectFirst
         testSelectSource
         testSelectFrom
         testSelectJoin
