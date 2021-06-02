@@ -1,7 +1,7 @@
 cabal-version: 1.12
 
 name:           esqueleto
-version:        3.5.0.0
+version:        3.5.1.0
 synopsis:       Type-safe EDSL for SQL queries on persistent backends.
 description:    @esqueleto@ is a bare bones, type-safe EDSL for SQL queries that works with unmodified @persistent@ SQL backends.  Its language closely resembles SQL, so you don't have to learn new concepts, just new syntax, and it's fairly easy to predict the generated SQL and optimize it for your backend. Most kinds of errors committed when writing SQL are caught as compile-time errors---although it is possible to write type-checked @esqueleto@ queries that fail at runtime.
                 .
@@ -102,7 +102,7 @@ test-suite specs
       , attoparsec
       , blaze-html
       , bytestring
-      , conduit 
+      , conduit
       , containers
       , esqueleto
       , exceptions
@@ -118,11 +118,11 @@ test-suite specs
       , persistent-sqlite
       , postgresql-simple
       , QuickCheck
-      , resourcet 
-      , tagged 
-      , text 
+      , resourcet
+      , tagged
+      , text
       , time
-      , transformers 
+      , transformers
       , unliftio
-      , unordered-containers 
+      , unordered-containers
     default-language: Haskell2010
