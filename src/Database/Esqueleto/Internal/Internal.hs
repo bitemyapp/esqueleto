@@ -2547,9 +2547,9 @@ select query = do
 -- @
 -- firstPerson :: MonadIO m => SqlPersistT m (Maybe Person)
 -- firstPerson =
-    'selectFirst' $
-        'from' $ \person ->
-            return person
+--  'selectFirst' $
+--      'from' $ \person ->
+--          return person
 -- @
 --
 -- The above query is equivalent to a 'select' combined with 'limit' but you
@@ -2558,10 +2558,10 @@ select query = do
 -- @
 -- firstPerson :: MonadIO m => SqlPersistT m [Person]
 -- firstPerson =
-    'select' $
-        'from' $ \person -> do
-            'limit' 1
-            return person
+--  'select' $
+--      'from' $ \person -> do
+--          'limit' 1
+--          return person
 -- @
 
 selectFirst :: (SqlSelect a r, MonadIO m) => SqlQuery a -> SqlReadT m (Maybe r)
