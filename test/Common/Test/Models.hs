@@ -55,6 +55,10 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     weight Int Maybe
     favNum Int
     deriving Eq Show Ord
+  User
+    username String
+    passwordHash String
+    deriving Eq Show Ord
   BlogPost
     title String
     authorId PersonId

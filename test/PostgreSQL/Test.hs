@@ -40,7 +40,7 @@ import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import Database.Persist.Postgresql (withPostgresqlConn, createPostgresqlPool)
+import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
@@ -1264,6 +1264,25 @@ testLateralQuery = do
             let _ = res :: [(Entity Lord, Value (Maybe Int))]
             asserting noExceptions
 
+testCrypt :: SpecDb
+testCrypt = do
+    describe "Crypt password hashing functions" $ do
+        itDb "authenticates a user" $ do
+            _ <- insertSelect $ do
+                pure $ User
+                    <# val "name"
+                    <&> EP.toCrypt EP.BF "1234password"
+            authenticated <-
+                select $ do
+                        user' <- Experimental.from $ table @User
+                        where_ $ user' ^. UserUsername ==. val "name"
+                            &&. EP.fromCrypt (user' ^. UserPasswordHash) "1234password"
+                        pure user'
+            let authUser = entityVal $ head authenticated
+            asserting $ do
+                userUsername authUser `shouldBe` "name"
+                userPasswordHash authUser `shouldNotBe` "1234password"
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1356,6 +1375,7 @@ spec = beforeAll mkConnectionPool $ do
                 testJSONInsertions
                 testJSONOperators
         testLateralQuery
+        testCrypt
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
