@@ -36,6 +36,7 @@ library
         Database.Esqueleto.MySQL
         Database.Esqueleto.PostgreSQL
         Database.Esqueleto.PostgreSQL.JSON
+        Database.Esqueleto.PostgreSQL.Pgcrypto
         Database.Esqueleto.SQLite
         Database.Esqueleto.Experimental.From
         Database.Esqueleto.Experimental.From.CommonTableExpression
