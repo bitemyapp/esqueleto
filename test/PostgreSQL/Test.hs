@@ -39,6 +39,7 @@ import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
+import qualified Database.Esqueleto.PostgreSQL.Pgcrypto as PGC
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
@@ -1268,15 +1269,16 @@ testCrypt :: SpecDb
 testCrypt = do
     describe "Crypt password hashing functions" $ do
         itDb "authenticates a user" $ do
+            rawExecute "CREATE EXTENSION IF NOT EXISTS pgcrypto" []
             _ <- insertSelect $ do
                 pure $ User
                     <# val "name"
-                    <&> EP.toCrypt EP.BF "1234password"
+                    <&> PGC.toCrypt PGC.BF "1234password"
             authenticated <-
                 select $ do
                         user' <- Experimental.from $ table @User
                         where_ $ user' ^. UserUsername ==. val "name"
-                            &&. EP.fromCrypt (user' ^. UserPasswordHash) "1234password"
+                            &&. PGC.fromCrypt (user' ^. UserPasswordHash) "1234password"
                         pure user'
             let authUser = entityVal $ head authenticated
             asserting $ do
