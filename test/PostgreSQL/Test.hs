@@ -1273,7 +1273,7 @@ testCrypt = do
             _ <- insertSelect $ do
                 pure $ User
                     <# val "name"
-                    <&> PGC.toCrypt PGC.BF "1234password"
+                    <&> PGC.toCrypt (PGC.BF $ Just 6) "1234password"
             authenticated <-
                 select $ do
                         user' <- Experimental.from $ table @User
