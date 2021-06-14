@@ -49,6 +49,16 @@ class ValidOnClause a
 instance {-# OVERLAPPABLE #-} ToFrom a a' => ValidOnClause a
 instance ValidOnClause (a -> SqlQuery b)
 
+-- | You may return joined values from a 'select' query - this is
+-- identical to the tuple instance, but is provided for convenience.
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
+    sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
+    sqlSelectColCount = sqlSelectColCount . toTuple
+      where
+        toTuple :: Proxy (a :& b) -> Proxy (a, b)
+        toTuple = const Proxy
+    sqlSelectProcessRow = fmap (uncurry (:&)) . sqlSelectProcessRow
+
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
 --
