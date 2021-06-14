@@ -1,3 +1,10 @@
+3.5.2.0
+=======
+- @ivanbakel
+  - [#268](https://github.com/bitemyapp/esqueleto/pull/268)
+        - Added `SqlSelect` instance for `(:&)`, allowing it to be returned from
+          queries just like `(,)` tuples.
+
 3.5.1.0
 =======
 - @ibarrae

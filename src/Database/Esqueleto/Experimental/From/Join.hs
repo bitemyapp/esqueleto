@@ -51,6 +51,8 @@ instance ValidOnClause (a -> SqlQuery b)
 
 -- | You may return joined values from a 'select' query - this is
 -- identical to the tuple instance, but is provided for convenience.
+--
+-- @since 3.5.2.0
 instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
     sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
     sqlSelectColCount = sqlSelectColCount . toTuple
