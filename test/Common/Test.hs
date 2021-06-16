@@ -301,11 +301,11 @@ testSelectOne :: SpecDb
 testSelectOne =
     describe "selectOne" $ do
         let personQuery =
-                selectOne $
-                    from $ \person -> do
-                        where_ $ person ^. PersonFavNum >=. val 1
-                        orderBy [asc (person ^. PersonId)]
-                        return $ person ^. PersonId
+                selectOne $ do
+                    person <- Experimental.from $ Experimental.table @Person
+                    where_ $ person ^. PersonFavNum >=. val 1
+                    orderBy [asc (person ^. PersonId)]
+                    return $ person ^. PersonId
         itDb "returns Just" $ do
             person <- insert' p1
             _ <- insert' p2
