@@ -1,3 +1,9 @@
+3.5.1.0
+=======
+- @ibarrae
+  - [#265](https://github.com/bitemyapp/esqueleto/pull/265)
+        - Added `selectOne`
+
 3.5.0.0
 =======
 - @belevy

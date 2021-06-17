@@ -98,6 +98,7 @@ module Database.Esqueleto.Legacy
   , SqlExpr
   , SqlEntity
   , select
+  , selectOne
   , selectSource
   , delete
   , deleteCount

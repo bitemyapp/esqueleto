@@ -97,6 +97,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , SqlExpr
   , SqlEntity
   , select
+  , selectOne
   , selectSource
   , delete
   , deleteCount

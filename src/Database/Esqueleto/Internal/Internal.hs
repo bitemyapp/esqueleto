@@ -2539,6 +2539,35 @@ select query = do
     conn <- R.ask
     liftIO $ with res $ flip R.runReaderT conn . runSource
 
+-- | Execute an @esqueleto@ @SELECT@ query inside @persistent@'s
+-- 'SqlPersistT' monad and return the first entry wrapped in a @Maybe@.
+-- @since 3.5.1.0
+--
+-- === __Example usage__
+--
+-- @
+-- firstPerson :: MonadIO m => SqlPersistT m (Maybe (Entity Person))
+-- firstPerson =
+--  'selectOne' $ do
+--      person <- 'from' $ 'table' @Person
+--      return person
+-- @
+--
+-- The above query is equivalent to a 'select' combined with 'limit' but you
+-- would still have to transform the results from a list:
+--
+-- @
+-- firstPerson :: MonadIO m => SqlPersistT m [Entity Person]
+-- firstPerson =
+--  'select' $ do
+--      person <- 'from' $ 'table' @Person
+--      'limit' 1
+--      return person
+-- @
+
+selectOne :: (SqlSelect a r, MonadIO m) => SqlQuery a -> SqlReadT m (Maybe r)
+selectOne query = fmap Maybe.listToMaybe $ select $ limit 1 >> query
+
 -- | (Internal) Run a 'C.Source' of rows.
 runSource
     :: Monad m
