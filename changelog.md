@@ -1,3 +1,9 @@
+3.5.2.1
+=======
+- @cdparks
+  - [#273](https://github.com/bitemyapp/esqueleto/pull/273)
+        - Avoid generating an empty list as the left operand to `NOT IN`.
+
 3.5.2.0
 =======
 - @ivanbakel
