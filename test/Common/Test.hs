@@ -1431,6 +1431,19 @@ testListOfValues = describe "lists of values" $ do
                return p
         asserting $ ret `shouldBe` [ Entity p2k p2 ]
 
+    itDb "NOT IN works for valList (null list)" $ do
+        p1k <- insert p1
+        p2k <- insert p2
+        p3k <- insert p3
+        ret <- select $
+               from $ \p -> do
+               where_ (p ^. PersonName `notIn` valList [])
+               return p
+        asserting $ ret `shouldMatchList` [ Entity p1k p1
+                                          , Entity p2k p2
+                                          , Entity p3k p3
+                                          ]
+
     itDb "EXISTS works for subList_select" $ do
         p1k <- insert p1
         _p2k <- insert p2
