@@ -939,7 +939,11 @@ notIn :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> S
     ERaw noMeta $ \_ info ->
         let (b1, vals1) = v Parens info
             (b2, vals2) = list Parens info
-        in (b1 <> " NOT IN " <> b2, vals1 <> vals2)
+        in
+        if b2 == "()" then
+            ("TRUE", [])
+        else
+            (b1 <> " NOT IN " <> b2, vals1 <> vals2)
 
 -- | @EXISTS@ operator.  For example:
 --
