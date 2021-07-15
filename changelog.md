@@ -1,3 +1,11 @@
+3.5.3.0
+=======
+- @3kyro
+  - [#266](https://github.com/bitemyapp/esqueleto/pull/266)
+    - Add pgcrypto crypt() functions
+        - Add new module `Database.Esqueleto.PostgreSQL.Pgcrypto`
+        - Add new funcions `fromCrypt`, `toCrypt` for password hashing
+          and user authentication
 3.5.2.1
 =======
 - @cdparks
