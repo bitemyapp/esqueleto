@@ -1,3 +1,9 @@
+3.4.3.0
+=======
+- @parsonsmatt
+    - [#]()
+        - Backport the `SqlSelect` instance for `:&`, initially implemented by
+          @ivanbakel in [#268](https://github.com/bitemyapp/esqueleto/pull/268)
 3.4.2.2
 =======
 - @parsonsmatt

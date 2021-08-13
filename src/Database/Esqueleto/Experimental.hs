@@ -541,6 +541,18 @@ import Database.Persist (EntityNameDB(..))
 data (:&) a b = a :& b
 infixl 2 :&
 
+-- | You may return joined values from a 'select' query - this is
+-- identical to the tuple instance, but is provided for convenience.
+--
+-- @since 3.4.3.0
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
+    sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
+    sqlSelectColCount = sqlSelectColCount . toTuple
+      where
+        toTuple :: Proxy (a :& b) -> Proxy (a, b)
+        toTuple = const Proxy
+    sqlSelectProcessRow = fmap (uncurry (:&)) . sqlSelectProcessRow
+
 data SqlSetOperation a
     = SqlSetUnion (SqlSetOperation a) (SqlSetOperation a)
     | SqlSetUnionAll (SqlSetOperation a) (SqlSetOperation a)
