@@ -3677,10 +3677,10 @@ deleteKey = Database.Persist.delete
 --     'select' $ do
 --         (foo :& bar) <- from $
 --             table @Foo
---             `LeftOuterJoin`
+--             ``LeftOuterJoin``
 --             table @Bar
---                 `on` do
---                     \(foo :& bar) ->
+--                 ``on`` do
+--                     \\(foo :& bar) ->
 --                         foo ^. FooId ==. bar ?. BarFooId
 --         where_ $
 --             foo ^. FooParentId ==. val parentId
@@ -3713,15 +3713,15 @@ deleteKey = Database.Persist.delete
 -- userPostsComment = do
 --     (u :& p :& c) <- from $
 --         table @User
---         `InnerJoin`
+--         ``InnerJoin``
 --         table @Post
 --             `on` do
---                 \(u :& p) ->
+--                 \\(u :& p) ->
 --                     u ^. UserId ==. p ^. PostUserId
---         `InnerJoin`
+--         ``InnerJoin``
 --         table @Comment
---             `on` do
---                 \(_ :& p :& c) ->
+--             ``on`` do
+--                 \\(_ :& p :& c) ->
 --                     p ^. PostId ==. c ^. CommentPostId
 --     pure (u, p, c)
 -- @
