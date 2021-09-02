@@ -1,3 +1,9 @@
+3.5.2.2
+=======
+- @NikitaRazmakhnin
+  - [#278](https://github.com/bitemyapp/esqueleto/pull/278)
+        - Fix generating of bad sql using nexted expressions with `distinctOnOrderBy`.
+
 3.5.2.1
 =======
 - @cdparks

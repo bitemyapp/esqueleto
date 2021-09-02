@@ -374,7 +374,11 @@ distinctOnOrderBy exprs act =
     toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
     toDistinctOn (ERaw m f) = ERaw m $ \p info ->
         let (b, vals) = f p info
-        in (TLB.fromLazyText $ head $ TL.splitOn " " $ TLB.toLazyText b, vals)
+        in  ( TLB.fromLazyText
+              $ TL.replace " DESC" ""
+              $ TL.replace " ASC" ""
+              $ TLB.toLazyText b
+            , vals )
 
 -- | @ORDER BY random()@ clause.
 --

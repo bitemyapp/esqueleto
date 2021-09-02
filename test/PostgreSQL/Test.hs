@@ -220,6 +220,12 @@ testSelectDistinctOn = do
       slightlyLessSimpleTest $ \bp ->
         distinctOnOrderBy [asc (bp ^. BlogPostAuthorId), asc (bp ^. BlogPostTitle)]
 
+    itDb "generates correct sql with nested expression (distinctOnOrderBy)" $ do
+      let query = do
+            let orderVal = coalesce [nothing, just $ val (10 :: Int)]
+            distinctOnOrderBy [ asc orderVal, desc orderVal ] $ pure orderVal
+      select query
+      asserting noExceptions
 
 
 
