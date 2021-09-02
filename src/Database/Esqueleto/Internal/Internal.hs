@@ -3664,15 +3664,111 @@ deleteKey
     -> R.ReaderT backend m ()
 deleteKey = Database.Persist.delete
 
--- | Avoid N+1 queries and join entities into a map structure
+-- | Avoid N+1 queries and join entities into a map structure.
+--
+-- This function is useful to call on the result of a single @JOIN@. For
+-- example, suppose you have this query:
+--
 -- @
--- getFoosAndNestedBarsFromParent :: ParentId -> (Map (Key Foo) (Foo, [Maybe (Entity Bar)]))
--- getFoosAndNestedBarsFromParent parentId = 'fmap' associateJoin $ 'select' $
--- 'from' $ \\(foo `'LeftOuterJoin`` bar) -> do
---   'on' (bar '?.' BarFooId '==.' foo '^.' FooId)
---   'where_' (foo '^.' FooParentId '==.' 'val' parentId)
---   'pure' (foo, bar)
+-- getFoosAndNestedBarsFromParent
+--     :: ParentId
+--     -> SqlPersistT IO [(Entity Foo, Maybe (Entity Bar))]
+-- getFoosAndNestedBarsFromParent parentId =
+--     'select' $ do
+--         (foo :& bar) <- from $
+--             table @Foo
+--             ``LeftOuterJoin``
+--             table @Bar
+--                 ``on`` do
+--                     \\(foo :& bar) ->
+--                         foo ^. FooId ==. bar ?. BarFooId
+--         where_ $
+--             foo ^. FooParentId ==. val parentId
+--         pure (foo, bar)
 -- @
+--
+-- This is a natural result type for SQL - a list of tuples. However, it's not
+-- what we usually want in Haskell - each @Foo@ in the list will be represented
+-- multiple times, once for each @Bar@.
+--
+-- We can write @'fmap' 'associateJoin'@ and it will translate it into a 'Map'
+-- that is keyed on the 'Key' of the left 'Entity', and the value is a tuple of
+-- the entity's value as well as the list of each coresponding entity.
+--
+-- @
+-- getFoosAndNestedBarsFromParentHaskellese
+--     :: ParentId
+--     -> SqlPersistT (Map (Key Foo) (Foo, [Maybe (Entity Bar)]))
+-- getFoosAndNestedBarsFromParentHaskellese parentId =
+--     'fmap' 'associateJoin' $ getFoosdAndNestedBarsFromParent parentId
+-- @
+--
+-- What if you have multiple joins?
+--
+-- Let's use 'associateJoin' with a *two* join query.
+--
+-- @
+-- userPostComments
+--     :: SqlQuery (SqlExpr (Entity User, Entity Post, Entity Comment))
+-- userPostsComment = do
+--     (u :& p :& c) <- from $
+--         table @User
+--         ``InnerJoin``
+--         table @Post
+--             `on` do
+--                 \\(u :& p) ->
+--                     u ^. UserId ==. p ^. PostUserId
+--         ``InnerJoin``
+--         table @Comment
+--             ``on`` do
+--                 \\(_ :& p :& c) ->
+--                     p ^. PostId ==. c ^. CommentPostId
+--     pure (u, p, c)
+-- @
+--
+-- This query returns a User, with all of the users Posts, and then all of the
+-- Comments on that post.
+--
+-- First, we *nest* the tuple.
+--
+-- @
+-- nest :: (a, b, c) -> (a, (b, c))
+-- nest (a, b, c) = (a, (b, c))
+-- @
+--
+-- This makes the return of the query conform to the input expected from
+-- 'associateJoin'.
+--
+-- @
+-- nestedUserPostComments
+--     :: SqlPersistT IO [(Entity User, (Entity Post, Entity Comment))]
+-- nestedUserPostComments =
+--     fmap nest $ select userPostsComments
+-- @
+--
+-- Now, we can call 'associateJoin' on it.
+--
+-- @
+-- associateUsers
+--     :: [(Entity User, (Entity Post, Entity Comment))]
+--     -> Map UserId (User, [(Entity Post, Entity Comment)])
+-- associateUsers =
+--     associateJoin
+-- @
+--
+-- Next, we'll use the 'Functor' instances for 'Map' and tuple to call
+-- 'associateJoin' on the @[(Entity Post, Entity Comment)]@.
+--
+-- @
+-- associatePostsAndComments
+--     :: Map UserId (User, [(Entity Post, Entity Comment)])
+--     -> Map UserId (User, Map PostId (Post, [Entity Comment]))
+-- associatePostsAndComments =
+--     fmap (fmap associateJoin)
+-- @
+--
+-- For more reading on this topic, see
+-- <https://www.foxhound.systems/blog/grouping-query-results-haskell/ this Foxhound Systems blog post>.
 --
 -- @since 3.1.2
 associateJoin
