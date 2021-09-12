@@ -560,7 +560,7 @@ subSelectForeign expr foreignKey k =
 -- 'subSelectMaybe'. For the most common safe use of this, see 'subSelectCount'.
 --
 -- @since 3.2.0
-subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+subSelectUnsafe :: SqlSelect (SqlExpr a) r => SqlQuery (SqlExpr a) -> SqlExpr a
 subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
@@ -568,12 +568,9 @@ subSelectUnsafe = sub SELECT
     => SqlExpr (Entity val)
     -> EntityField val typ
     -> SqlExpr (Value typ)
-ERaw m f ^. field
+ent ^. field
     | isIdField field = idFieldValue
-    | Just alias <- sqlExprMetaAlias m =
-        ERaw noMeta $ \_ info ->
-            f Never info <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef), [])
-    | otherwise = ERaw noMeta $ \_ info -> (dot info $ persistFieldDef field, [])
+    | otherwise = ERaw noMeta $ \_ info -> (viewFieldBuilder ent info fieldDef, [])
   where
     fieldDef =
         if isIdField field then
@@ -583,25 +580,27 @@ ERaw m f ^. field
             persistFieldDef field
     idFieldValue =
         case getEntityKeyFields ed of
-            idField :| [] ->
-                ERaw noMeta $ \_ info -> (dot info idField, [])
+            idField :| [] -> ERaw noMeta $ \_ info -> (viewFieldBuilder ent info idField, [])
 
             idFields ->
-                let renderedFields info = dot info <$> NEL.toList idFields
+                let renderedFields info = viewFieldBuilder ent info <$> NEL.toList idFields
                 in ERaw noMeta{ sqlExprMetaCompositeFields = Just renderedFields} $
                     \p info -> (parensM p $ uncommas $ renderedFields info, [])
 
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
-    dot info fieldDef' =
-        sourceIdent info <> "." <> fieldIdent
-      where
-        sourceIdent = fmap fst $ f Never
-        fieldIdent
-            | Just baseI <- sqlExprMetaAlias m =
-                useIdent info $ aliasedEntityColumnIdent baseI fieldDef'
-            | otherwise =
-                fromDBName info (coerce $ fieldDB fieldDef')
+viewFieldBuilder :: SqlExpr (Entity val) -> IdentInfo -> FieldDef -> TLB.Builder
+viewFieldBuilder (ERaw m f) info fieldDef 
+    | Just alias <- sqlExprMetaAlias m =
+        fst (f Never info) <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef))
+    | otherwise = sourceIdent info <> "." <> fieldIdent
+  where
+    sourceIdent = fst <$> f Never
+    fieldIdent 
+        | Just baseI <- sqlExprMetaAlias m =
+            useIdent info $ aliasedEntityColumnIdent baseI fieldDef
+        | otherwise =
+            fromDBName info (coerce $ fieldDB fieldDef)
 
 -- | Project an SqlExpression that may be null, guarding against null cases.
 withNonNull
@@ -2374,7 +2373,7 @@ setAux field value = \ent -> ERaw noMeta $ \_ info ->
         (valueToSet, valueVals) = valueF Parens info
     in (fieldName info field <> " = " <> valueToSet, valueVals)
 
-sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+sub :: (SqlSelect (SqlExpr a) r) => Mode -> SqlQuery (SqlExpr a) -> SqlExpr a 
 sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info query
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
@@ -2684,18 +2683,22 @@ instance ( UnsafeSqlFunctionArgument a
          ) => UnsafeSqlFunctionArgument (a, b, c, d, e, f, g, h, i, j) where
   toArgList = toArgList . from10
 
+-- | (Internal) Coerce a SqlExpr from any arbitrary a to any arbitrary b 
+-- You should /not/ use this function unless you know what you're doing!
+veryVeryUnsafeCoerceSqlExpr :: SqlExpr a -> SqlExpr b
+veryVeryUnsafeCoerceSqlExpr = coerce
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue = coerce
+veryUnsafeCoerceSqlExprValue = veryVeryUnsafeCoerceSqlExpr 
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList = coerce
+veryUnsafeCoerceSqlExprValueList = veryVeryUnsafeCoerceSqlExpr 
 
 
 ----------------------------------------------------------------------
@@ -3381,7 +3384,7 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
     sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
-materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
+materializeExpr :: IdentInfo -> SqlExpr a -> (TLB.Builder, [PersistValue])
 materializeExpr info (ERaw m f)
     | Just fields <- sqlExprMetaCompositeFields m = (uncommas $ fmap parens $ fields info, [])
     | Just alias <- sqlExprMetaAlias m
