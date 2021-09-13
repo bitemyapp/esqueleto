@@ -80,7 +80,7 @@ instance PgToJsonb (SqlExpr (JsonValue a)) a where
     toJsonb = id
 
 instance PgToJsonb (SqlExpr (Value a)) a where
-    toJsonb = veryVeryUnsafeCoerceSqlExpr . unsafeSqlFunction "toJsonb"
+    toJsonb = veryVeryUnsafeCoerceSqlExpr . unsafeSqlFunction "to_jsonb"
 
 instance forall a. PersistEntity a
   => PgToJsonb (SqlExpr (Entity a)) (Entity a) where

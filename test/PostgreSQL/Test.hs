@@ -1464,30 +1464,71 @@ testLateralQuery = do
             let _ = res :: [(Entity Lord, Value (Maybe Int))]
             asserting noExceptions
 
+testToJson :: SpecDb
+testToJson = do
+    itDb "to_json supports Value" $ do
+        r <- select $ pure $ JSONE.toJsonb $ val @Int 1
+        asserting $ r `shouldBe` [JSONE.JsonValue 1]
+    itDb "to_json supports Entity" $ do
+        p1e <- insert' p1
+        r <- select $ JSONE.toJsonb <$> Experimental.from (table @Person)
+        asserting $ r `shouldBe` [JSONE.JsonValue p1e]
+    itDb "to_json supports tuples" $ do
+        p1e <- insert' p1
+        r <- select $ do
+            p <- Experimental.from $ table @Person
+            pure $ JSONE.toJsonb $ (p, val @Int 1)
+        asserting $ r `shouldBe` [JSONE.JsonValue (p1e, 1)]
+    itDb "to_json supports 3 tuples" $ do
+        p1e <- insert' p1
+        r <- select $ do
+            p <- Experimental.from $ table @Person
+            pure $ JSONE.toJsonb $ (val @Int 1, p, val @Int 2)
+        asserting $ r `shouldBe` [JSONE.JsonValue (1, p1e, 2)]
+
+testJsonAgg :: SpecDb
+testJsonAgg = do
+    itDb "json_agg supports Value" $ do
+        r <- select $ pure $ JSONE.jsonAgg $ JSONE.toJsonb $ val @Int 1
+        asserting $ r `shouldBe` [JSONE.JsonValue [1]]
+    itDb "json_agg supports Entities" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2
+        r <- select $ JSONE.jsonAgg . JSONE.toJsonb <$> Experimental.from (table @Person)
+        asserting $ r `shouldBe` [JSONE.JsonValue [p1e, p2e]]
+    itDb "json_agg supports Tuples" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2
+        r <- select $ do
+            p <- Experimental.from $ table @Person
+            p' <- Experimental.from $ table @Person
+            pure $ JSONE.jsonAgg $ JSONE.toJsonb (p, p')
+        asserting $ r `shouldBe` [JSONE.JsonValue [(p1e, p1e), (p1e, p2e), (p2e, p1e), (p2e, p2e)]]
+
 testNestedMultiset :: SpecDb
 testNestedMultiset =
     itDb "supports nested multiset" $ do
-    p1e <- insert' p1
-    p2e <- insert' p2
-    [b1e, b2e, b3e] <- mapM (insert' . BlogPost "") [entityKey p1e, entityKey p1e, entityKey p2e]
-    [c1e, c2e] <- mapM (insert' . Comment "") [entityKey b1e, entityKey b2e]
-    let q = do
-            person <- Experimental.from $ table @Person
-            pure ( person
-                 , JSONE.multiset $ do
-                   posts <- Experimental.from $ table @BlogPost
-                   where_ $ posts ^. BlogPostAuthorId ==. person ^. PersonId
-                   pure ( posts
-                        , JSONE.multiset $ do
-                          comments <- Experimental.from $ table @Comment
-                          where_ $ comments ^. CommentBlog ==. posts ^. BlogPostId
-                          pure comments
-                        )
-                 )
-    res <- select q
-    asserting $ res `shouldMatchList` [ (p1e, JSONE.JsonValue [(b1e, [c1e]), (b2e, [c2e])])
-                                      , (p2e, JSONE.JsonValue [(b3e, [])])
-                                      ]
+        p1e <- insert' p1
+        p2e <- insert' p2
+        [b1e, b2e, b3e] <- mapM (insert' . BlogPost "") [entityKey p1e, entityKey p1e, entityKey p2e]
+        [c1e, c2e] <- mapM (insert' . Comment "") [entityKey b1e, entityKey b2e]
+        let q = do
+                person <- Experimental.from $ table @Person
+                pure ( person
+                     , JSONE.multiset $ do
+                       posts <- Experimental.from $ table @BlogPost
+                       where_ $ posts ^. BlogPostAuthorId ==. person ^. PersonId
+                       pure ( posts
+                            , JSONE.multiset $ do
+                              comments <- Experimental.from $ table @Comment
+                              where_ $ comments ^. CommentBlog ==. posts ^. BlogPostId
+                              pure comments
+                            )
+                     )
+        res <- select q
+        asserting $ res `shouldMatchList` [ (p1e, JSONE.JsonValue [(b1e, [c1e]), (b2e, [c2e])])
+                                          , (p2e, JSONE.JsonValue [(b3e, [])])
+                                          ]
 
 type JSONValue = Maybe (JSONB A.Value)
 
@@ -1581,10 +1622,10 @@ spec = beforeAll mkConnectionPool $ do
                 testJSONInsertions
                 testJSONOperators
         testLateralQuery
-        testValuesExpression
-        testSubselectAliasingBehavior
         testPostgresqlLocking
-        describe "PostgreSQL Experimental JSON" $
+        describe "PostgreSQL Experimental JSON" $ do
+            testToJson
+            testJsonAgg
             testNestedMultiset
 
 insertJsonValues :: SqlPersistT IO ()
