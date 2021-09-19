@@ -1468,42 +1468,42 @@ testToJson :: SpecDb
 testToJson = do
     itDb "to_json supports Value" $ do
         r <- select $ pure $ JSONE.toJsonb $ val @Int 1
-        asserting $ r `shouldBe` [JSONE.JsonValue 1]
+        asserting $ r `shouldBe` [JSONE.JsonBValue 1]
     itDb "to_json supports Entity" $ do
         p1e <- insert' p1
         r <- select $ JSONE.toJsonb <$> Experimental.from (table @Person)
-        asserting $ r `shouldBe` [JSONE.JsonValue p1e]
+        asserting $ r `shouldBe` [JSONE.JsonBValue p1e]
     itDb "to_json supports tuples" $ do
         p1e <- insert' p1
         r <- select $ do
             p <- Experimental.from $ table @Person
             pure $ JSONE.toJsonb $ (p, val @Int 1)
-        asserting $ r `shouldBe` [JSONE.JsonValue (p1e, 1)]
+        asserting $ r `shouldBe` [JSONE.JsonBValue (p1e, 1)]
     itDb "to_json supports 3 tuples" $ do
         p1e <- insert' p1
         r <- select $ do
             p <- Experimental.from $ table @Person
             pure $ JSONE.toJsonb $ (val @Int 1, p, val @Int 2)
-        asserting $ r `shouldBe` [JSONE.JsonValue (1, p1e, 2)]
+        asserting $ r `shouldBe` [JSONE.JsonBValue (1, p1e, 2)]
 
 testJsonAgg :: SpecDb
 testJsonAgg = do
     itDb "json_agg supports Value" $ do
-        r <- select $ pure $ JSONE.jsonAgg $ JSONE.toJsonb $ val @Int 1
-        asserting $ r `shouldBe` [JSONE.JsonValue [1]]
+        r <- select $ pure $ JSONE.jsonbAgg $ JSONE.toJsonb $ val @Int 1
+        asserting $ r `shouldBe` [JSONE.JsonBValue [1]]
     itDb "json_agg supports Entities" $ do
         p1e <- insert' p1
         p2e <- insert' p2
-        r <- select $ JSONE.jsonAgg . JSONE.toJsonb <$> Experimental.from (table @Person)
-        asserting $ r `shouldBe` [JSONE.JsonValue [p1e, p2e]]
+        r <- select $ JSONE.jsonbAgg . JSONE.toJsonb <$> Experimental.from (table @Person)
+        asserting $ r `shouldBe` [JSONE.JsonBValue [p1e, p2e]]
     itDb "json_agg supports Tuples" $ do
         p1e <- insert' p1
         p2e <- insert' p2
         r <- select $ do
             p <- Experimental.from $ table @Person
             p' <- Experimental.from $ table @Person
-            pure $ JSONE.jsonAgg $ JSONE.toJsonb (p, p')
-        asserting $ r `shouldBe` [JSONE.JsonValue [(p1e, p1e), (p1e, p2e), (p2e, p1e), (p2e, p2e)]]
+            pure $ JSONE.jsonbAgg $ JSONE.toJsonb (p, p')
+        asserting $ r `shouldBe` [JSONE.JsonBValue [(p1e, p1e), (p1e, p2e), (p2e, p1e), (p2e, p2e)]]
 
 testNestedMultiset :: SpecDb
 testNestedMultiset =
@@ -1526,8 +1526,8 @@ testNestedMultiset =
                             )
                      )
         res <- select q
-        asserting $ res `shouldMatchList` [ (p1e, JSONE.JsonValue [(b1e, [c1e]), (b2e, [c2e])])
-                                          , (p2e, JSONE.JsonValue [(b3e, [])])
+        asserting $ res `shouldMatchList` [ (p1e, JSONE.JsonBValue [(b1e, [c1e]), (b2e, [c2e])])
+                                          , (p2e, JSONE.JsonBValue [(b3e, [])])
                                           ]
 
 type JSONValue = Maybe (JSONB A.Value)

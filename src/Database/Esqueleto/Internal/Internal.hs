@@ -2520,7 +2520,7 @@ valueToFunctionArg info (ERaw _ f) = f Never info
 -- from 'unsafeSqlBinOp' applies to this function as well.
 unsafeSqlFunction
     :: UnsafeSqlFunctionArgument a
-    => TLB.Builder -> a -> SqlExpr (Value b)
+    => TLB.Builder -> a -> SqlExpr b
 unsafeSqlFunction name arg =
     ERaw noMeta $ \_ info ->
         let (argsTLB, argsVals) =
@@ -2556,7 +2556,7 @@ unsafeSqlFunctionParens name arg =
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
-unsafeSqlCastAs :: T.Text -> SqlExpr (Value a) -> SqlExpr (Value b)
+unsafeSqlCastAs :: T.Text -> SqlExpr a -> SqlExpr b 
 unsafeSqlCastAs t (ERaw _ f) = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . f Never)
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
@@ -2575,8 +2575,8 @@ class UnsafeSqlFunctionArgument a where
 instance UnsafeSqlFunctionArgument () where
     toArgList _ = []
 
-instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
-    toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
+instance UnsafeSqlFunctionArgument (SqlExpr a) where
+    toArgList = (:[]) . veryVeryUnsafeCoerceSqlExpr
 
 instance UnsafeSqlFunctionArgument a => UnsafeSqlFunctionArgument [a] where
   toArgList = concatMap toArgList

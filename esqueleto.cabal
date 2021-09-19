@@ -33,6 +33,7 @@ library
         Database.Esqueleto.Legacy
         Database.Esqueleto.Experimental
         Database.Esqueleto.Internal.Internal
+        Database.Esqueleto.Internal.JSON
         Database.Esqueleto.Internal.ExprParser
         Database.Esqueleto.MySQL
         Database.Esqueleto.PostgreSQL
