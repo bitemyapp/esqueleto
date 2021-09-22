@@ -341,6 +341,8 @@ distinct act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
 distinctOn :: [SqlExpr DistinctOn] -> SqlQuery a -> SqlQuery a
 distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs }) >> act
 
+{-# DEPRECATED distinctOn "This function is deprecated, as it is only supported in Postgresql. Please use the variant in `Database.Esqueleto.PostgreSQL` instead." #-}
+
 -- | Erase an SqlExpression's type so that it's suitable to
 -- be used by 'distinctOn'.
 --
@@ -379,6 +381,8 @@ distinctOnOrderBy exprs act =
               $ TL.replace " ASC" ""
               $ TLB.toLazyText b
             , vals )
+
+{-# DEPRECATED distinctOnOrderBy "This function is deprecated, as it is only supported in Postgresql. Please use the function defined in `Database.Esqueleto.PostgreSQL` instead." #-}
 
 -- | @ORDER BY random()@ clause.
 --
