@@ -379,39 +379,39 @@ instance (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => Ex.ToFrom (PgV
 
 fromValues :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
 fromValues exprs = Ex.From $ do
-  ident <- newIdentFor $ DBName "vq"
-  alias <- Ex.toAlias $ NE.head exprs
-  ref   <- Ex.toAliasReference ident alias
-  let aliasIdents = mapMaybe (\someVal -> case someVal of
-          SomeValue (ERaw aliasMeta _) -> sqlExprMetaAlias aliasMeta
-        ) $ toSomeValues ref
-  pure (ref, const $ mkExpr ident aliasIdents)
+    ident <- newIdentFor $ DBName "vq"
+    alias <- Ex.toAlias $ NE.head exprs
+    ref   <- Ex.toAliasReference ident alias
+    let aliasIdents = mapMaybe (\someVal -> case someVal of
+            SomeValue (ERaw aliasMeta _) -> sqlExprMetaAlias aliasMeta
+            ) $ toSomeValues ref
+    pure (ref, const $ mkExpr ident aliasIdents)
   where
     someValueToSql :: IdentInfo -> SomeValue -> (TLB.Builder, [PersistValue])
     someValueToSql info (SomeValue expr) = materializeExpr info expr
 
     mkValuesRowSql :: IdentInfo -> [SomeValue] -> (TLB.Builder, [PersistValue])
     mkValuesRowSql info vs =
-      let materialized = someValueToSql info <$> vs
-          valsSql = TLB.toLazyText . fst <$> materialized
-          params = concatMap snd materialized
-      in (TLB.fromLazyText $ "(" <> TL.intercalate "," valsSql <> ")", params)
+        let materialized = someValueToSql info <$> vs
+            valsSql = TLB.toLazyText . fst <$> materialized
+            params = concatMap snd materialized
+        in (TLB.fromLazyText $ "(" <> TL.intercalate "," valsSql <> ")", params)
 
     -- (VALUES (v11, v12,..), (v21, v22,..)) as "vq"("v1", "v2",..)
     mkExpr :: Ident -> [Ident] -> IdentInfo -> (TLB.Builder, [PersistValue])
     mkExpr valsIdent colIdents info =
-      let materialized = mkValuesRowSql info . toSomeValues <$> NE.toList exprs
-          (valsSql, params) =
-            ( TL.intercalate "," $ map (TLB.toLazyText . fst) materialized
-            , concatMap snd materialized
+        let materialized = mkValuesRowSql info . toSomeValues <$> NE.toList exprs
+            (valsSql, params) =
+                ( TL.intercalate "," $ map (TLB.toLazyText . fst) materialized
+                , concatMap snd materialized
+                )
+            colsAliases = TL.intercalate "," (map (TLB.toLazyText . useIdent info) colIdents)
+        in
+            ( "(VALUES " <> TLB.fromLazyText valsSql <> ") AS "
+            <> useIdent info valsIdent
+            <> "(" <> TLB.fromLazyText colsAliases <> ")"
+            , params
             )
-          colsAliases = TL.intercalate "," (map (TLB.toLazyText . useIdent info) colIdents)
-      in
-        ( "(VALUES " <> TLB.fromLazyText valsSql <> ") AS "
-        <> useIdent info valsIdent
-        <> "(" <> TLB.fromLazyText colsAliases <> ")"
-        , params
-        )
 
 -- | Allows to use `VALUES (..)` in-memory set of values
 -- in RHS of `from` expressions. Useful for JOIN's on
