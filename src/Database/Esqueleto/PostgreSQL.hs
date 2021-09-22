@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -26,6 +28,7 @@ module Database.Esqueleto.PostgreSQL
     , insertSelectWithConflict
     , insertSelectWithConflictCount
     , filterWhere
+    , values
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -39,9 +42,14 @@ import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
 import Data.Int (Int64)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
+import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
+import qualified Database.Esqueleto.Experimental as Ex
+import qualified Database.Esqueleto.Experimental.From as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
 import Database.Persist.Class (OnlyOneUniqueKey)
@@ -363,3 +371,75 @@ filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     in ( aggBuilder <> " FILTER (WHERE " <> clauseBuilder <> ")"
        , aggValues <> clauseValues
        )
+
+newtype PgValuesExprs a = PgValuesExprs { unPgValuesExprs :: NE.NonEmpty a }
+
+instance (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => Ex.ToFrom (PgValuesExprs a) a where
+  toFrom = fromValues . unPgValuesExprs
+
+fromValues :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
+fromValues exprs = Ex.From $ do
+  ident <- newIdentFor $ DBName "vq"
+  alias <- Ex.toAlias $ NE.head exprs
+  ref   <- Ex.toAliasReference ident alias
+  let aliasIdents = mapMaybe (\someVal -> case someVal of
+          SomeValue (ERaw aliasMeta _) -> sqlExprMetaAlias aliasMeta
+        ) $ toSomeValues ref
+  pure (ref, const $ mkExpr ident aliasIdents)
+  where
+    someValueToSql :: IdentInfo -> SomeValue -> (TLB.Builder, [PersistValue])
+    someValueToSql info (SomeValue expr) = materializeExpr info expr
+
+    mkValuesRowSql :: IdentInfo -> [SomeValue] -> (TLB.Builder, [PersistValue])
+    mkValuesRowSql info vs =
+      let materialized = someValueToSql info <$> vs
+          valsSql = TLB.toLazyText . fst <$> materialized
+          params = concatMap snd materialized
+      in (TLB.fromLazyText $ "(" <> TL.intercalate "," valsSql <> ")", params)
+
+    -- (VALUES (v11, v12,..), (v21, v22,..)) as "vq"("v1", "v2",..)
+    mkExpr :: Ident -> [Ident] -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mkExpr valsIdent colIdents info =
+      let materialized = mkValuesRowSql info . toSomeValues <$> NE.toList exprs
+          (valsSql, params) =
+            ( TL.intercalate "," $ map (TLB.toLazyText . fst) materialized
+            , concatMap snd materialized
+            )
+          colsAliases = TL.intercalate "," (map (TLB.toLazyText . useIdent info) colIdents)
+      in
+        ( "(VALUES " <> TLB.fromLazyText valsSql <> ") AS "
+        <> useIdent info valsIdent
+        <> "(" <> TLB.fromLazyText colsAliases <> ")"
+        , params
+        )
+
+-- | Allows to use `VALUES (..)` in-memory set of values
+-- in RHS of `from` expressions. Useful for JOIN's on
+-- known values which also can be additionally preprocessed
+-- somehow on db side with usage of inner PostgreSQL capabilities.
+--
+--
+-- Example of usage:
+--
+-- @
+-- share [mkPersist sqlSettings] [persistLowerCase|
+--   User
+--     name Text
+--     age Int
+--     deriving Eq Show
+--
+-- select $ do
+--  bound :& user <- from $
+--      values (   (val (10 :: Int), val ("ten" :: Text))
+--            :| [ (val 20, val "twenty")
+--               , (val 30, val "thirty") ]
+--            )
+--      `InnerJoin` table User
+--      `on` (\((bound, _boundName) :& user) -> user^.UserAge >=. bound)
+--  groupBy bound
+--  pure (bound, count @Int $ user^.UserName)
+-- @
+--
+-- @since 3.5.2.3
+values :: NE.NonEmpty a -> PgValuesExprs a
+values = PgValuesExprs
