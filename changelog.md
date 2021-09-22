@@ -1,3 +1,9 @@
+3.5.2.3
+=======
+- @NikitaRazmakhnin
+  - [#284](https://github.com/bitemyapp/esqueleto/pull/284)
+        - Add PostgreSQL-specific support of VALUES(..) literals
+
 3.5.2.2
 =======
 - @NikitaRazmakhnin
