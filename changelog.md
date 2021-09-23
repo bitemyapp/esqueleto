@@ -1,3 +1,10 @@
+3.6.0.0 (unreleased)
+=======
+- @parsonsmatt
+    - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
+        - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
+          defined in `PostgreSQL` module instead.
+
 3.5.2.2
 =======
 - @NikitaRazmakhnin

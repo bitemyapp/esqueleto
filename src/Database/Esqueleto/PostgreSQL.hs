@@ -38,14 +38,17 @@ import Control.Exception (throw)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
+import qualified Control.Monad.Trans.Writer as W
 import Data.Int (Int64)
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
+import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
-import Database.Esqueleto.Internal.Internal hiding (random_)
+import Database.Esqueleto.Internal.Internal hiding
+       (distinctOn, distinctOnOrderBy, random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
@@ -105,7 +108,7 @@ distinctOn exprs = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 3.6.0
 distinctOnOrderBy :: [SqlExpr OrderBy] -> SqlQuery ()
-distinctOnOrderBy exprs act = do
+distinctOnOrderBy exprs = do
     distinctOn (toDistinctOn <$> exprs)
     orderBy exprs
   where

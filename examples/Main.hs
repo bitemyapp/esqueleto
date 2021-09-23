@@ -19,30 +19,21 @@ module Main
     ) where
 
 import Blog
-import Control.Monad (void)
-import Control.Monad (forM_)
+import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger, MonadLoggerIO)
 import Control.Monad.Reader (MonadReader(..), runReaderT)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Monoid ((<>))
-import Database.Esqueleto
+import Database.Esqueleto.Legacy
 import Database.Persist.Postgresql (ConnectionString, withPostgresqlConn)
+import qualified Database.Persist.Sql as Persistent
 import Database.Persist.TH
-       ( AtLeastOneUniqueKey(..)
-       , OnlyOneUniqueKey(..)
-       , mkDeleteCascade
-       , mkMigrate
-       , mkPersist
-       , persistLowerCase
-       , share
-       , sqlSettings
-       )
+       (mkMigrate, mkPersist, persistLowerCase, share, sqlSettings)
 
 
 share [ mkPersist sqlSettings
-      , mkDeleteCascade sqlSettings
       , mkMigrate "migrateAll"] [persistLowerCase|
   Person
     name String
@@ -150,7 +141,7 @@ deleteYoungsters = do
     from $ \p -> do
     where_ (p ^. PersonAge <. just (val 14))
     pure p
-  forM_ youngsters (deleteCascade . entityKey)
+  forM_ youngsters (Persistent.delete . entityKey)
 
 
 insertBlogPosts :: (MonadIO m, MonadLogger m)
