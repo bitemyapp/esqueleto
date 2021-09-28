@@ -2308,7 +2308,7 @@ testExperimentalFrom = do
                                         people ^. PersonId ==. profiles ^. ProfilePerson)
                      `InnerJoin` Table @BlogPost
                    `Experimental.on` (\(people :& _ :& posts) ->
-                                        (people ^. PersonId) ==. posts ^. BlogPostAuthorId)
+                                        people ^. PersonId ==. posts ^. BlogPostAuthorId)
               pure result
       rows <- select $ do
         (persons :& profiles :& posts) <- Experimental.from $ q

@@ -63,13 +63,13 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
 
 -- | Identical to the tuple instance and provided for convenience.
 --
--- @since 3.5.2.3
+-- @since 3.5.3.0
 instance (ToAlias a, ToAlias b) => ToAlias (a :& b) where
     toAlias (a :& b) = (:&) <$> toAlias a <*> toAlias b
 
 -- | Identical to the tuple instance and provided for convenience.
 --
--- @since 3.5.2.3
+-- @since 3.5.3.0
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a :& b) where
     toAliasReference ident (a :& b) = (:&) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
 

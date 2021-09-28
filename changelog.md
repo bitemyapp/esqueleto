@@ -1,3 +1,10 @@
+3.5.3.0
+- @m4dc4p
+  - [#291](https://github.com/bitemyapp/esqueleto/pull/291)
+         - Added `ToAlias` and `ToAliasReference` instaces to the `:&` type, mirroring
+         the tuple instances for the same classes. See [Issue #290](https://github.com/bitemyapp/esqueleto/issues/290)
+         for discussion.
+         
 3.5.2.2
 =======
 - @NikitaRazmakhnin
