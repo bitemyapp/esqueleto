@@ -372,13 +372,37 @@ filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
        , aggValues <> clauseValues
        )
 
-newtype PgValuesExprs a = PgValuesExprs { unPgValuesExprs :: NE.NonEmpty a }
 
-instance (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => Ex.ToFrom (PgValuesExprs a) a where
-  toFrom = fromValues . unPgValuesExprs
-
-fromValues :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
-fromValues exprs = Ex.From $ do
+-- | Allows to use `VALUES (..)` in-memory set of values
+-- in RHS of `from` expressions. Useful for JOIN's on
+-- known values which also can be additionally preprocessed
+-- somehow on db side with usage of inner PostgreSQL capabilities.
+--
+--
+-- Example of usage:
+--
+-- @
+-- share [mkPersist sqlSettings] [persistLowerCase|
+--   User
+--     name Text
+--     age Int
+--     deriving Eq Show
+--
+-- select $ do
+--  bound :& user <- from $
+--      values (   (val (10 :: Int), val ("ten" :: Text))
+--            :| [ (val 20, val "twenty")
+--               , (val 30, val "thirty") ]
+--            )
+--      `InnerJoin` table User
+--      `on` (\((bound, _boundName) :& user) -> user^.UserAge >=. bound)
+--  groupBy bound
+--  pure (bound, count @Int $ user^.UserName)
+-- @
+--
+-- @since 3.5.2.3
+values :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
+values exprs = Ex.From $ do
     ident <- newIdentFor $ DBName "vq"
     alias <- Ex.toAlias $ NE.head exprs
     ref   <- Ex.toAliasReference ident alias
@@ -412,34 +436,3 @@ fromValues exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
-
--- | Allows to use `VALUES (..)` in-memory set of values
--- in RHS of `from` expressions. Useful for JOIN's on
--- known values which also can be additionally preprocessed
--- somehow on db side with usage of inner PostgreSQL capabilities.
---
---
--- Example of usage:
---
--- @
--- share [mkPersist sqlSettings] [persistLowerCase|
---   User
---     name Text
---     age Int
---     deriving Eq Show
---
--- select $ do
---  bound :& user <- from $
---      values (   (val (10 :: Int), val ("ten" :: Text))
---            :| [ (val 20, val "twenty")
---               , (val 30, val "thirty") ]
---            )
---      `InnerJoin` table User
---      `on` (\((bound, _boundName) :& user) -> user^.UserAge >=. bound)
---  groupBy bound
---  pure (bound, count @Int $ user^.UserName)
--- @
---
--- @since 3.5.2.3
-values :: NE.NonEmpty a -> PgValuesExprs a
-values = PgValuesExprs
