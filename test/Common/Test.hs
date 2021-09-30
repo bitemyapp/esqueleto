@@ -2313,8 +2313,8 @@ testExperimentalFrom = do
       rows <- select $ do
         (persons :& profiles :& posts) <- Experimental.from $ q
         pure (persons ^. PersonId, profiles ^. ProfileId, posts ^. BlogPostId)
-      let result = coerce rows :: [(PersonId, ProfileId, BlogPostId)]
-      -- We don't care about eh result of the query, only that it
+      let result = rows :: [(Value PersonId, Value ProfileId, Value BlogPostId)]
+      -- We don't care about the result of the query, only that it
       -- rendered & executed.
       asserting noExceptions
 
