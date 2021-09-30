@@ -2313,7 +2313,7 @@ testExperimentalFrom = do
       rows <- select $ do
         (persons :& profiles :& posts) <- Experimental.from $ q
         pure (persons ^. PersonId, profiles ^. ProfileId, posts ^. BlogPostId)
-      let result :: [(PersonId, ProfileId, BlogPostId)] = [(a, b, c) | (Value a, Value b, Value c) <- rows]
+      let result = coerce rows :: [(PersonId, ProfileId, BlogPostId)]
       -- We don't care about eh result of the query, only that it
       -- rendered & executed.
       asserting (null $ drop 1000 result)
