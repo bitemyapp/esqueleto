@@ -2275,7 +2275,6 @@ testExperimentalFrom = do
                                        , (l2e, l2e)
                                        ]
 
-
     itDb "compiles" $ do
         let q = do
               (persons :& profiles :& posts) <-
@@ -2300,6 +2299,24 @@ testExperimentalFrom = do
         asserting $ upperNames `shouldMatchList` [ Value "JOHN"
                                               , Value "MIKE"
                                               ]
+    itDb "allows re-using (:&) joined tables" $ do
+      let q = do
+              result@(persons :& profiles :& posts) <-
+                Experimental.from $  Table @Person
+                         `InnerJoin` Table @Profile
+                   `Experimental.on` (\(people :& profiles) ->
+                                        people ^. PersonId ==. profiles ^. ProfilePerson)
+                     `InnerJoin` Table @BlogPost
+                   `Experimental.on` (\(people :& _ :& posts) ->
+                                        people ^. PersonId ==. posts ^. BlogPostAuthorId)
+              pure result
+      rows <- select $ do
+        (persons :& profiles :& posts) <- Experimental.from $ q
+        pure (persons ^. PersonId, profiles ^. ProfileId, posts ^. BlogPostId)
+      let result = coerce rows :: [(PersonId, ProfileId, BlogPostId)]
+      -- We don't care about eh result of the query, only that it
+      -- rendered & executed.
+      asserting noExceptions
 
 listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
