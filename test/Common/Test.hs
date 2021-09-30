@@ -2316,7 +2316,7 @@ testExperimentalFrom = do
       let result = coerce rows :: [(PersonId, ProfileId, BlogPostId)]
       -- We don't care about eh result of the query, only that it
       -- rendered & executed.
-      asserting (null $ drop 1000 result)
+      asserting noExceptions
 
 listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
