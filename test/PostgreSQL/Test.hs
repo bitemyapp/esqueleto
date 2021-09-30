@@ -25,6 +25,7 @@ import qualified Data.Char as Char
 import Data.Coerce
 import Data.Foldable
 import qualified Data.List as L
+import qualified Data.List.NonEmpty as NE
 import Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import Data.Ord (comparing)
@@ -1270,6 +1271,53 @@ testLateralQuery = do
             let _ = res :: [(Entity Lord, Value (Maybe Int))]
             asserting noExceptions
 
+testValuesExpression :: SpecDb
+testValuesExpression = do
+    describe "(VALUES (..)) query" $ do
+        itDb "works with joins and other sql expressions" $ do
+            p1k <- insert p1
+            p2k <- insert p2
+            p3k <- insert p3
+            let exprs :: NE.NonEmpty (SqlExpr (Value Int), SqlExpr (Value Text))
+                exprs =   (val 10, val "ten")
+                    NE.:| [ (val 20, val "twenty")
+                        , (val 30, val "thirty") ]
+                query = do
+                    (bound, boundName) :& person <- Experimental.from $
+                        EP.values exprs
+                        `Experimental.InnerJoin` table @Person
+                        `Experimental.on` (\((bound, boundName) :& person) -> person^.PersonAge >=. just bound)
+                    groupBy bound
+                    orderBy [ asc bound ]
+                    pure (bound, count @Int $ person^.PersonName)
+            result <- select query
+            liftIO $ result `shouldBe` [ (Value 10, Value 2)
+                                       , (Value 20, Value 1)
+                                       , (Value 30, Value 1) ]
+
+        itDb "supports single-column query" $ do
+            let query = do
+                    vInt <- Experimental.from $ EP.values $ val 1 NE.:| [ val 2, val 3 ]
+                    pure (vInt :: SqlExpr (Value Int))
+            result <- select query
+            asserting noExceptions
+            liftIO $ result `shouldBe` [ Value 1, Value 2, Value 3 ]
+
+        itDb "supports multi-column query (+ nested simple expression and null)" $ do
+            let query = do
+                    (vInt, vStr, vDouble) <- Experimental.from
+                        $ EP.values $ (val 1, val "str1", coalesce [just $ val 1.0, nothing])
+                                NE.:| [ (val 2, val "str2", just $ val 2.5)
+                                      , (val 3, val "str3", nothing) ]
+                    pure ( vInt :: SqlExpr (Value Int)
+                            , vStr :: SqlExpr (Value Text)
+                            , vDouble :: SqlExpr (Value (Maybe Double)) )
+            result <- select query
+            asserting noExceptions
+            liftIO $ result `shouldBe` [ (Value 1, Value "str1", Value $ Just 1.0)
+                                       , (Value 2, Value "str2", Value $ Just 2.5)
+                                       , (Value 3, Value "str3", Value Nothing) ]
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1362,6 +1410,7 @@ spec = beforeAll mkConnectionPool $ do
                 testJSONInsertions
                 testJSONOperators
         testLateralQuery
+        testValuesExpression
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
