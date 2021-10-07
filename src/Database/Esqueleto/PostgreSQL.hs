@@ -29,6 +29,8 @@ module Database.Esqueleto.PostgreSQL
     , insertSelectWithConflictCount
     , filterWhere
     , values
+    , distinctOn
+    , distinctOnOrderBy
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
