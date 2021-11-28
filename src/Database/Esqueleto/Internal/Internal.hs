@@ -590,10 +590,8 @@ ent ^. field
     ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
 
 viewFieldBuilder :: SqlExpr (Entity val) -> IdentInfo -> FieldDef -> TLB.Builder
-viewFieldBuilder (ERaw m f) info fieldDef 
-    | Just alias <- sqlExprMetaAlias m =
-        fst (f Never info) <> ("." <> useIdent info (aliasedEntityColumnIdent alias fieldDef))
-    | otherwise = sourceIdent info <> "." <> fieldIdent
+viewFieldBuilder (ERaw m f) info fieldDef =
+    sourceIdent info <> "." <> fieldIdent
   where
     sourceIdent = fst <$> f Never
     fieldIdent 
