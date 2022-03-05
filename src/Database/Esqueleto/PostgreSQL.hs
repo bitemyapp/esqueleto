@@ -47,6 +47,7 @@ import Data.Maybe
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
+import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
 import qualified Database.Esqueleto.Experimental.From as Ex
@@ -222,18 +223,44 @@ upsertBy uniqueKey record updates = do
         Just upsertSql ->
             handler sqlB upsertSql
   where
-    addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
-    entDef = entityDef (Just record)
-    updatesText conn = first builderToText $ renderUpdates conn updates
+    addVals l =
+        map toPersistValue (toPersistFields record) ++ l ++ case updates of
+            [] ->
+                []
+            _ ->
+                persistUniqueToValues uniqueKey
+    entDef =
+        entityDef (Just record)
+    updatesText conn =
+        case updates of
+            [] ->
+                ("", [])
+            _ ->
+                first builderToText $ renderUpdates conn updates
 #if MIN_VERSION_persistent(2,11,0)
     uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
         let (updateText, updateVals) =
                 updatesText sqlB
-            queryText =
+            queryTextUnmodified =
                 upsertSql entDef uniqueFields updateText
+            queryText =
+                case updates of
+                    [] ->
+                        let
+                            (okay, _bad) =
+                                Text.breakOn "DO UPDATE" queryTextUnmodified
+                            good =
+                                okay <> "DO NOTHING RETURNING ??"
+                        in
+                            good
+                    _ ->
+                        queryTextUnmodified
+
             queryVals =
-                addVals updateVals
+                addVals $ case updates of
+                    [] -> []
+                    _ -> updateVals
         xs <- rawSql queryText queryVals
         pure (head xs)
 #else
@@ -248,10 +275,7 @@ upsertBy uniqueKey record updates = do
 -- Example of usage:
 --
 -- @
--- share [ mkPersist sqlSettings
---       , mkDeleteCascade sqlSettings
---       , mkMigrate "migrate"
---       ] [persistLowerCase|
+-- 'mkPersist' 'sqlSettings' ['persistLowerCase'|
 --   Bar
 --     num Int
 --     deriving Eq Show
@@ -261,17 +285,19 @@ upsertBy uniqueKey record updates = do
 --     deriving Eq Show
 -- |]
 --
--- insertSelectWithConflict
---   UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
---   (from $ \b ->
---     return $ Foo <# (b ^. BarNum)
---   )
---   (\current excluded ->
---     [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
---   )
+-- action = do
+--     'insertSelectWithConflict'
+--         UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
+--         (do
+--             b <- from $ table \@Bar
+--             return $ Foo <# (b ^. BarNum)
+--         )
+--         (\\current excluded ->
+--             [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
+--         )
 -- @
 --
--- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique,
+-- Inserts to table @Foo@ all @Bar.num@ values and in case of conflict @SomeFooUnique@,
 -- the conflicting value is updated to the current plus the excluded.
 --
 -- @since 3.1.3

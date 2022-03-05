@@ -33,8 +33,6 @@ test-ghcid-build:
 		--restart "stack.yaml" \
 		--restart "esqueleto.cabal"
 
-
-
 init-pgsql:
 	sudo -u postgres -- createuser -s esqutest
 

@@ -51,6 +51,34 @@ import Common.Test
 import Common.Test.Import hiding (from, on)
 import PostgreSQL.MigrateJSON
 
+spec :: Spec
+spec = beforeAll mkConnectionPool $ do
+    tests
+
+    describe "PostgreSQL specific tests" $ do
+        testAscRandom random_
+        testRandomMath
+        testSelectDistinctOn
+        testPostgresModule
+        testPostgresqlOneAscOneDesc
+        testPostgresqlTwoAscFields
+        testPostgresqlSum
+        testPostgresqlRandom
+        testPostgresqlUpdate
+        testPostgresqlCoalesce
+        testPostgresqlTextFunctions
+        testInsertUniqueViolation
+        testUpsert
+        testInsertSelectWithConflict
+        testFilterWhere
+        testCommonTableExpressions
+        setDatabaseState insertJsonValues cleanJSON
+            $ describe "PostgreSQL JSON tests" $ do
+                testJSONInsertions
+                testJSONOperators
+        testLateralQuery
+        testValuesExpression
+
 returningType :: forall a m . m a -> m a
 returningType a = a
 
@@ -1038,18 +1066,20 @@ testInsertUniqueViolation =
       sqlErrorHint = ""}
 
 testUpsert :: SpecDb
-testUpsert =
-  describe "Upsert test" $ do
+testUpsert = describe "Upsert test" $ do
     itDb "Upsert can insert like normal" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u1e `shouldBe` u1
+        u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+        liftIO $ entityVal u1e `shouldBe` u1
     itDb "Upsert performs update on collision" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u1e `shouldBe` u1
-      u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u2e `shouldBe` u2
-      u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
+        u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+        liftIO $ entityVal u1e `shouldBe` u1
+        u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
+        liftIO $ entityVal u2e `shouldBe` u2
+        u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
+        liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
+    itDb "Works with no updates" $ do
+        _ <- EP.upsert u1 []
+        pure ()
 
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
@@ -1378,39 +1408,6 @@ selectJSON f = select $ from $ \v -> do
     f $ just (v ^. JsonValue)
     return v
 
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
-
-
-
-spec :: Spec
-spec = beforeAll mkConnectionPool $ do
-    tests
-
-    describe "PostgreSQL specific tests" $ do
-        testAscRandom random_
-        testRandomMath
-        testSelectDistinctOn
-        testPostgresModule
-        testPostgresqlOneAscOneDesc
-        testPostgresqlTwoAscFields
-        testPostgresqlSum
-        testPostgresqlRandom
-        testPostgresqlUpdate
-        testPostgresqlCoalesce
-        testPostgresqlTextFunctions
-        testInsertUniqueViolation
-        testUpsert
-        testInsertSelectWithConflict
-        testFilterWhere
-        testCommonTableExpressions
-        setDatabaseState insertJsonValues cleanJSON
-            $ describe "PostgreSQL JSON tests" $ do
-                testJSONInsertions
-                testJSONOperators
-        testLateralQuery
-        testValuesExpression
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
