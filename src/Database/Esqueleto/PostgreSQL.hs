@@ -232,11 +232,7 @@ upsertBy uniqueKey record updates = do
     entDef =
         entityDef (Just record)
     updatesText conn =
-        case updates of
-            [] ->
-                ("", [])
-            _ ->
-                first builderToText $ renderUpdates conn updates
+        first builderToText $ renderUpdates conn updates
 #if MIN_VERSION_persistent(2,11,0)
     uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
