@@ -1066,7 +1066,7 @@ testInsertUniqueViolation =
       sqlErrorHint = ""}
 
 testUpsert :: SpecDb
-testUpsert = describe "Upsert test" $ do
+testUpsert = focus $ describe "Upsert test" $ do
     itDb "Upsert can insert like normal" $  do
         u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
         liftIO $ entityVal u1e `shouldBe` u1
@@ -1077,9 +1077,16 @@ testUpsert = describe "Upsert test" $ do
         liftIO $ entityVal u2e `shouldBe` u2
         u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
         liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
-    itDb "Works with no updates" $ do
-        _ <- EP.upsert u1 []
-        pure ()
+    describe "With no updates" $ do
+        itDb "Works with no updates" $ do
+            _ <- EP.upsert u1 []
+            pure ()
+        itDb "Works with no updates, twice" $ do
+            Entity u1Key u1' <- EP.upsert u1 []
+            Entity u1Key_ u1'' <- EP.upsert u1 { oneUniqueName = "Something Else" } []
+            pure ()
+            -- liftIO $ do
+            --     u1 `shouldBe` u1'
 
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
