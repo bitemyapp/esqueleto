@@ -1,7 +1,7 @@
 3.5.3.1
 =======
 - @parsonsmatt
-    - [#](https://github.com/bitemyapp/esqueleto/pull/)
+    - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
         - Fix `upsert` and `upsertBy` to produce `INSERT ... ON CONFLICT DO
           NOTHING` code when given an empty list.
 

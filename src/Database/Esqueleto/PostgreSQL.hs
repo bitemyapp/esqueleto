@@ -45,16 +45,16 @@ import Data.Int (Int64)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe
 import Data.Proxy (Proxy(..))
+import qualified Data.Text as Text
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
-import qualified Data.Text as Text
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
 import qualified Database.Esqueleto.Experimental.From as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
