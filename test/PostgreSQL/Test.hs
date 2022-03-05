@@ -52,7 +52,7 @@ import Common.Test.Import hiding (from, on)
 import PostgreSQL.MigrateJSON
 
 spec :: Spec
-spec = focus $ beforeAll mkConnectionPool $ do
+spec = beforeAll mkConnectionPool $ do
     tests
 
     describe "PostgreSQL specific tests" $ do
