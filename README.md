@@ -488,5 +488,5 @@ user which can access it:
 mysql> CREATE DATABASE esqutest;
 mysql> CREATE USER 'travis'@'localhost';
 mysql> ALTER USER 'travis'@'localhost' IDENTIFIED BY 'esqutest';
-mysql> GRANT ALL ON esqutest.* TO 'travis';
+mysql> GRANT ALL ON esqutest.* TO 'travis'@'localhost';
 ```
