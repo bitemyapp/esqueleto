@@ -29,6 +29,8 @@ module Database.Esqueleto.PostgreSQL
     , insertSelectWithConflictCount
     , filterWhere
     , values
+    , distinctOn
+    , distinctOnOrderBy
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -41,6 +43,7 @@ import Control.Exception (throw)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
+import qualified Control.Monad.Trans.Writer as W
 import Data.Int (Int64)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe
@@ -48,12 +51,14 @@ import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
+import Database.Esqueleto.Internal.Internal hiding
+       (distinctOn, distinctOnOrderBy, random_)
+
 import qualified Database.Esqueleto.Experimental as Ex
 import qualified Database.Esqueleto.Experimental.From as Ex
-import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
@@ -63,6 +68,68 @@ import Database.Persist.SqlBackend
 random_ :: (PersistField a, Num a) => SqlExpr (Value a)
 random_ = unsafeSqlValue "RANDOM()"
 
+-- | @DISTINCT ON@.  Change the current @SELECT@ into
+-- @SELECT DISTINCT ON (SqlExpressions)@.  For example:
+--
+-- @
+-- select $ do
+--   foo <- 'from' $ table \@Foo
+--   'distinctOn' ['don' (foo ^. FooName), 'don' (foo ^. FooState)]
+--   pure foo
+-- @
+--
+-- You can also chain different calls to 'distinctOn'.  The
+-- above is equivalent to:
+--
+-- @
+-- select $ do
+--   foo <- 'from' $ table \@Foo
+--   'distinctOn' ['don' (foo ^. FooName)]
+--   'distinctOn' ['don' (foo ^. FooState)]
+--   pure foo
+-- @
+--
+-- Each call to 'distinctOn' adds more SqlExpressions.  Calls to
+-- 'distinctOn' override any calls to 'distinct'.
+--
+-- Note that PostgreSQL requires the SqlExpressions on @DISTINCT
+-- ON@ to be the first ones to appear on a @ORDER BY@.  This is
+-- not managed automatically by esqueleto, keeping its spirit
+-- of trying to be close to raw SQL.
+--
+-- @since 3.6.0
+distinctOn :: [SqlExpr DistinctOn] -> SqlQuery ()
+distinctOn exprs = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
+
+-- | A convenience function that calls both 'distinctOn' and
+-- 'orderBy'.  In other words,
+--
+-- @
+-- 'distinctOnOrderBy' [asc foo, desc bar, desc quux]
+-- @
+--
+-- is the same as:
+--
+-- @
+-- 'distinctOn' [don foo, don  bar, don  quux]
+-- 'orderBy'  [asc foo, desc bar, desc quux]
+--   ...
+-- @
+--
+-- @since 3.6.0
+distinctOnOrderBy :: [SqlExpr OrderBy] -> SqlQuery ()
+distinctOnOrderBy exprs = do
+    distinctOn (toDistinctOn <$> exprs)
+    orderBy exprs
+  where
+    toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
+    toDistinctOn (ERaw m f) = ERaw m $ \p info ->
+        let (b, vals) = f p info
+        in  ( TLB.fromLazyText
+              $ TL.replace " DESC" ""
+              $ TL.replace " ASC" ""
+              $ TLB.toLazyText b
+            , vals )
 -- | Empty array literal. (@val []@) does unfortunately not work
 emptyArray :: SqlExpr (Value [a])
 emptyArray = unsafeSqlValue "'{}'"
