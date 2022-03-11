@@ -2618,6 +2618,15 @@ rawEsqueleto mode query = do
 -- 'from' $ \\(appointment :: 'SqlExpr' ('Entity' Appointment)) ->
 -- return ()
 -- @
+--
+-- ==== "Database.Esqueleto.Experimental":
+--
+-- @
+--  delete $ do
+--    userFeature <- from $ table @UserFeature
+--    where_ ((userFeature ^. UserFeatureFeature) `notIn` valList allKnownFeatureFlags)
+-- @
+--
 delete
     :: (MonadIO m)
     => SqlQuery ()
