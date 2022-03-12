@@ -1,5 +1,5 @@
 
-3.5.4.0
+3.5.3.1
 =======
 - @jappeace
   - [#303](https://github.com/bitemyapp/esqueleto/pull/303)
