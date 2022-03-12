@@ -1,3 +1,10 @@
+
+3.5.3.1
+=======
+- @jappeace
+  - [#303](https://github.com/bitemyapp/esqueleto/pull/303)
+      - Added docs for delete function for new experimental API.
+
 3.5.3.0
 =======
 - @m4dc4p
