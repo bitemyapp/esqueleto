@@ -1,4 +1,3 @@
-
 3.5.3.1
 =======
 - @jappeace
@@ -11,7 +10,7 @@
   - [#291](https://github.com/bitemyapp/esqueleto/pull/291)
          - Added `ToAlias` and `ToAliasReference` instaces to the `:&` type, mirroring
          the tuple instances for the same classes. See [Issue #290](https://github.com/bitemyapp/esqueleto/issues/290)
-         for discussion.       
+         for discussion.
 - @NikitaRazmakhnin
   - [#284](https://github.com/bitemyapp/esqueleto/pull/284)
         - Add PostgreSQL-specific support of VALUES(..) literals
