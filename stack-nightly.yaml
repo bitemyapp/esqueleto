@@ -1,6 +1,14 @@
-resolver: nightly-2021-05-05
+resolver: nightly-2022-03-29
+
 packages:
-  - '.'
+  - "."
   - 'examples'
 
 
+extra-deps:
+  - time-1.12.1
+  - base-compat-0.12.1
+  - directory-1.3.7.0
+  - process-1.6.14.0
+  - Cabal-3.6.3.0
+  - unix-2.7.2.2
