@@ -1,3 +1,9 @@
+3.5.3.2
+=======
+- @parsonsmatt
+    - [#]()
+        - Bump `time` version bound
+
 3.5.3.1
 =======
 - @jappeace
