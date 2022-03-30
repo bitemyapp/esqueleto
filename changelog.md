@@ -1,7 +1,7 @@
 3.5.3.2
 =======
 - @parsonsmatt
-    - [#]()
+    - [#309](https://github.com/bitemyapp/esqueleto/pull/309)
         - Bump `time` version bound
 
 3.5.3.1
