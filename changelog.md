@@ -1,7 +1,7 @@
 3.5.4.0
 =======
 - @parsonsmatt
-    - []()
+    - [#310](https://github.com/bitemyapp/esqueleto/pull/310)
         - Add instances of `HasField` for `SqlExpr (Entity rec)` and `SqlExpr
           (Maybe (Entity rec))`. These instances allow you to use the
           `OverloadedRecordDot` language extension in GHC 9.2 with SQL
