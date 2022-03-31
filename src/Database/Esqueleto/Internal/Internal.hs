@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeApplications #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -61,7 +62,7 @@ import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.SqlBackend
 import qualified Database.Persist
-import Database.Persist (FieldNameDB(..), EntityNameDB(..))
+import Database.Persist (FieldNameDB(..), EntityNameDB(..), SymbolToField(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
        , keyAndEntityColumnNames
@@ -71,6 +72,7 @@ import Database.Persist.Sql.Util
 import Text.Blaze.Html (Html)
 import Data.Coerce (coerce)
 import Data.Kind (Type)
+import GHC.Records
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -2085,6 +2087,87 @@ entityAsValueMaybe = coerce
 -- string ('TLB.Builder') and a list of values to be
 -- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
+
+-- |  This instance allows you to use @record.field@ notation with GHC 9.2's
+-- @OverloadedRecordDot@ extension.
+--
+-- Example:
+--
+-- @
+-- -- persistent model:
+-- BlogPost
+--     authorId     PersonId
+--     title        Text
+--
+-- -- query:
+-- 'select' $ do
+--     bp <- 'from' $ 'table' \@BlogPost
+--     pure $ bp.title
+-- @
+--
+-- This is exactly equivalent to the following:
+--
+-- @
+-- blogPost :: SqlExpr (Entity BlogPost)
+--
+-- blogPost ^. BlogPostTitle
+-- blogPost ^. #title
+-- blogPost.title
+-- @
+-- There's another instance defined on @'SqlExpr' ('Entity' ('Maybe' rec))@,
+-- which allows you to project from a @LEFT JOIN@ed entity.
+--
+-- @since 3.5.4.0
+instance
+    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+  =>
+    HasField sym (SqlExpr (Entity rec)) (SqlExpr (Value typ))
+  where
+    getField expr = expr ^. symbolToField @sym
+
+-- | This instance allows you to use @record.field@ notation with GC 9.2's
+-- @OverloadedRecordDot@ extension.
+--
+-- Example:
+--
+-- @
+-- -- persistent model:
+-- Person
+--     name         Text
+--
+-- BlogPost
+--     title        Text
+--     authorId     PersonId
+--
+-- -- query:
+--
+-- 'select' $ do
+--     (p :& bp) <- 'from' $
+--         'table' @Person
+--         `leftJoin` table @BlogPost
+--         `on` do
+--             \\(p :& bp) ->
+--                 just p.id ==. bp.authorId
+--     pure (p.name, bp.title)
+-- @
+--
+-- The following forms are all equivalent:
+--
+-- @
+-- blogPost :: SqlExpr (Maybe (Entity BlogPost))
+--
+-- blogPost ?. BlogPostTitle
+-- blogPost ?. #title
+-- blogPost.title
+-- @
+--
+-- @since 3.5.4.0
+instance
+    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+  =>
+    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ)))
+  where
+    getField expr = expr ?. symbolToField @sym
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause
