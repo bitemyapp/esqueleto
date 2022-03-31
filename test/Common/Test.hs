@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -21,6 +20,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
 
 #if __GLASGOW_HASKELL__ >= 902
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -70,9 +70,9 @@ module Common.Test
 import Common.Test.Import hiding (from, on)
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
-import Data.Either
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
+import Data.Either
 import Data.Monoid ((<>))
 import Database.Esqueleto
 import qualified Database.Esqueleto.Experimental as Experimental
