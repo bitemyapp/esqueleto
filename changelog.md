@@ -1,3 +1,12 @@
+3.5.4.0
+=======
+- @parsonsmatt
+    - []()
+        - Add instances of `HasField` for `SqlExpr (Entity rec)` and `SqlExpr
+          (Maybe (Entity rec))`. These instances allow you to use the
+          `OverloadedRecordDot` language extension in GHC 9.2 with SQL
+          representations of database entities.
+
 3.5.3.2
 =======
 - @parsonsmatt

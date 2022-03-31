@@ -22,6 +22,10 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+#if __GLASGOW_HASKELL__ >= 902
+{-# LANGUAGE OverloadedRecordDot #-}
+#endif
+
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
 module Common.Test
@@ -2347,6 +2351,7 @@ tests =
         testOnClauseOrder
         testExperimentalFrom
         testLocking
+        testOverloadedRecordDot
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
@@ -2441,3 +2446,27 @@ shouldBeOnClauseWithoutMatchingJoinException ea =
             pure ()
         _ ->
             expectationFailure $ "Expected OnClauseWithMatchingJoinException, got: " <> show ea
+
+testOverloadedRecordDot :: SpecDb
+testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
+#if __GLASGOW_HASKELL__ >= 902
+    describe "with SqlExpr (Entity rec)" $ do
+        itDb "lets you project from a record" $ do
+            select $ do
+                bp <- Experimental.from $ table @BlogPost
+                pure bp.title
+    describe "with SqlExpr (Maybe (Entity rec))" $ do
+        itDb "lets you project from a Maybe record" $ do
+            select $ do
+                p :& mbp <- Experimental.from $
+                    table @Person
+                    `leftJoin` table @BlogPost
+                        `Experimental.on` do
+                            \(p :& mbp) ->
+                                just p.id ==. mbp.authorId
+                pure (p.id, mbp.title)
+
+#else
+    it "is only supported in GHC 9.2 or above" $ \_ -> do
+        pending
+#endif
