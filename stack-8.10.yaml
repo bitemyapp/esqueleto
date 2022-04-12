@@ -3,11 +3,6 @@ resolver: lts-19.3
 packages:
   - '.'
   - 'examples'
-  - ../persistent/persistent/
-  - ../persistent/persistent-postgresql/
-  - ../persistent/persistent-mysql/
-  - ../persistent/persistent-sqlite/
-  - ../persistent/persistent-test/
 
 allow-newer: true
 
