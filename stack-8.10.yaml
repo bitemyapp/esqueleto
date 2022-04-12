@@ -1,12 +1,10 @@
-resolver: lts-17.8
+resolver: lts-19.3
 
 packages:
   - '.'
   - 'examples'
 
+allow-newer: true
+
 extra-deps:
 - lift-type-0.1.0.1
-- persistent-2.13.0.0
-- persistent-sqlite-2.13.0.0
-- persistent-mysql-2.13.0.0
-- persistent-postgresql-2.13.0.0
