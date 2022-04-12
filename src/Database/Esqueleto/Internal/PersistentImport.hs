@@ -1,3 +1,5 @@
+{-# language CPP #-}
+
 -- | Re-export "Database.Persist.Sql" without any clashes with
 -- @esqueleto@.
 module Database.Esqueleto.Internal.PersistentImport
@@ -70,13 +72,16 @@ module Database.Esqueleto.Internal.PersistentImport
     , keyAndEntityFields
     , PersistStore
     , PersistUnique
-    , DeleteCascade(..)
     , PersistConfig(..)
     , BackendSpecificUpdate
     , Entity(..)
     , PersistEntity(..)
     , PersistField(..)
+#if MIN_VERSION_persistent(2,14,0)
+#else
+    , DeleteCascade(..)
     , SomePersistField(..)
+#endif
     , PersistQueryRead(..)
     , PersistQueryWrite(..)
     , BackendCompatible(..)

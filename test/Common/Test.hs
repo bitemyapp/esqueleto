@@ -87,6 +87,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
 import qualified UnliftIO.Resource as R
+import Database.Persist.Class.PersistEntity
 
 import Common.Test.Select
 
@@ -2357,6 +2358,9 @@ insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
            , PersistStore backend
            , MonadIO m
+#if MIN_VERSION_persistent(2,14,0)
+           , SafeToInsert val
+#endif
            , PersistEntity val )
         => val -> ReaderT backend m (Entity val)
 insert' v = flip Entity v <$> insert v

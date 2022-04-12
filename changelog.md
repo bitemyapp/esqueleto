@@ -1,3 +1,9 @@
+3.5.4.1
+=======
+- @parsonsmatt
+    - [#]()
+        - Support `persistent-2.14.0.0`
+
 3.5.4.0
 =======
 - @parsonsmatt
