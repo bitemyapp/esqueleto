@@ -1406,25 +1406,29 @@ data Insertion a
 -- are no guarantees that they will behave the same.
 --
 -- @since 2.2.7
-data LockingKind
-    = ForUpdate
+data LockingKind where
+    ForUpdate :: LockingKind
       -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    | ForUpdateSkipLocked
+    ForUpdateSkipLocked :: LockingKind
       -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    | ForShare
+    ForShare :: LockingKind
       -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
       --
       -- @since 2.2.7
-    | LockInShareMode
+    LockInShareMode :: LockingKind
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
+    ForUpdateOfSkipLocked :: PersistEntity val => (SqlExpr (Entity val)) -> LockingKind
+      -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
+      --
+      -- @since 3.5.4.0
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -2804,7 +2808,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeHaving     info havingClause
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
-        , makeLocking         lockingClause
+        , makeLocking    info lockingClause
         ]
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -3037,13 +3041,15 @@ makeLimit (conn, _) (Limit ml mo) =
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
-makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
+makeLocking :: IdentInfo -> LockingClause -> (TLB.Builder, [PersistValue])
+makeLocking info = flip (,) [] . maybe mempty toTLB . Monoid.getLast
   where
     toTLB ForUpdate           = "\nFOR UPDATE"
     toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
     toTLB ForShare            = "\nFOR SHARE"
     toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
+    toTLB (ForUpdateOfSkipLocked (ERaw _ f))=
+      "\nFOR UPDATE OF " <> fst (f Never info) <> " SKIP LOCKED"
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
