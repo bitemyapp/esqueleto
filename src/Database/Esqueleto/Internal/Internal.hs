@@ -3038,14 +3038,15 @@ makeLimit (conn, _) (Limit ml mo) =
     in (TLB.fromText limitRaw, mempty)
 
 makeLocking :: IdentInfo -> LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking info = flip (,) [] . maybe mempty toTLB . Monoid.getLast
-  where
-    toTLB ForUpdate           = "\nFOR UPDATE"
-    toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
-    toTLB ForShare            = "\nFOR SHARE"
-    toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
-    toTLB (ForUpdateOfSkipLocked (ERaw _ f))=
-      "\nFOR UPDATE OF " <> fst (f Never info) <> " SKIP LOCKED"
+makeLocking info lockingClause = 
+  case Monoid.getLast lockingClause of
+    Just ForUpdate           -> ("\nFOR UPDATE", [])
+    Just ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
+    Just ForShare            -> ("\nFOR SHARE", [])
+    Just LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
+    Just (ForUpdateOfSkipLocked (ERaw _ f)) -> 
+      first (\name -> "\nFOR UPDATE OF " <> name <> " SKIP LOCKED") (f Never info)
+    Nothing -> mempty
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
