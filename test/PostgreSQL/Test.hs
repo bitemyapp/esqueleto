@@ -12,10 +12,11 @@
 module PostgreSQL.Test where
 
 import Control.Arrow ((&&&))
+import Control.Concurrent (forkIO)
 import Control.Monad (void, when)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
-import Control.Monad.Trans.Reader (ReaderT, ask, mapReaderT)
+import Control.Monad.Trans.Reader (ReaderT, ask, mapReaderT, runReaderT)
 import qualified Control.Monad.Trans.Resource as R
 import Data.Aeson hiding (Value)
 import qualified Data.Aeson as A (Value)
@@ -45,6 +46,7 @@ import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
+import Test.Hspec.Core.Spec (sequential)
 import Test.Hspec.QuickCheck
 
 import Common.Test
@@ -1227,6 +1229,169 @@ testCommonTableExpressions = do
             pure res
         asserting $ vals `shouldBe` fmap Value [2..11]
 
+testPostgresqlLocking :: SpecDb
+testPostgresqlLocking =
+    describe "For update skip locked locking" $ sequential $ do
+      let mkInitialStateForLockingTest connection =
+            flip runSqlPool connection $ do
+                  p1k <- insert p1
+                  p2k <- insert p2
+                  p3k <- insert p3
+                  blogPosts <- mapM insert'
+                    [ BlogPost "A" p1k
+                    , BlogPost "B" p2k
+                    , BlogPost "C" p3k ]
+                  pure ([p1k, p2k, p3k], entityKey <$> blogPosts)
+          cleanupLockingTest connection (personKeys, blogPostKeys) =
+              flip runSqlPool connection $ do
+                void $ forM_ blogPostKeys P.delete
+                void $ forM_ personKeys P.delete
+      aroundWith (\testAction connection -> do
+        bracket (mkInitialStateForLockingTest connection) (cleanupLockingTest connection) $ \(personKeys, blogPostKeys) ->
+            testAction (connection, personKeys, blogPostKeys)
+        ) $ do
+              it "skips locked rows for a locking select" $ \(connection, personKeys, blogPostKeys) -> do
+                    waitMainThread <- newEmptyMVar
+
+                    let sideThread :: IO Expectation
+                        sideThread = do
+                          flip runSqlPool connection $ do
+
+                            _ <- takeMVar waitMainThread
+                            nonLockedRowsNonSpecified <-
+                              select $ do
+                                  p <- Experimental.from $ table @Person
+                                  locking (ForUpdateSkipLocked)
+                                  return p
+
+                            nonLockedRowsSpecifiedTable <-
+                              select $ do
+                                from $ \(p `LeftOuterJoin` b) -> do
+                                  on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                  EP.forUpdateOfSkipLocked [LockableEntity p]
+                                  return p
+
+                            nonLockedRowsSpecifyAllTables <-
+                              select $ do
+                                from $ \(p `InnerJoin` b) -> do
+                                  on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                  EP.forUpdateOfSkipLocked [LockableEntity p,LockableEntity b]
+                                  return p
+
+                            pure $ do
+                                  nonLockedRowsNonSpecified `shouldBe` []
+                                  nonLockedRowsSpecifiedTable `shouldBe` []
+                                  nonLockedRowsSpecifyAllTables `shouldBe` []
+
+                    withAsync sideThread $ \sideThreadAsync -> do
+                      void $ flip runSqlPool connection $ do
+                        void $ select $ do
+                              person <- Experimental.from $ table @Person
+                              locking (ForUpdate)
+                              pure $ person ^. PersonId
+
+                        _ <- putMVar waitMainThread ()
+                        sideThreadAsserts <- wait sideThreadAsync
+                        nonLockedRowsAfterUpdate <- select $ do
+                                              from $ \(p `LeftOuterJoin` b) -> do
+                                                on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                                EP.forUpdateOfSkipLocked [LockableEntity p]
+                                                return p
+
+                        asserting $ sideThreadAsserts
+                        asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
+
+              it "skips locked rows for a subselect update" $ \(connection, personKeys, blogPostKeys)-> do
+                  waitMainThread <- newEmptyMVar
+
+                  let sideThread :: IO Expectation
+                      sideThread =
+                            flip runSqlPool connection $ do
+                              liftIO $ takeMVar waitMainThread
+
+                              nonLockedRowsSpecifiedTable <-
+                                select $ do
+                                   from $ \(p `LeftOuterJoin` b) -> do
+                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                     EP.forUpdateOfSkipLocked [LockableEntity p]
+                                     return p
+
+                              pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
+
+                  withAsync sideThread $ \sideThreadAsync -> do
+                    void $ flip runSqlPool connection $ do
+                      update $ \p -> do
+                            set p [ PersonName =. val "ChangedName" ]
+                            where_ $ p ^. PersonId
+                              `in_` (subList_select $ do
+                                        person <- Experimental.from $ table @Person
+                                        limit 1
+                                        locking (ForUpdate)
+                                        pure $ person ^. PersonId)
+
+                      liftIO $ putMVar waitMainThread ()
+                      sideThreadAsserts <- wait sideThreadAsync
+                      nonLockedRowsAfterUpdate <- select $ do
+                                            from $ \(p `LeftOuterJoin` b) -> do
+                                              on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                              EP.forUpdateOfSkipLocked [LockableEntity p]
+                                              return p
+
+                      asserting sideThreadAsserts
+                      asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
+
+              it "skips locked rows for a subselect join update" $ \(connection, personKeys, blogPostKeys) -> do
+                  waitMainThread <- newEmptyMVar
+
+                  let sideThread :: IO Expectation
+                      sideThread =
+                            flip runSqlPool connection $ do
+                                liftIO $ takeMVar waitMainThread
+                                lockedRows <-
+                                  select $ do
+                                    from $ \(p `LeftOuterJoin` b) -> do
+                                      on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                      where_ (b ^. BlogPostTitle ==. val "A")
+                                      EP.forUpdateOfSkipLocked [LockableEntity p]
+                                      return p
+
+                                nonLockedRows <-
+                                  select $ do
+                                    from $ \(p `LeftOuterJoin` b) -> do
+                                      on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                      EP.forUpdateOfSkipLocked [LockableEntity p]
+                                      return p
+
+                                pure $ do
+                                    lockedRows `shouldBe` []
+                                    length nonLockedRows `shouldBe` 2
+
+                  withAsync sideThread $ \sideThreadAsync -> do
+                    void $ flip runSqlPool connection $ do
+                      update $ \p -> do
+                            set p [ PersonName =. val "ChangedName" ]
+                            where_ $ p ^. PersonId
+                              `in_` (subList_select $ do
+                                      (people :& blogPosts) <-
+                                          Experimental.from $ table @Person
+                                          `Experimental.leftJoin` table @BlogPost
+                                          `Experimental.on` (\(people :& blogPosts) ->
+                                                  just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+                                      where_ (blogPosts ?. BlogPostTitle ==. just (val "A"))
+                                      pure $ people ^. PersonId
+                                    )
+
+                      liftIO $ putMVar waitMainThread ()
+                      sideThreadAsserts <- wait sideThreadAsync
+                      nonLockedRowsAfterUpdate <- select $ do
+                                            from $ \(p `LeftOuterJoin` b) -> do
+                                              on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                              EP.forUpdateOfSkipLocked [LockableEntity p]
+                                              return p
+
+                      asserting sideThreadAsserts
+                      asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
+
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
 testLateralQuery :: SpecDb
@@ -1434,6 +1599,7 @@ spec = beforeAll mkConnectionPool $ do
         testLateralQuery
         testValuesExpression
         testSubselectAliasingBehavior
+        testPostgresqlLocking
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do

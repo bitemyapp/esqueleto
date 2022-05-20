@@ -27,6 +27,7 @@ module Database.Esqueleto.PostgreSQL
     , upsertBy
     , insertSelectWithConflict
     , insertSelectWithConflictCount
+    , forUpdateOfSkipLocked
     , filterWhere
     , values
     -- * Internal
@@ -434,3 +435,6 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+forUpdateOfSkipLocked :: [LockableEntity] -> SqlQuery ()
+forUpdateOfSkipLocked = locking . ForUpdateOfSkipLocked
