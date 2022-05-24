@@ -1265,14 +1265,14 @@ testPostgresqlLocking =
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [p])
+                        locking (ForUpdateOfSkipLocked [LockableEntity p])
                         return p
                   
                   nonLockedRowsSpecifyAllTables <-
                     select $ do
-                      from $ \(p `innerJoin` b) -> do
+                      from $ \(p `InnerJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [p,b])
+                        locking (ForUpdateOfSkipLocked [LockableEntity p,LockableEntity b])
                         return p
 
                   liftIO $ putMVar assertions $
@@ -1292,7 +1292,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [p])
+                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
@@ -1325,7 +1325,7 @@ testPostgresqlLocking =
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [p])
+                        locking (ForUpdateOfSkipLocked [LockableEntity p])
                         return p
 
                   liftIO $ putMVar assertions $
@@ -1347,7 +1347,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [p])
+                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
@@ -1381,14 +1381,14 @@ testPostgresqlLocking =
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
                         where_ (b ^. BlogPostTitle ==. val "A")
-                        locking (ForUpdateOfSkipLocked [p])
+                        locking (ForUpdateOfSkipLocked [LockableEntity p])
                         return p
 
                   nonLockedRows <-
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [p])
+                        locking (ForUpdateOfSkipLocked [LockableEntity p])
                         return p
 
                   liftIO $ putMVar assertions $
@@ -1415,7 +1415,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [p])
+                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
