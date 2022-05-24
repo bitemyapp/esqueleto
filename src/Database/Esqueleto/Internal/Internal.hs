@@ -1426,10 +1426,14 @@ data LockingKind where
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
-    ForUpdateOfSkipLocked :: PersistEntity val => [(SqlExpr (Entity val))] -> LockingKind
+    ForUpdateOfSkipLocked :: [LockableEntity] -> LockingKind
       -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
       --
       -- @since 3.5.4.2
+
+-- | Existential type to wrap table type entities for LockingKind
+data LockableEntity where
+  LockableEntity :: PersistEntity val => (SqlExpr (Entity val)) -> LockableEntity
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -3046,7 +3050,7 @@ makeLocking info lockingClause =
     Just ForShare            -> ("\nFOR SHARE", [])
     Just LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
     Just (ForUpdateOfSkipLocked rawNames) ->
-      let names = uncommas' $ (\(ERaw _ f) -> (f Never info)) <$> rawNames in
+      let names = uncommas' $ (\(LockableEntity (ERaw _ f)) -> (f Never info)) <$> rawNames in
       first (\n -> "\nFOR UPDATE OF " <> n <> " SKIP LOCKED") names
     Nothing -> mempty
 
