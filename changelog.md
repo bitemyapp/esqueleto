@@ -1,3 +1,9 @@
+3.5.4.2
+=======
+- @josephsumabat
+    - [#316](https://github.com/bitemyapp/esqueleto/pull/316)
+      - Support `FOR UPDATE OF tablename SKIP LOCKED` locking kind
+
 3.5.4.1
 =======
 - @parsonsmatt
