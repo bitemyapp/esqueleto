@@ -1429,7 +1429,7 @@ data LockingKind where
     ForUpdateOfSkipLocked :: PersistEntity val => (SqlExpr (Entity val)) -> LockingKind
       -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
       --
-      -- @since 3.5.4.0
+      -- @since 3.5.4.2
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
