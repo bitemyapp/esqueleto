@@ -1431,7 +1431,16 @@ data LockingKind where
       --
       -- @since 3.5.4.2
 
--- | Existential type to wrap table type entities for LockingKind
+-- | Wraps table type entities for usage in LockingKind. Usage:
+-- Example of usage:
+--
+-- @
+-- select $ do
+--   from $ \(p `InnerJoin` b) -> do
+--     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+--   locking (ForUpdateOfSkipLocked [LockableEntity p,LockableEntity b])
+--   return p
+-- @
 data LockableEntity where
   LockableEntity :: PersistEntity val => (SqlExpr (Entity val)) -> LockableEntity
 
