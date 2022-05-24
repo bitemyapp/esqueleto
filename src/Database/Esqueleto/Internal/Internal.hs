@@ -1426,7 +1426,7 @@ data LockingKind where
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
-    ForUpdateOfSkipLocked :: PersistEntity val => (SqlExpr (Entity val)) -> LockingKind
+    ForUpdateOfSkipLocked :: PersistEntity val => [(SqlExpr (Entity val))] -> LockingKind
       -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
       --
       -- @since 3.5.4.2
@@ -3049,8 +3049,9 @@ makeLocking info lockingClause =
     Just ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
     Just ForShare            -> ("\nFOR SHARE", [])
     Just LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
-    Just (ForUpdateOfSkipLocked (ERaw _ f)) ->
-      first (\name -> "\nFOR UPDATE OF " <> name <> " SKIP LOCKED") (f Never info)
+    Just (ForUpdateOfSkipLocked rawNames) ->
+      let names = uncommas' $ (\(ERaw _ f) -> (f Never info)) <$> rawNames in
+      first (\n -> "\nFOR UPDATE OF " <> n <> " SKIP LOCKED") names
     Nothing -> mempty
 
 parens :: TLB.Builder -> TLB.Builder
