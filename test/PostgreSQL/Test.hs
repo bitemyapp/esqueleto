@@ -1235,6 +1235,7 @@ testPostgresqlLocking :: SpecDb
 testPostgresqlLocking =
     -- These tests use a create a fork in order to run two transactions concurrently.
     -- This is necessary in order to test the locking behaviour
+    -- NOTE: If the forked process throws an exception then the test will hang as the assertion "MVar" never gets woken
     describe "For update skip locked locking" $ sequential $ do
         it "skips locked rows for a locking select" $ \connection -> do
           waitForUpdate <- newEmptyMVar
@@ -1264,13 +1265,21 @@ testPostgresqlLocking =
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked p)
+                        locking (ForUpdateOfSkipLocked [p])
+                        return p
+                  
+                  nonLockedRowsSpecifyAllTables <-
+                    select $ do
+                      from $ \(p `innerJoin` b) -> do
+                        on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                        locking (ForUpdateOfSkipLocked [p,b])
                         return p
 
                   liftIO $ putMVar assertions $
                     do
                        nonLockedRowsNonSpecified `shouldBe` []
                        nonLockedRowsSpecifiedTable `shouldBe` []
+                       nonLockedRowsSpecifyAllTables `shouldBe` []
 
           void $ flip runSqlPool connection $ do
             void $ select $ do
@@ -1283,7 +1292,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked p)
+                                    locking (ForUpdateOfSkipLocked [p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
@@ -1316,7 +1325,7 @@ testPostgresqlLocking =
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked p)
+                        locking (ForUpdateOfSkipLocked [p])
                         return p
 
                   liftIO $ putMVar assertions $
@@ -1338,7 +1347,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked p)
+                                    locking (ForUpdateOfSkipLocked [p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
@@ -1372,14 +1381,14 @@ testPostgresqlLocking =
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
                         where_ (b ^. BlogPostTitle ==. val "A")
-                        locking (ForUpdateOfSkipLocked p)
+                        locking (ForUpdateOfSkipLocked [p])
                         return p
 
                   nonLockedRows <-
                     select $ do
                       from $ \(p `LeftOuterJoin` b) -> do
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked p)
+                        locking (ForUpdateOfSkipLocked [p])
                         return p
 
                   liftIO $ putMVar assertions $
@@ -1406,7 +1415,7 @@ testPostgresqlLocking =
             nonLockedRowsAfterUpdate <- select $ do
                                   from $ \(p `LeftOuterJoin` b) -> do
                                     on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked p)
+                                    locking (ForUpdateOfSkipLocked [p])
                                     return p
 
             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
