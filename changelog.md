@@ -1,3 +1,9 @@
+3.5.5.0
+=======
+- @parsonsmatt
+    - [#]()
+        - Add `Eq` and `Show` instances to `:&`
+
 3.5.4.1
 =======
 - @parsonsmatt
