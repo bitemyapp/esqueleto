@@ -39,6 +39,7 @@ import GHC.TypeLits
 -- See the examples at the beginning of this module to see how this
 -- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
+    deriving (Eq, Show)
 infixl 2 :&
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
