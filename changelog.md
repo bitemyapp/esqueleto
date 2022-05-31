@@ -1,7 +1,7 @@
 3.5.5.0
 =======
 - @parsonsmatt
-    - [#]()
+    - [#317](https://github.com/bitemyapp/esqueleto/pull/317)
         - Add `Eq` and `Show` instances to `:&`
 
 3.5.4.1
