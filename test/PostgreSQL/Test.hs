@@ -1233,13 +1233,8 @@ testCommonTableExpressions = do
 
 testPostgresqlLocking :: SpecDb
 testPostgresqlLocking =
-    -- These tests use a create a fork in order to run two transactions concurrently.
-    -- This is necessary in order to test the locking behaviour
-    -- NOTE: If the forked process throws an exception then the test will hang as the assertion "MVar" never gets woken
     describe "For update skip locked locking" $ sequential $ do
         it "skips locked rows for a locking select" $ \connection -> do
-          waitForUpdate <- newEmptyMVar
-          assertions <- newEmptyMVar
 
           (personKeys, blogPostKeys) <- flip runSqlPool connection $ do
               p1k <- insert p1
@@ -1251,9 +1246,9 @@ testPostgresqlLocking =
                 , BlogPost "C" p3k ]
               pure ([p1k, p2k, p3k], entityKey <$> blogPosts)
 
-          void $ forkIO $ do
-               () <- takeMVar waitForUpdate
-               void $ flip runSqlPool connection $ do
+          let sideThread :: IO Expectation
+              sideThread = do
+                flip runSqlPool connection $ do
 
                   nonLockedRowsNonSpecified <-
                     select $ do
@@ -1267,7 +1262,7 @@ testPostgresqlLocking =
                         on (p ^. PersonId ==. b ^. BlogPostAuthorId)
                         locking (ForUpdateOfSkipLocked [LockableEntity p])
                         return p
-                  
+
                   nonLockedRowsSpecifyAllTables <-
                     select $ do
                       from $ \(p `InnerJoin` b) -> do
@@ -1275,37 +1270,33 @@ testPostgresqlLocking =
                         locking (ForUpdateOfSkipLocked [LockableEntity p,LockableEntity b])
                         return p
 
-                  liftIO $ putMVar assertions $
-                    do
-                       nonLockedRowsNonSpecified `shouldBe` []
-                       nonLockedRowsSpecifiedTable `shouldBe` []
-                       nonLockedRowsSpecifyAllTables `shouldBe` []
+                  pure $ do
+                        nonLockedRowsNonSpecified `shouldBe` []
+                        nonLockedRowsSpecifiedTable `shouldBe` []
+                        nonLockedRowsSpecifyAllTables `shouldBe` []
 
-          void $ flip runSqlPool connection $ do
-            void $ select $ do
-                  person <- Experimental.from $ table @Person
-                  locking (ForUpdate)
-                  pure $ person ^. PersonId
-            liftIO $ putMVar waitForUpdate ()
+          withAsync sideThread $ \sideThreadAsync -> do
+            void $ flip runSqlPool connection $ do
+              void $ select $ do
+                    person <- Experimental.from $ table @Person
+                    locking (ForUpdate)
+                    pure $ person ^. PersonId
 
-            forkedAssertions <- liftIO $ takeMVar assertions
-            nonLockedRowsAfterUpdate <- select $ do
-                                  from $ \(p `LeftOuterJoin` b) -> do
-                                    on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
-                                    return p
+              sideThreadAsserts <- wait sideThreadAsync
+              nonLockedRowsAfterUpdate <- select $ do
+                                    from $ \(p `LeftOuterJoin` b) -> do
+                                      on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                      locking (ForUpdateOfSkipLocked [LockableEntity p])
+                                      return p
 
-            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-            liftIO $ forkedAssertions
+              asserting $ sideThreadAsserts
+              asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
           flip runSqlPool connection $ do
             void $ forM_ blogPostKeys P.delete
             void $ forM_ personKeys P.delete
-            transactionSave
 
         it "skips locked rows for a subselect update" $ \connection -> do
-          waitForUpdate <- newEmptyMVar
-          assertions <- newEmptyMVar
 
           (personKeys, blogPostKeys) <- flip runSqlPool connection $ do
               p1k <- insert p1
@@ -1317,50 +1308,46 @@ testPostgresqlLocking =
                 , BlogPost "C" p3k ]
               pure ([p1k, p2k, p3k], entityKey <$> blogPosts)
 
-          void $ forkIO $ do
-               () <- takeMVar waitForUpdate
-               void $ flip runSqlPool connection $ do
+          let sideThread :: IO Expectation
+              sideThread =
+                     flip runSqlPool connection $ do
 
-                  nonLockedRowsSpecifiedTable <-
-                    select $ do
-                      from $ \(p `LeftOuterJoin` b) -> do
-                        on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [LockableEntity p])
-                        return p
+                      nonLockedRowsSpecifiedTable <-
+                         select $ do
+                           from $ \(p `LeftOuterJoin` b) -> do
+                             on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                             locking (ForUpdateOfSkipLocked [LockableEntity p])
+                             return p
 
-                  liftIO $ putMVar assertions $
-                    do
-                       length nonLockedRowsSpecifiedTable `shouldBe` 2
+                      pure $
+                            length nonLockedRowsSpecifiedTable `shouldBe` 2
 
-          void $ flip runSqlPool connection $ do
-            update $ \p -> do
-                  set p [ PersonName =. val "ChangedName" ]
-                  where_ $ p ^. PersonId
-                    `in_` (subList_select $ do
-                              person <- Experimental.from $ table @Person
-                              limit 1
-                              locking (ForUpdate)
-                              pure $ person ^. PersonId)
-            liftIO $ putMVar waitForUpdate ()
+          withAsync sideThread $ \sideThreadAsync -> do
+            void $ flip runSqlPool connection $ do
+              update $ \p -> do
+                    set p [ PersonName =. val "ChangedName" ]
+                    where_ $ p ^. PersonId
+                      `in_` (subList_select $ do
+                                person <- Experimental.from $ table @Person
+                                limit 1
+                                locking (ForUpdate)
+                                pure $ person ^. PersonId)
 
-            forkedAssertions <- liftIO $ takeMVar assertions
-            nonLockedRowsAfterUpdate <- select $ do
-                                  from $ \(p `LeftOuterJoin` b) -> do
-                                    on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
-                                    return p
+              sideThreadAsserts <- wait sideThreadAsync
+              nonLockedRowsAfterUpdate <- select $ do
+                                    from $ \(p `LeftOuterJoin` b) -> do
+                                      on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                      locking (ForUpdateOfSkipLocked [LockableEntity p])
+                                      return p
 
-            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-            liftIO $ forkedAssertions
+              asserting sideThreadAsserts
+              asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
           flip runSqlPool connection $ do
             void $ forM_ blogPostKeys P.delete
             void $ forM_ personKeys P.delete
-            transactionSave
 
         it "skips locked rows for a subselect join update" $ \connection -> do
-          waitForUpdate <- newEmptyMVar
-          assertions <- newEmptyMVar
 
           (personKeys, blogPostKeys) <- flip runSqlPool connection $ do
               p1k <- insert p1
@@ -1372,59 +1359,57 @@ testPostgresqlLocking =
                 , BlogPost "C" p3k ]
               pure ([p1k, p2k, p3k], entityKey <$> blogPosts)
 
-          void $ forkIO $ do
-               () <- takeMVar waitForUpdate
-               void $ flip runSqlPool connection $ do
+          let sideThread :: IO Expectation
+              sideThread =
+                    flip runSqlPool connection $ do
 
-                  lockedRows <-
-                    select $ do
-                      from $ \(p `LeftOuterJoin` b) -> do
-                        on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        where_ (b ^. BlogPostTitle ==. val "A")
-                        locking (ForUpdateOfSkipLocked [LockableEntity p])
-                        return p
+                        lockedRows <-
+                          select $ do
+                            from $ \(p `LeftOuterJoin` b) -> do
+                              on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                              where_ (b ^. BlogPostTitle ==. val "A")
+                              locking (ForUpdateOfSkipLocked [LockableEntity p])
+                              return p
 
-                  nonLockedRows <-
-                    select $ do
-                      from $ \(p `LeftOuterJoin` b) -> do
-                        on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                        locking (ForUpdateOfSkipLocked [LockableEntity p])
-                        return p
+                        nonLockedRows <-
+                          select $ do
+                            from $ \(p `LeftOuterJoin` b) -> do
+                              on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                              locking (ForUpdateOfSkipLocked [LockableEntity p])
+                              return p
 
-                  liftIO $ putMVar assertions $
-                    do
-                       lockedRows `shouldBe` []
-                       length nonLockedRows `shouldBe` 2
+                        pure $ do
+                            lockedRows `shouldBe` []
+                            length nonLockedRows `shouldBe` 2
 
-          void $ flip runSqlPool connection $ do
-            update $ \p -> do
-                  set p [ PersonName =. val "ChangedName" ]
-                  where_ $ p ^. PersonId
-                    `in_` (subList_select $ do
-                            (people :& blogPosts) <-
-                                Experimental.from $ table @Person
-                                `Experimental.leftJoin` table @BlogPost
-                                `Experimental.on` (\(people :& blogPosts) ->
-                                        just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
-                            where_ (blogPosts ?. BlogPostTitle ==. just (val "A"))
-                            pure $ people ^. PersonId
-                          )
-            liftIO $ putMVar waitForUpdate ()
+          withAsync sideThread $ \sideThreadAsync -> do
+            void $ flip runSqlPool connection $ do
+              update $ \p -> do
+                    set p [ PersonName =. val "ChangedName" ]
+                    where_ $ p ^. PersonId
+                      `in_` (subList_select $ do
+                              (people :& blogPosts) <-
+                                  Experimental.from $ table @Person
+                                  `Experimental.leftJoin` table @BlogPost
+                                  `Experimental.on` (\(people :& blogPosts) ->
+                                          just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+                              where_ (blogPosts ?. BlogPostTitle ==. just (val "A"))
+                              pure $ people ^. PersonId
+                            )
 
-            forkedAssertions <- liftIO $ takeMVar assertions
-            nonLockedRowsAfterUpdate <- select $ do
-                                  from $ \(p `LeftOuterJoin` b) -> do
-                                    on (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                                    locking (ForUpdateOfSkipLocked [LockableEntity p])
-                                    return p
+              sideThreadAsserts <- wait sideThreadAsync
+              nonLockedRowsAfterUpdate <- select $ do
+                                    from $ \(p `LeftOuterJoin` b) -> do
+                                      on (p ^. PersonId ==. b ^. BlogPostAuthorId)
+                                      locking (ForUpdateOfSkipLocked [LockableEntity p])
+                                      return p
 
-            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-            liftIO $ forkedAssertions
+              asserting sideThreadAsserts
+              asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
           flip runSqlPool connection $ do
             void $ forM_ blogPostKeys P.delete
             void $ forM_ personKeys P.delete
-            transactionSave
 
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
