@@ -276,8 +276,8 @@ upsertBy uniqueKey record updates = do
 --
 -- @since 3.1.3
 insertSelectWithConflict
-    :: forall a m val
-     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
+    :: forall a m val backend
+     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val, SqlBackendCanWrite backend)
     => a
     -- ^ Unique constructor or a unique, this is used just to get the name of
     -- the postgres constraint, the value(s) is(are) never used, so if you have
@@ -288,7 +288,7 @@ insertSelectWithConflict
     -- ^ A list of updates to be applied in case of the constraint being
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
-    -> SqlWriteT m ()
+    -> R.ReaderT backend m ()
 insertSelectWithConflict unique query a =
     void $ insertSelectWithConflictCount unique query a
 
@@ -296,12 +296,13 @@ insertSelectWithConflict unique query a =
 --
 -- @since 3.1.3
 insertSelectWithConflictCount
-    :: forall a val m
-     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
+    :: forall a val m backend
+     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val,
+     SqlBackendCanWrite backend)
     => a
     -> SqlQuery (SqlExpr (Insertion val))
     -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
-    -> SqlWriteT m Int64
+    -> R.ReaderT backend m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask
     uncurry rawExecuteCount $
