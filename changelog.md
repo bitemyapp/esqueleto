@@ -1,9 +1,9 @@
 3.5.4.2
 =======
 - @parsonsmatt
-    - [#]()
-        - Remove use of `SqlReadT` type alias so that Simplified Subsumption
-          doesn't bite
+    - [#318](https://github.com/bitemyapp/esqueleto/pull/318)
+        - Remove use of `SqlReadT` and `SqlWriteT` type alias so that Simplified
+          Subsumption doesn't bite end users
 
 3.5.4.1
 =======
