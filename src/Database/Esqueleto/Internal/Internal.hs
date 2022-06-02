@@ -2560,10 +2560,11 @@ rawSelectSource
     ( SqlSelect a r
     , MonadIO m1
     , MonadIO m2
+    , SqlBackendCanRead backend
     )
     => Mode
     -> SqlQuery a
-    -> SqlReadT m1 (Acquire (C.ConduitT () r m2 ()))
+    -> R.ReaderT backend m1 (Acquire (C.ConduitT () r m2 ()))
 rawSelectSource mode query = do
     conn <- projectBackend <$> R.ask
     let _ = conn :: SqlBackend
@@ -2646,9 +2647,10 @@ select
     ::
     ( SqlSelect a r
     , MonadIO m
+    , SqlBackendCanRead backend
     )
     => SqlQuery a
-    -> SqlReadT m [r]
+    -> R.ReaderT backend m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
@@ -2680,7 +2682,7 @@ select query = do
 --      return person
 -- @
 
-selectOne :: (SqlSelect a r, MonadIO m) => SqlQuery a -> SqlReadT m (Maybe r)
+selectOne :: (SqlSelect a r, MonadIO m, SqlBackendCanRead backend) => SqlQuery a -> R.ReaderT backend m (Maybe r)
 selectOne query = fmap Maybe.listToMaybe $ select $ limit 1 >> query
 
 -- | (Internal) Run a 'C.Source' of rows.
@@ -2735,16 +2737,16 @@ rawEsqueleto mode query = do
 -- @
 --
 delete
-    :: (MonadIO m)
+    :: (MonadIO m, SqlBackendCanWrite backend)
     => SqlQuery ()
-    -> SqlWriteT m ()
+    -> R.ReaderT backend m ()
 delete a = void $ deleteCount a
 
 -- | Same as 'delete', but returns the number of rows affected.
 deleteCount
-    :: (MonadIO m)
+    :: (MonadIO m, SqlBackendCanWrite backend)
     => SqlQuery ()
-    -> SqlWriteT m Int64
+    -> R.ReaderT backend m Int64
 deleteCount a = rawEsqueleto DELETE a
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
@@ -2763,9 +2765,10 @@ update
     ::
     ( MonadIO m, PersistEntity val
     , BackendCompatible SqlBackend (PersistEntityBackend val)
+    , SqlBackendCanWrite backend
     )
     => (SqlExpr (Entity val) -> SqlQuery ())
-    -> SqlWriteT m ()
+    -> R.ReaderT backend m ()
 update a = void $ updateCount a
 
 -- | Same as 'update', but returns the number of rows affected.
@@ -2773,9 +2776,10 @@ updateCount
     ::
     ( MonadIO m, PersistEntity val
     , BackendCompatible SqlBackend (PersistEntityBackend val)
+    , SqlBackendCanWrite backend
     )
     => (SqlExpr (Entity val) -> SqlQuery ())
-    -> SqlWriteT m Int64
+    -> R.ReaderT backend m Int64
 updateCount a = rawEsqueleto UPDATE $ from a
 
 builderToText :: TLB.Builder -> T.Text
@@ -3717,16 +3721,16 @@ to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,
 --
 -- @since 2.4.2
 insertSelect
-    :: (MonadIO m, PersistEntity a)
+    :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
-    -> SqlWriteT m ()
+    -> R.ReaderT backend m ()
 insertSelect a = void $ insertSelectCount a
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
 insertSelectCount
-    :: (MonadIO m, PersistEntity a)
+    :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
-    -> SqlWriteT m Int64
+    -> R.ReaderT backend m Int64
 insertSelectCount a = rawEsqueleto INSERT_INTO a
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual

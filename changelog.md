@@ -4,6 +4,20 @@
     - [#316](https://github.com/bitemyapp/esqueleto/pull/316)
       - Support `FOR UPDATE OF tablename SKIP LOCKED` locking kind
 
+
+3.5.5.0
+=======
+- @parsonsmatt
+    - [#317](https://github.com/bitemyapp/esqueleto/pull/317)
+        - Add `Eq` and `Show` instances to `:&`
+
+3.5.4.2
+=======
+- @parsonsmatt
+    - [#318](https://github.com/bitemyapp/esqueleto/pull/318)
+        - Remove use of `SqlReadT` and `SqlWriteT` type alias so that Simplified
+          Subsumption doesn't bite end users
+
 3.5.4.1
 =======
 - @parsonsmatt
