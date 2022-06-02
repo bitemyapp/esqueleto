@@ -1429,7 +1429,7 @@ data LockingKind where
     ForUpdateOfSkipLocked :: [LockableEntity] -> LockingKind
       -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
       --
-      -- @since 3.5.5.0
+      -- @since 3.6.0.0
 
 -- | Wraps table type entities for use with LockingKind. 
 --
@@ -1446,7 +1446,7 @@ data LockingKind where
 --     return p
 -- @
 --
--- @since 3.5.5.0
+-- @since 3.6.0.0
 data LockableEntity where
   LockableEntity :: PersistEntity val => (SqlExpr (Entity val)) -> LockableEntity
 
