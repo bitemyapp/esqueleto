@@ -2536,10 +2536,11 @@ rawSelectSource
     ( SqlSelect a r
     , MonadIO m1
     , MonadIO m2
+    , SqlBackendCanRead backend
     )
     => Mode
     -> SqlQuery a
-    -> SqlReadT m1 (Acquire (C.ConduitT () r m2 ()))
+    -> R.ReaderT backend m1 (Acquire (C.ConduitT () r m2 ()))
 rawSelectSource mode query = do
     conn <- projectBackend <$> R.ask
     let _ = conn :: SqlBackend
@@ -2622,9 +2623,10 @@ select
     ::
     ( SqlSelect a r
     , MonadIO m
+    , SqlBackendCanRead backend
     )
     => SqlQuery a
-    -> SqlReadT m [r]
+    -> R.ReaderT backend m [r]
 select query = do
     res <- rawSelectSource SELECT query
     conn <- R.ask
@@ -2656,7 +2658,7 @@ select query = do
 --      return person
 -- @
 
-selectOne :: (SqlSelect a r, MonadIO m) => SqlQuery a -> SqlReadT m (Maybe r)
+selectOne :: (SqlSelect a r, MonadIO m, SqlBackendCanRead backend) => SqlQuery a -> R.ReaderT backend m (Maybe r)
 selectOne query = fmap Maybe.listToMaybe $ select $ limit 1 >> query
 
 -- | (Internal) Run a 'C.Source' of rows.
