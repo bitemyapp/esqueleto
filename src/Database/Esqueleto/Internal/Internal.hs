@@ -1442,7 +1442,7 @@ data LockingKind where
 --         `innerJoin` table @BlogPost
 --             `on` do
 --                 \(p :& bp) -> p ^. PersonId ==. b ^. BlogPostAuthorId
---     locking (ForUpdateOfSkipLocked [LockableEntity p,LockableEntity b])
+--     forUpdateOfSkipLocked [LockableEntity p,LockableEntity b]
 --     return p
 -- @
 --
