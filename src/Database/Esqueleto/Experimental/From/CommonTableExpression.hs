@@ -33,6 +33,13 @@ import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 -- always verify that using a CTE will in fact improve your performance
 -- over a regular subquery.
 --
+-- Notably, in PostgreSQL prior to version 12, CTEs are always fully
+-- calculated, which can potentially significantly pessimize queries. As of
+-- PostgreSQL 12, non-recursive and side-effect-free queries may be inlined and
+-- optimized accordingly if not declared @MATERIALIZED@ to get the previous
+-- behaviour. See [the PostgreSQL CTE documentation](https://www.postgresql.org/docs/current/queries-with.html#id-1.5.6.12.7),
+-- section Materialization, for more information.
+--
 -- /Since: 3.4.0.0/
 with :: ( ToAlias a
         , ToAliasReference a
