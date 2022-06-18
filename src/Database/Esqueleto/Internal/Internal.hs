@@ -1,18 +1,19 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeApplications #-}
-{-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -26,8 +27,6 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NEL
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -38,6 +37,8 @@ import Control.Monad.Trans.Resource (MonadResource, release)
 import Data.Acquire (Acquire, allocateAcquire, with)
 import Data.Int (Int64)
 import Data.List (intersperse)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NEL
 import qualified Data.Maybe as Maybe
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
@@ -46,9 +47,11 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
+import Data.Kind (Type)
 import qualified Data.Map.Strict as Map
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
@@ -60,19 +63,17 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist.SqlBackend
+import Database.Persist (EntityNameDB(..), FieldNameDB(..), SymbolToField(..))
 import qualified Database.Persist
-import Database.Persist (FieldNameDB(..), EntityNameDB(..), SymbolToField(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
-       , keyAndEntityColumnNames
        , isIdField
+       , keyAndEntityColumnNames
        , parseEntityValues
        )
-import Text.Blaze.Html (Html)
-import Data.Coerce (coerce)
-import Data.Kind (Type)
+import Database.Persist.SqlBackend
 import GHC.Records
+import Text.Blaze.Html (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -1406,25 +1407,48 @@ data Insertion a
 -- are no guarantees that they will behave the same.
 --
 -- @since 2.2.7
-data LockingKind
-    = ForUpdate
+data LockingKind where
+    ForUpdate :: LockingKind
       -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    | ForUpdateSkipLocked
+    ForUpdateSkipLocked :: LockingKind
       -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    | ForShare
+    ForShare :: LockingKind
       -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
       --
       -- @since 2.2.7
-    | LockInShareMode
+    LockInShareMode :: LockingKind
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
+    ForUpdateOfSkipLocked :: [LockableEntity] -> LockingKind
+      -- ^ @FOR UPDATE OF tablename SKIP LOCKED@ syntax. Supported by MySQL, and PostgreSQL
+      --
+      -- @since 3.6.0.0
+
+-- | Wraps table type entities for use with LockingKind. 
+--
+-- Example use:
+--
+-- @
+-- select $ do
+--     (p :& bp) <- from $ 
+--         table @Person
+--         `innerJoin` table @BlogPost
+--             `on` do
+--                 \(p :& bp) -> p ^. PersonId ==. b ^. BlogPostAuthorId
+--     forUpdateOfSkipLocked [LockableEntity p,LockableEntity b]
+--     return p
+-- @
+--
+-- @since 3.6.0.0
+data LockableEntity where
+  LockableEntity :: PersistEntity val => (SqlExpr (Entity val)) -> LockableEntity
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -2804,7 +2828,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeHaving     info havingClause
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
-        , makeLocking         lockingClause
+        , makeLocking    info lockingClause
         ]
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -3037,13 +3061,17 @@ makeLimit (conn, _) (Limit ml mo) =
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
-makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
-  where
-    toTLB ForUpdate           = "\nFOR UPDATE"
-    toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
-    toTLB ForShare            = "\nFOR SHARE"
-    toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
+makeLocking :: IdentInfo -> LockingClause -> (TLB.Builder, [PersistValue])
+makeLocking info lockingClause =
+  case Monoid.getLast lockingClause of
+    Just ForUpdate           -> ("\nFOR UPDATE", [])
+    Just ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
+    Just ForShare            -> ("\nFOR SHARE", [])
+    Just LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
+    Just (ForUpdateOfSkipLocked rawNames) ->
+      let names = uncommas' $ (\(LockableEntity (ERaw _ f)) -> (f Never info)) <$> rawNames in
+      first (\n -> "\nFOR UPDATE OF " <> n <> " SKIP LOCKED") names
+    Nothing -> mempty
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")

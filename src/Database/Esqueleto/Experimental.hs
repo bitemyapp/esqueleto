@@ -174,6 +174,7 @@ module Database.Esqueleto.Experimental
     , OrderBy
     , DistinctOn
     , LockingKind(..)
+    , LockableEntity(..)
     , SqlString
 
       -- ** Joins

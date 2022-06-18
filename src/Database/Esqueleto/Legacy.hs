@@ -84,6 +84,7 @@ module Database.Esqueleto.Legacy
   , OrderBy
   , DistinctOn
   , LockingKind(..)
+  , LockableEntity(..)
   , SqlString
     -- ** Joins
   , InnerJoin(..)
