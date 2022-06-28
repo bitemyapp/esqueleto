@@ -3198,7 +3198,7 @@ instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
     sqlSelectProcessRow _ pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
-materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
+materializeExpr :: IdentInfo -> SqlExpr a -> (TLB.Builder, [PersistValue])
 materializeExpr info (ERaw m f)
     | Just fields <- sqlExprMetaCompositeFields m = (uncommas $ fmap parens $ fields info, [])
     | Just alias <- sqlExprMetaAlias m

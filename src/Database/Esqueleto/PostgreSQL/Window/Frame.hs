@@ -5,7 +5,7 @@ module Database.Esqueleto.PostgreSQL.Window.Frame
     , renderFrame
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
-    , between, unboundedFollowing, unboundedPreceeding, preceeding, following, currentRow
+    , between, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
     )
     where
 
@@ -23,7 +23,7 @@ instance ToFrame Frame where
 
 renderFrame :: IdentInfo -> Frame -> (TLB.Builder, [PersistValue])
 renderFrame info (Frame mKind frameBody mExclusion) =
-    let (kind, kindVals) = maybe mempty (renderFrameKind info) mKind
+    let (kind, kindVals) = maybe ("ROWS ", []) (renderFrameKind info) mKind
         (exclusion, exclusionVals) = maybe mempty (renderFrameExclusion info) mExclusion
         (body, bodyVals) = renderFrameBody info frameBody
     in (" " <> kind <> body <> exclusion, kindVals <> bodyVals <> exclusionVals)
@@ -75,8 +75,8 @@ excludeNoOthers = frameExclusion "NO OTHERS"
 -- This is illegal so `following 10` instead becomes `BETWEEN CURRENT_ROW AND 10 FOLLOWING`
 -- Additionally `BETWEEN` requires that the frame start be before the frame end.
 -- To prevent this error the frame will be flipped automatically.
--- i.e. `between (following 10) (preceeding 10)` becomes `BETWEEEN 10 PRECEEDING AND 10 FOLLOWING`
--- therefore `between (following 10) (preceeding 10) === between (preceeding 10) (following 10)
+-- i.e. `between (following 10) (preceding 10)` becomes `BETWEEEN 10 PRECEEDING AND 10 FOLLOWING`
+-- therefore `between (following 10) (preceding 10) === between (preceding 10) (following 10)
 data FrameBody
     = FrameStart FrameRange
     | FrameBetween FrameRange FrameRange
@@ -102,7 +102,7 @@ instance ToFrame FrameRange where
 
 renderFrameRange :: IdentInfo -> FrameRange -> (TLB.Builder, [PersistValue])
 renderFrameRange _ FrameRangeCurrentRow = ("CURRENT ROW", [])
-renderFrameRange _ (FrameRangePreceeding bounds) = renderBounds bounds <> (" PRECEEDING", [])
+renderFrameRange _ (FrameRangePreceding bounds) = renderBounds bounds <> (" PRECEDING", [])
 renderFrameRange _ (FrameRangeFollowing bounds) = renderBounds bounds <> (" FOLLOWING", [])
 
 renderBounds :: FrameRangeBound -> (TLB.Builder, [PersistValue])
@@ -110,21 +110,21 @@ renderBounds (FrameRangeUnbounded) = ("UNBOUNDED", [])
 renderBounds (FrameRangeBounded i) = ("?", [PersistInt64 i])
 
 data FrameRange
-    = FrameRangePreceeding FrameRangeBound
+    = FrameRangePreceding FrameRangeBound
     | FrameRangeCurrentRow
     | FrameRangeFollowing FrameRangeBound
     deriving Eq
 
 instance Ord FrameRange where
-    FrameRangePreceeding b1 <= FrameRangePreceeding b2 = b1 <= b2
-    FrameRangePreceeding _  <= FrameRangeCurrentRow    = True
-    FrameRangePreceeding _  <= FrameRangeFollowing  _  = True
-    FrameRangeCurrentRow    <= FrameRangePreceeding _  = False
-    FrameRangeCurrentRow    <= FrameRangeCurrentRow    = True
-    FrameRangeCurrentRow    <= FrameRangeFollowing  _  = True
-    FrameRangeFollowing  _  <= FrameRangePreceeding _  = False
-    FrameRangeFollowing  _  <= FrameRangeCurrentRow    = False
-    FrameRangeFollowing  b1 <= FrameRangeFollowing  b2 = b1 <= b2
+    FrameRangePreceding b1 <= FrameRangePreceding b2 = b1 <= b2
+    FrameRangePreceding _  <= FrameRangeCurrentRow   = True
+    FrameRangePreceding _  <= FrameRangeFollowing _  = True
+    FrameRangeCurrentRow   <= FrameRangePreceding _  = False
+    FrameRangeCurrentRow   <= FrameRangeCurrentRow   = True
+    FrameRangeCurrentRow   <= FrameRangeFollowing _  = True
+    FrameRangeFollowing _  <= FrameRangePreceding _  = False
+    FrameRangeFollowing _  <= FrameRangeCurrentRow   = False
+    FrameRangeFollowing b1 <= FrameRangeFollowing b2 = b1 <= b2
 
 data FrameRangeBound
     = FrameRangeUnbounded
@@ -140,11 +140,11 @@ instance Ord FrameRangeBound where
 between :: FrameRange -> FrameRange -> FrameBody
 between = FrameBetween
 
-unboundedPreceeding :: FrameRange
-unboundedPreceeding = FrameRangePreceeding FrameRangeUnbounded
+unboundedPreceding :: FrameRange
+unboundedPreceding = FrameRangePreceding FrameRangeUnbounded
 
-preceeding :: Int64 -> FrameRange
-preceeding offset = FrameRangePreceeding (FrameRangeBounded offset)
+preceding :: Int64 -> FrameRange
+preceding offset = FrameRangePreceding (FrameRangeBounded offset)
 
 following :: Int64 -> FrameRange
 following offset = FrameRangeFollowing (FrameRangeBounded offset)

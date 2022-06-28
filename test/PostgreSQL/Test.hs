@@ -40,6 +40,7 @@ import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
+import qualified Database.Esqueleto.PostgreSQL.WindowFunction as Window 
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import Database.Persist.Postgresql (withPostgresqlConn, createPostgresqlPool)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
@@ -1318,6 +1319,49 @@ testValuesExpression = do
                                        , (Value 2, Value "str2", Value $ Just 2.5)
                                        , (Value 3, Value "str3", Value Nothing) ]
 
+testWindowFunctions :: SpecDb
+testWindowFunctions = do
+    fdescribe "Window Functions" $ do
+        itDb "Supports running Total" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , Window.sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
+                                         <> Window.frame_ Window.unboundedPreceding) 
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldBe` [ (Value 1, Value (Just 2.0)) 
+                                          , (Value 2, Value (Just 6.0))
+                                          , (Value 3, Value (Just 11.0))
+                                          , (Value 6, Value (Just 18.0))]
+
+        itDb "Supports running total minus current row and addition to sum" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , just (n ^. NumbersDouble) +.
+                             Window.sum_ (n ^. NumbersDouble) 
+                                `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
+                                             <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)
+                                             ) 
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldBe` [ (Value 1, Value Nothing) 
+                                          , (Value 2, Value (Just 6.0))
+                                          , (Value 3, Value (Just 11.0))
+                                          , (Value 6, Value (Just 18.0))]
+
+        
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1411,6 +1455,7 @@ spec = beforeAll mkConnectionPool $ do
                 testJSONOperators
         testLateralQuery
         testValuesExpression
+        testWindowFunctions
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
