@@ -1,35 +1,37 @@
+STACK := stack --jobs $(shell nproc)
+
 .PHONY: build
 build:
-	stack build
+	$(STACK) build
 
 .PHONY: build-tests
 build-tests:
-	stack build --test --no-run-tests
+	$(STACK) build --test --no-run-tests
 
 .PHONY: ghci
 ghci:
-	stack ghci
+	$(STACK) ghci
 
 .PHONY: test
 test:
-	stack test
+	$(STACK) test
 
 # Intended for use in local dev
 .PHONY: test-postgresql
 test-postgresql: reset-pgsql
-	stack test esqueleto:postgresql
+	$(STACK) test esqueleto:postgresql
 
 .PHONY: test-mysql
 test-mysql:
-	stack test esqueleto:mysql
+	$(STACK) test esqueleto:mysql
 
 .PHONY: test-ghci
 test-ghci:
-	stack ghci esqueleto:test:sqlite
+	$(STACK) ghci esqueleto:test:sqlite
 
 .PHONY: test-ghcid
 test-ghcid:
-	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto --test" \
+	ghcid -c "$(STACK) ghci --ghci-options -fobject-code esqueleto --test" \
 		--warnings \
 		--restart "stack.yaml" \
 		--restart "esqueleto.cabal" \
@@ -37,7 +39,7 @@ test-ghcid:
 
 .PHONY: test-ghcid-build
 test-ghcid-build:
-	ghcid -c "stack ghci --ghci-options -fobject-code esqueleto --test" \
+	ghcid -c "$(STACK) ghci --ghci-options -fobject-code esqueleto --test" \
 		--warnings \
 		--restart "stack.yaml" \
 		--restart "esqueleto.cabal"
