@@ -42,6 +42,11 @@ test-ghcid-build:
 		--restart "stack.yaml" \
 		--restart "esqueleto.cabal"
 
+.PHONY: haddock doc
+haddock: doc
+doc:
+	$(STACK) haddock
+
 .PHONY: init-pgsql
 init-pgsql:
 	sudo -u postgres -- createuser -s esqutest
