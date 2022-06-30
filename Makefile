@@ -53,6 +53,10 @@ haddock: doc
 doc:
 	$(STACK) haddock
 
+.PHONY: clean
+clean:
+	$(STACK) clean
+
 .PHONY: init-pgsql
 init-pgsql:
 	sudo -u postgres -- createuser -s esqutest
