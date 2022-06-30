@@ -90,6 +90,7 @@ test-suite specs
         Common.Test.Models
         Common.Test.Import
         Common.Test.Select
+        Common.Record
         PostgreSQL.MigrateJSON
         SQLite.Test
         PostgreSQL.Test
