@@ -1,5 +1,9 @@
 STACK := stack --jobs $(shell nproc)
 
+match ?=
+
+STACK_TEST_ARGS := $(if $(match),--test-arguments "--match $(match)",)
+
 .PHONY: build
 build:
 	$(STACK) build
@@ -14,20 +18,20 @@ ghci:
 
 .PHONY: test
 test:
-	$(STACK) test
+	$(STACK) test $(STACK_TEST_ARGS)
 
 # Intended for use in local dev
 .PHONY: test-postgresql
 test-postgresql: reset-pgsql
-	$(STACK) test esqueleto:postgresql
+	$(STACK) test esqueleto:postgresql $(STACK_TEST_ARGS)
 
 .PHONY: test-mysql
 test-mysql:
-	$(STACK) test esqueleto:mysql
+	$(STACK) test esqueleto:mysql $(STACK_TEST_ARGS)
 
 .PHONY: test-ghci
 test-ghci:
-	$(STACK) ghci esqueleto:test:sqlite
+	$(STACK) ghci esqueleto:test:sqlite $(STACK_TEST_ARGS)
 
 .PHONY: test-ghcid
 test-ghcid:
