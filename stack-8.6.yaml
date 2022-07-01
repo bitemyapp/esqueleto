@@ -5,11 +5,7 @@ packages:
   - 'examples'
 
 extra-deps:
-  - git: https://github.com/yesodweb/persistent
-    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
-    subdirs:
-      - persistent
-      - persistent-template
-      - persistent-mysql
-      - persistent-postgresql
-      - persistent-sqlite
+  - persistent-2.14.0.1
+  - lift-type-0.1.0.1
+  - th-lift-instances-0.1.19
+  - th-lift-0.8.2
