@@ -27,8 +27,6 @@ import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-import Database.Persist.Names (EntityNameDB(..))
-
 -- | 'FROM' clause, used to bring entities into scope.
 --
 -- Internally, this function uses the `From` datatype.
