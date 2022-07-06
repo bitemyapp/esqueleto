@@ -16,7 +16,7 @@ import Data.Text (Text)
 import qualified Data.Text as T (concat, pack)
 import qualified Data.Text.Encoding as TE (decodeUtf8, encodeUtf8)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Internal.Internal (SqlExpr, Value, just, val)
+import Database.Esqueleto.Internal.Internal (SqlExpr_, ValueContext, Value, just, val)
 import GHC.Generics (Generic)
 
 -- | Newtype wrapper around any type with a JSON representation.
@@ -41,7 +41,7 @@ newtype JSONB a = JSONB { unJSONB :: a }
 -- | 'SqlExpr' of a NULL-able 'JSONB' value. Hence the 'Maybe'.
 --
 -- Note: NULL here is a PostgreSQL NULL, not a JSON 'null'
-type JSONBExpr a = SqlExpr (Value (Maybe (JSONB a)))
+type JSONBExpr a = SqlExpr_ ValueContext (Value (Maybe (JSONB a)))
 
 -- | Convenience function to lift a regular value into
 -- a 'JSONB' expression.

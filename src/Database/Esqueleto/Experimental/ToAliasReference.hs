@@ -16,22 +16,22 @@ type ToAliasReferenceT a = a
 class ToAliasReference a where
     toAliasReference :: Ident -> a -> SqlQuery a
 
-instance ToAliasReference (SqlExpr (Value a)) where
+instance ToAliasReference (SqlExpr_ ctx (Value a)) where
     toAliasReference aliasSource (ERaw m _)
       | Just alias <- sqlExprMetaAlias m = pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
           (useIdent info aliasSource <> "." <> useIdent info alias, [])
     toAliasReference _ e = pure e
 
-instance ToAliasReference (SqlExpr (Entity a)) where
+instance ToAliasReference (SqlExpr_ ctx (Entity a)) where
     toAliasReference aliasSource (ERaw m _)
       | Just _ <- sqlExprMetaAlias m =
           pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
             (useIdent info aliasSource, [])
     toAliasReference _ e = pure e
 
-instance ToAliasReference (SqlExpr (Maybe (Entity a))) where
+instance ToAliasReference (SqlExpr_ ctx (Maybe (Entity a))) where
     toAliasReference aliasSource e =
-        coerce <$> toAliasReference aliasSource (coerce e :: SqlExpr (Entity a))
+        coerce <$> toAliasReference aliasSource (coerce e :: SqlExpr_ ctx (Entity a))
 
 
 instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a, b) where

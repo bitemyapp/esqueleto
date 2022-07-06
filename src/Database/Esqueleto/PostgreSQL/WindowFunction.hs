@@ -1,7 +1,8 @@
-{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
@@ -14,56 +15,69 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     )
     where
 
-import qualified Data.Text.Lazy.Builder                       as TLB
-import           Database.Esqueleto.Internal.Internal         (NeedParens (..),
-                                                               SqlExpr (..),
-                                                               SqlSelect (..),
-                                                               UnsafeSqlFunctionArgument,
-                                                               Value (..),
-                                                               materializeExpr,
-                                                               noMeta, parens,
-                                                               parensM,
-                                                               unsafeSqlFunction,
-                                                               unsafeSqlValue)
-import           Database.Esqueleto.Internal.PersistentImport (PersistField (..),
-                                                               PersistValue (..))
-import           Database.Esqueleto.PostgreSQL.Window         (Frame,
-                                                               PartitionBy,
-                                                               RenderWindow (..),
-                                                               Window, between,
-                                                               currentRow,
-                                                               excludeCurrentRow,
-                                                               excludeGroup,
-                                                               excludeNoOthers,
-                                                               excludeTies,
-                                                               following,
-                                                               frame_, groups,
-                                                               orderBy_,
-                                                               partitionBy_,
-                                                               preceding,
-                                                               range, rows,
-                                                               unboundedFollowing,
-                                                               unboundedPreceding)
+import Database.Esqueleto.Internal.Internal
+       ( MergeContext
+       , NeedParens(..)
+       , SqlExpr
+       , SqlExpr_(..)
+       , Value(..)
+       , ValueContext
+       , noMeta
+       , parens
+       , parensM
+       , unsafeSqlFunction
+       , unsafeSqlValue
+       )
+import Database.Esqueleto.Internal.PersistentImport (PersistField(..))
+import Database.Esqueleto.PostgreSQL.Window
+       ( Frame
+       , PartitionBy
+       , RenderWindow(..)
+       , Window
+       , between
+       , currentRow
+       , excludeCurrentRow
+       , excludeGroup
+       , excludeNoOthers
+       , excludeTies
+       , following
+       , frame_
+       , groups
+       , orderBy_
+       , partitionBy_
+       , preceding
+       , range
+       , rows
+       , unboundedFollowing
+       , unboundedPreceding
+       )
 
-newtype WindowExpr a = WindowExpr { _unWindowExpr :: SqlExpr a }
+data AggregateContext
+data WindowContext
+type instance MergeContext WindowContext ValueContext = WindowContext
+type instance MergeContext ValueContext WindowContext = WindowContext
+newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
 
-unsafeWindowFunction :: UnsafeSqlFunctionArgument a => TLB.Builder -> a -> WindowExpr (Value b)
-unsafeWindowFunction functionName arguments =
-    WindowExpr $ unsafeSqlFunction functionName arguments
-
-sum_ :: (PersistField a, PersistField b) => SqlExpr (Value a) -> WindowExpr (Value (Maybe b))
-sum_ = unsafeWindowFunction "SUM"
+sum_ :: (PersistField a, PersistField b) => SqlExpr_ ValueContext (Value a) -> SqlExpr_ AggregateContext (Value (Maybe b))
+sum_ = unsafeSqlFunction "SUM"
 
 rowNumber_ :: WindowExpr (Value Integer)
 rowNumber_ = WindowExpr $ unsafeSqlValue "ROW_NUMBER()"
 
-over_ :: RenderWindow window => WindowExpr a -> window -> SqlExpr a
-(WindowExpr (ERaw _ f)) `over_` window =
+class WindowExprC expr where
+    over_ :: RenderWindow window => expr a -> window -> SqlExpr_ WindowContext a
+
+instance WindowExprC WindowExpr where
+    over_ windowExpr window = overImpl (unWindowExpr windowExpr) window
+instance WindowExprC (SqlExpr_ AggregateContext) where
+    over_ = overImpl
+
+overImpl :: RenderWindow window => SqlExpr_ ctx a -> window -> SqlExpr_ WindowContext a
+overImpl (ERaw _ f) window =
     ERaw noMeta $ \p info ->
         let (b, v) = f Never info
             (w, vw) = renderWindow info window
         in (parensM p $ b <> " OVER " <> parens w , v <> vw)
-
 {--
 
 --( "LAG(?) OVER (PARTITION BY ?, ? ORDER BY ? ASC ROWS BETWEEN ? PRECEEDING AND UNBOUNDED FOLLOWING)"
@@ -79,12 +93,10 @@ example =
 
 example2 = countRows_ @Int64 `over_` ()
 
-newtype WindowExpr a = WindowExpr { unsafeWindowExpr :: SqlExpr a }
-
-lag :: SqlExpr (Value a) -> WindowExpr a
+lag :: SqlExpr_ ValueContext (Value a) -> WindowExpr a
 lag v = lag_ v Nothing Nothing
 
-lag_ :: SqlExpr a -> Maybe (SqlExpr Int64) -> Maybe (SqlExpr a) -> WindowExpr a
+lag_ :: SqlExpr_ ValueContext a -> Maybe (SqlExpr_ ValueContext Int64) -> Maybe (SqlExpr_ ValueContext a) -> WindowExpr a
 lag_ v mOffset mDefaultVal =
     coerce $
     case (mOffset, mDefaultVal) of

@@ -15,16 +15,16 @@ class ToMaybe a where
     type ToMaybeT a
     toMaybe :: a -> ToMaybeT a
 
-instance ToMaybe (SqlExpr (Maybe a)) where
-    type ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
+instance ToMaybe (SqlExpr_ ctx (Maybe a)) where
+    type ToMaybeT (SqlExpr_ ctx (Maybe a)) = SqlExpr_ ctx (Maybe a)
     toMaybe = id
 
-instance ToMaybe (SqlExpr (Entity a)) where
-    type ToMaybeT (SqlExpr (Entity a)) = SqlExpr (Maybe (Entity a))
-    toMaybe (ERaw f m) = (ERaw f m)
+instance ToMaybe (SqlExpr_ ctx (Entity a)) where
+    type ToMaybeT (SqlExpr_ ctx (Entity a)) = SqlExpr_ ctx (Maybe (Entity a))
+    toMaybe (ERaw f m) = ERaw f m
 
-instance ToMaybe (SqlExpr (Value a)) where
-    type ToMaybeT (SqlExpr (Value a)) = SqlExpr (Value (Maybe (Nullable a)))
+instance ToMaybe (SqlExpr_ ctx (Value a)) where
+    type ToMaybeT (SqlExpr_ ctx (Value a)) = SqlExpr_ ctx (Value (Maybe (Nullable a)))
     toMaybe = veryUnsafeCoerceSqlExprValue
 
 

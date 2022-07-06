@@ -71,7 +71,7 @@ instance ToFrom (From a) a where
 {-# DEPRECATED Table "@since 3.5.0.0 - use 'table' instead" #-}
 data Table a = Table
 
-instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
+instance PersistEntity ent => ToFrom (Table ent) (SqlExpr_ ValueContext (Entity ent)) where
     toFrom _ = table
 
 -- | Bring a PersistEntity into scope from a table
@@ -81,7 +81,7 @@ instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
 -- @
 --
 -- @since 3.5.0.0
-table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
+table :: forall ent. PersistEntity ent => From (SqlExpr_ ValueContext (Entity ent))
 table = From $ do
     let ed = entityDef (Proxy @ent)
     ident <- newIdentFor (coerce $ getEntityDBName ed)

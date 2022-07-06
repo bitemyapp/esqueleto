@@ -17,7 +17,8 @@ import           Database.Esqueleto.Internal.Internal         (IdentInfo,
                                                                NeedParens (..),
                                                                OrderBy,
                                                                SomeValue (..),
-                                                               SqlExpr (..),
+                                                               SqlExpr_ (..),
+                                                               ValueContext,
                                                                ToSomeValues (..),
                                                                noMeta,
                                                                uncommas')
@@ -41,8 +42,8 @@ import           Database.Esqueleto.PostgreSQL.Window.Frame   (Frame,
 
 
 data Window = Window
-    { windowPartitionBy :: Maybe (First (SqlExpr PartitionBy))
-    , windowOrderBy     :: Maybe [SqlExpr OrderBy]
+    { windowPartitionBy :: Maybe (First (SqlExpr_ ValueContext PartitionBy))
+    , windowOrderBy     :: Maybe [SqlExpr_ ValueContext OrderBy]
     , windowFrame       :: Maybe (First Frame)
     }
 
@@ -68,7 +69,7 @@ partitionBy_ expr =
       renderSomeValues info someValues =
           uncommas' $ fmap (\(SomeValue (ERaw _ f)) -> f Never info) someValues
 
-orderBy_ :: [SqlExpr OrderBy] -> Window
+orderBy_ :: [SqlExpr_ ValueContext OrderBy] -> Window
 orderBy_ []    = mempty
 orderBy_ exprs = mempty{ windowOrderBy = Just exprs }
 
