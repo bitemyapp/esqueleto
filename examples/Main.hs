@@ -64,7 +64,7 @@ putPersons = do
   -- | Select all values from the `person` table
   people <- select $
               from $ \person -> do
-              return person
+              return (person :: SqlExpr (Entity Person))
 
   -- | entityVal extracts the Person value, which we then extract
   -- | the person name from the record and print it

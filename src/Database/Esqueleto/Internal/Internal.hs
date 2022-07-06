@@ -2532,7 +2532,7 @@ veryUnsafeCoerceSqlExprValueList = coerce
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource
-    ::
+    :: forall a r m1 m2 backend.
     ( SqlSelect a r
     , MonadIO m1
     , MonadIO m2
@@ -2554,7 +2554,7 @@ rawSelectSource mode query = do
 
     massage = do
         mrow <- C.await
-        case sqlSelectProcessRow <$> mrow of
+        case sqlSelectProcessRow (Proxy :: Proxy a) <$> mrow of
             Just (Right r)  -> C.yield r >> massage
             Just (Left err) -> liftIO $ throwIO $ PersistMarshalError err
             Nothing         -> return ()
@@ -3062,7 +3062,7 @@ aliasedColumnName (I baseIdent) info columnName =
 -- This looks very similar to @RawSql@, and it is!  However,
 -- there are some crucial differences and ultimately they're
 -- different classes.
-class SqlSelect a r | a -> r, r -> a where
+class SqlSelect a r | a -> r where
     -- | Creates the variable part of the @SELECT@ query and
     -- returns the list of 'PersistValue's that will be given to
     -- 'rawQuery'.
@@ -3072,7 +3072,7 @@ class SqlSelect a r | a -> r, r -> a where
     sqlSelectColCount :: Proxy a -> Int
 
     -- | Transform a row of the result into the data type.
-    sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
+    sqlSelectProcessRow :: Proxy a -> [PersistValue] -> Either T.Text r
 
     -- | Create @INSERT INTO@ clause instead.
     sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
@@ -3097,14 +3097,14 @@ instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) wher
             ("INSERT INTO " <> table e <> parens fields <> "\n", [])
     sqlSelectCols info (ERaw _ f) = f Never info
     sqlSelectColCount   = const 0
-    sqlSelectProcessRow =
+    sqlSelectProcessRow _ =
       const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
 instance SqlSelect () () where
     sqlSelectCols _ _ = ("1", [])
     sqlSelectColCount _ = 1
-    sqlSelectProcessRow _ = Right ()
+    sqlSelectProcessRow _ _ = Right ()
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
@@ -3154,7 +3154,7 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
           in (process, mempty)
 
     sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
-    sqlSelectProcessRow = parseEntityValues ed
+    sqlSelectProcessRow _ = parseEntityValues ed
       where
         ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
 
@@ -3168,9 +3168,9 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
       where
         fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
         fromEMaybe = const Proxy
-    sqlSelectProcessRow cols
+    sqlSelectProcessRow _ cols
         | all (== PersistNull) cols = return Nothing
-        | otherwise                 = Just <$> sqlSelectProcessRow cols
+        | otherwise                 = Just <$> sqlSelectProcessRow (Proxy :: Proxy (SqlExpr (Entity a))) cols
 
 
 -- | You may return any single value (i.e. a single column) from
@@ -3178,8 +3178,8 @@ instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entit
 instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
     sqlSelectCols = materializeExpr
     sqlSelectColCount = const 1
-    sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
-    sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
+    sqlSelectProcessRow _ [pv] = Value <$> fromPersistValue pv
+    sqlSelectProcessRow _ pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
 materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
@@ -3202,7 +3202,7 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
       where
         fromTuple :: Proxy (a,b) -> (Proxy a, Proxy b)
         fromTuple = const (Proxy, Proxy)
-    sqlSelectProcessRow =
+    sqlSelectProcessRow _ =
       let x = getType processRow
           getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
           getType = const Proxy
@@ -3211,8 +3211,8 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
 
           processRow row =
               let (rowFst, rowSnd) = splitAt colCountFst row
-              in (,) <$> sqlSelectProcessRow rowFst
-                     <*> sqlSelectProcessRow rowSnd
+              in (,) <$> sqlSelectProcessRow (Proxy :: Proxy a) rowFst
+                     <*> sqlSelectProcessRow (Proxy :: Proxy b) rowSnd
 
       in colCountFst `seq` processRow
          -- Avoids recalculating 'colCountFst'.
@@ -3228,7 +3228,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc c
       ]
   sqlSelectColCount   = sqlSelectColCount . from3P
-  sqlSelectProcessRow = fmap to3 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to3 . sqlSelectProcessRow (from3P p)
 
 from3P :: Proxy (a,b,c) -> Proxy ((a,b),c)
 from3P = const Proxy
@@ -3252,7 +3252,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc d
       ]
   sqlSelectColCount   = sqlSelectColCount . from4P
-  sqlSelectProcessRow = fmap to4 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to4 . sqlSelectProcessRow (from4P p)
 
 from4P :: Proxy (a,b,c,d) -> Proxy ((a,b),(c,d))
 from4P = const Proxy
@@ -3278,7 +3278,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc e
       ]
   sqlSelectColCount   = sqlSelectColCount . from5P
-  sqlSelectProcessRow = fmap to5 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to5 . sqlSelectProcessRow (from5P p)
 
 from5P :: Proxy (a,b,c,d,e) -> Proxy ((a,b),(c,d),e)
 from5P = const Proxy
@@ -3306,7 +3306,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc f
       ]
   sqlSelectColCount   = sqlSelectColCount . from6P
-  sqlSelectProcessRow = fmap to6 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to6 . sqlSelectProcessRow (from6P p)
 
 from6P :: Proxy (a,b,c,d,e,f) -> Proxy ((a,b),(c,d),(e,f))
 from6P = const Proxy
@@ -3336,7 +3336,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc g
       ]
   sqlSelectColCount   = sqlSelectColCount . from7P
-  sqlSelectProcessRow = fmap to7 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to7 . sqlSelectProcessRow (from7P p)
 
 from7P :: Proxy (a,b,c,d,e,f,g) -> Proxy ((a,b),(c,d),(e,f),g)
 from7P = const Proxy
@@ -3368,7 +3368,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc h
       ]
   sqlSelectColCount   = sqlSelectColCount . from8P
-  sqlSelectProcessRow = fmap to8 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to8 . sqlSelectProcessRow (from8P p)
 
 from8P :: Proxy (a,b,c,d,e,f,g,h) -> Proxy ((a,b),(c,d),(e,f),(g,h))
 from8P = const Proxy
@@ -3402,7 +3402,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc i
       ]
   sqlSelectColCount   = sqlSelectColCount . from9P
-  sqlSelectProcessRow = fmap to9 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to9 . sqlSelectProcessRow (from9P p)
 
 from9P :: Proxy (a,b,c,d,e,f,g,h,i) -> Proxy ((a,b),(c,d),(e,f),(g,h),i)
 from9P = const Proxy
@@ -3438,7 +3438,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc j
       ]
   sqlSelectColCount   = sqlSelectColCount . from10P
-  sqlSelectProcessRow = fmap to10 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to10 . sqlSelectProcessRow (from10P p)
 
 from10P :: Proxy (a,b,c,d,e,f,g,h,i,j) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j))
 from10P = const Proxy
@@ -3476,7 +3476,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc k
       ]
   sqlSelectColCount   = sqlSelectColCount . from11P
-  sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to11 . sqlSelectProcessRow (from11P p)
 
 from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
 from11P = const Proxy
@@ -3513,7 +3513,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc l
       ]
   sqlSelectColCount   = sqlSelectColCount . from12P
-  sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to12 . sqlSelectProcessRow (from12P p)
 
 from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 from12P = const Proxy
@@ -3552,7 +3552,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc m
       ]
   sqlSelectColCount   = sqlSelectColCount . from13P
-  sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to13 . sqlSelectProcessRow (from13P p)
 
 from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 from13P = const Proxy
@@ -3593,7 +3593,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc n
       ]
   sqlSelectColCount   = sqlSelectColCount . from14P
-  sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to14 . sqlSelectProcessRow (from14P p)
 
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
@@ -3636,7 +3636,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc o
       ]
   sqlSelectColCount   = sqlSelectColCount . from15P
-  sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to15 . sqlSelectProcessRow (from15P p)
 
 from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 from15P = const Proxy
@@ -3681,7 +3681,7 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc p
       ]
   sqlSelectColCount   = sqlSelectColCount . from16P
-  sqlSelectProcessRow = fmap to16 . sqlSelectProcessRow
+  sqlSelectProcessRow p = fmap to16 . sqlSelectProcessRow (from16P p)
 
 from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 from16P = const Proxy

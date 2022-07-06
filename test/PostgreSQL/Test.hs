@@ -1062,12 +1062,12 @@ testInsertSelectWithConflict =
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
-      uniques1 <- select $ from $ \u -> return u
+      uniques1 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
       n2 <- EP.insertSelectWithConflictCount UniqueValue (
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
-      uniques2 <- select $ from $ \u -> return u
+      uniques2 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
       liftIO $ n1 `shouldBe` 3
       liftIO $ n2 `shouldBe` 0
       let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
@@ -1082,12 +1082,12 @@ testInsertSelectWithConflict =
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques1 <- select $ from $ \u -> return u
+        uniques1 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
         n2 <- EP.insertSelectWithConflictCount UniqueValue (
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques2 <- select $ from $ \u -> return u
+        uniques2 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
         liftIO $ n1 `shouldBe` 3
         liftIO $ n2 `shouldBe` 3
         let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]

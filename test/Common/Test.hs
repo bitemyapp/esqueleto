@@ -332,7 +332,7 @@ testSelectSource = do
                 query =
                     selectSource $
                     from $ \person ->
-                    return person
+                    return (person :: SqlExpr (Entity Person))
             p1e <- insert' p1
             ret <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
             asserting $ ret `shouldBe` [ p1e ]
@@ -343,7 +343,7 @@ testSelectSource = do
                 query =
                     selectSource $
                     from $ \person ->
-                    return person
+                    return (person :: SqlExpr (Entity Person))
             p1e <- insert' p1
             ret0 <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
             ret1 <- mapReaderT R.runResourceT $ runConduit $ query .| CL.consume
@@ -375,7 +375,7 @@ testSelectFrom = do
             ret <-
                 select $
                 from $ \person ->
-                return person
+                return (person :: SqlExpr (Entity Person))
             asserting $ ret `shouldBe` [ p1e ]
 
         itDb "works for a simple self-join (one entity)" $ do
@@ -383,7 +383,7 @@ testSelectFrom = do
             ret <-
                 select $
                 from $ \(person1, person2) ->
-                return (person1, person2)
+                return (person1 :: SqlExpr (Entity Person), person2 :: SqlExpr (Entity Person))
             asserting $ ret `shouldBe` [ (p1e, p1e) ]
 
         itDb "works for a simple self-join (two entities)" $ do
@@ -392,7 +392,7 @@ testSelectFrom = do
             ret <-
                 select $
                 from $ \(person1, person2) ->
-                return (person1, person2)
+                return (person1 :: SqlExpr (Entity Person), person2 :: SqlExpr (Entity Person))
             asserting $
                 ret
                     `shouldSatisfy`
@@ -506,7 +506,7 @@ testSelectFrom = do
                 number = 101 :: Int
                 Right thePk = keyFromValues [toPersistValue number]
             fcPk <- insert fc
-            [Entity _ ret] <- select $ from return
+            [Entity _ ret] <- select $ Experimental.from $ table @Frontcover 
             asserting $ do
                 ret `shouldBe` fc
                 fcPk `shouldBe` thePk

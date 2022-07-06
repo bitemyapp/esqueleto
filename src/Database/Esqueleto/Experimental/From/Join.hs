@@ -56,12 +56,11 @@ instance ValidOnClause (a -> SqlQuery b)
 -- @since 3.5.2.0
 instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
     sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
-    sqlSelectColCount = sqlSelectColCount . toTuple
-      where
-        toTuple :: Proxy (a :& b) -> Proxy (a, b)
-        toTuple = const Proxy
-    sqlSelectProcessRow = fmap (uncurry (:&)) . sqlSelectProcessRow
+    sqlSelectColCount = sqlSelectColCount . toTupleP
+    sqlSelectProcessRow p = fmap (uncurry (:&)) . sqlSelectProcessRow (toTupleP p)
 
+toTupleP :: Proxy (a :& b) -> Proxy (a, b)
+toTupleP = const Proxy
 -- | Identical to the tuple instance and provided for convenience.
 --
 -- @since 3.5.3.0
