@@ -1063,12 +1063,12 @@ testInsertSelectWithConflict =
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
-      uniques1 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
+      uniques1 <- select $ Experimental.from $ Experimental.table @OneUnique
       n2 <- EP.insertSelectWithConflictCount UniqueValue (
           from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
         )
         (\current excluded -> [])
-      uniques2 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
+      uniques2 <- select $ Experimental.from $ Experimental.table @OneUnique
       liftIO $ n1 `shouldBe` 3
       liftIO $ n2 `shouldBe` 0
       let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
@@ -1083,12 +1083,12 @@ testInsertSelectWithConflict =
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques1 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
+        uniques1 <- select $ Experimental.from $ Experimental.table @OneUnique
         n2 <- EP.insertSelectWithConflictCount UniqueValue (
             from $ \p -> return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
           )
           (\current excluded -> [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques2 <- select $ from $ \u -> return (u :: SqlExpr (Entity OneUnique))
+        uniques2 <- select $ Experimental.from $ Experimental.table @OneUnique
         liftIO $ n1 `shouldBe` 3
         liftIO $ n2 `shouldBe` 3
         let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
@@ -1321,8 +1321,49 @@ testValuesExpression = do
 
 testWindowFunctions :: SpecDb
 testWindowFunctions = do
-    fdescribe "Window Functions" $ do
-        itDb "Supports running Total" $ do
+    describe "Window Functions" $ do
+
+        itDb "supports over ()" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , Window.sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` ()
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldMatchList` 
+                                          [ (Value 1, Value (Just 18.0)) 
+                                          , (Value 2, Value (Just 18.0))
+                                          , (Value 3, Value (Just 18.0))
+                                          , (Value 6, Value (Just 18.0))]
+
+        itDb "supports partitioning" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            
+            let (%.)  = ES.unsafeSqlBinOp " % "
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , Window.sum_ @_ @Double (n ^. NumbersDouble) 
+                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldMatchList` 
+                                          [ (Value 1, Value (Just 7.0)) 
+                                          , (Value 2, Value (Just 11.0))
+                                          , (Value 3, Value (Just 7.0))
+                                          , (Value 6, Value (Just 11.0))
+                                          ]
+
+        itDb "supports running total" $ do
             _ <- insert $ Numbers 1 2
             _ <- insert $ Numbers 2 4
             _ <- insert $ Numbers 3 5
@@ -1340,7 +1381,7 @@ testWindowFunctions = do
                                           , (Value 3, Value (Just 11.0))
                                           , (Value 6, Value (Just 18.0))]
 
-        itDb "Supports running total minus current row and addition to sum" $ do
+        itDb "supports running total excluding current row and addition to sum" $ do
             _ <- insert $ Numbers 1 2
             _ <- insert $ Numbers 2 4
             _ <- insert $ Numbers 3 5
