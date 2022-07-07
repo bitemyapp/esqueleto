@@ -210,12 +210,14 @@ sqlFieldType fieldType = do
         AppT (ConT ((==) ''Entity -> True)) _innerType -> AppT (ConT ''SqlExpr) fieldType
 
         -- Maybe (Entity x) -> SqlExpr (Maybe (Entity x))
-        AppT
-          (ConT ((==) ''Maybe -> True))
-          (AppT (ConT ((==) ''Entity -> True)) _innerType) -> AppT (ConT ''SqlExpr) fieldType
+        (ConT ((==) ''Maybe -> True))
+          `AppT` ((ConT ((==) ''Entity -> True))
+                  `AppT` _innerType) -> AppT (ConT ''SqlExpr) fieldType
 
         -- x -> SqlExpr (Value x)
-        _ -> AppT (ConT ''SqlExpr) (AppT (ConT ''Value) fieldType)
+        _ -> (ConT ''SqlExpr)
+                `AppT` ((ConT ''Value)
+                        `AppT` fieldType)
 
 -- | Generates the declaration for an @Sql@-prefixed record, given the original
 -- record's information.
@@ -238,9 +240,9 @@ makeSqlSelectInstance info@RecordInfo {..} = do
   let overlap = Nothing
       instanceConstraints = []
       instanceType =
-        AppT
-          (AppT (ConT ''SqlSelect) (ConT sqlName))
-          (ConT name)
+        (ConT ''SqlSelect)
+          `AppT` (ConT sqlName)
+          `AppT` (ConT name)
 
   pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
 
@@ -281,9 +283,9 @@ sqlSelectColsDec RecordInfo {..} = do
           , RecP sqlName fieldPatterns
           ]
           ( NormalB $
-              AppE
-                (AppE (VarE 'sqlSelectCols) (VarE identInfo))
-                (ParensE joinedFields)
+              (VarE 'sqlSelectCols)
+                `AppE` (VarE identInfo)
+                `AppE` (ParensE joinedFields)
           )
           -- `where` clause.
           []
@@ -357,24 +359,17 @@ sqlSelectProcessRowDec RecordInfo {..} = do
       [ Clause
           [VarP colsName]
           ( NormalB $
-              AppE
-                ( AppE
-                    (VarE 'first)
-                    ( InfixE
-                        (Just $ AppE
+              (VarE 'first)
+              `AppE` (InfixE
+                        (Just $
                           (VarE 'fromString)
+                          `AppE`
                           (LitE $ StringL $ "Failed to parse " ++ nameBase name ++ ": "))
                         (VarE '(<>))
-                        Nothing
-                    )
-                )
-                ( AppE
-                    ( AppE
-                        (VarE 'evalStateT)
-                        (VarE processName)
-                    )
-                    (VarE colsName)
-                )
+                        Nothing)
+              `AppE` ((VarE 'evalStateT)
+                      `AppE` (VarE processName)
+                      `AppE` (VarE colsName))
           )
           -- `where` clause
           [ ValD
@@ -384,7 +379,7 @@ sqlSelectProcessRowDec RecordInfo {..} = do
 #if MIN_VERSION_template_haskell(2,17,0)
                     Nothing
 #endif
-                    (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE constructorName fieldExps)])
+                    (statements ++ [NoBindS $ (VarE 'pure) `AppE` (RecConE constructorName fieldExps)])
               )
               []
           ]
@@ -409,9 +404,9 @@ sqlSelectProcessRowPat fieldType var = do
         -- Entity x -> var
         AppT (ConT ((==) ''Entity -> True)) _innerType -> pure $ VarP var
         -- Maybe (Entity x) -> var
-        AppT
-          (ConT ((==) ''Maybe -> True))
-          (AppT (ConT ((==) ''Entity -> True)) _innerType) -> pure $ VarP var
+        (ConT ((==) ''Maybe -> True))
+          `AppT` ((ConT ((==) ''Entity -> True))
+                  `AppT` _innerType) -> pure $ VarP var
         -- x -> Value var
 #if MIN_VERSION_template_haskell(2,18,0)
         _ -> pure $ ConP 'Value [] [VarP var]

@@ -20,9 +20,9 @@
 module Common.Record (testDeriveEsqueletoRecord) where
 
 import Common.Test.Import hiding (from, on)
-import Database.Esqueleto.Record (deriveEsqueletoRecord)
-import Database.Esqueleto.Experimental
 import Data.List (sortOn)
+import Database.Esqueleto.Experimental
+import Database.Esqueleto.Record (deriveEsqueletoRecord)
 
 data MyRecord =
     MyRecord
