@@ -5,8 +5,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Database.Esqueleto.Record
@@ -19,6 +17,7 @@ import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
 import Database.Esqueleto.Internal.Internal (SqlSelect(..))
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
 import Data.Bifunctor (first)
 import Data.Text (Text)
 import Control.Monad (forM)
@@ -353,24 +352,17 @@ sqlSelectProcessRowDec RecordInfo {..} = do
   --         (evalStateT $processName $colsName)
   --   where $processName = do $statements
   --                           pure $name {$fieldExps}
+  bodyExp <- [e|
+    first (fromString ("Failed to parse " ++ $(lift $ nameBase name) ++ ": ") <>)
+          (evalStateT $(varE processName) $(varE colsName))
+    |]
+
   pure $
     FunD
       'sqlSelectProcessRow
       [ Clause
           [VarP colsName]
-          ( NormalB $
-              (VarE 'first)
-              `AppE` (InfixE
-                        (Just $
-                          (VarE 'fromString)
-                          `AppE`
-                          (LitE $ StringL $ "Failed to parse " ++ nameBase name ++ ": "))
-                        (VarE '(<>))
-                        Nothing)
-              `AppE` ((VarE 'evalStateT)
-                      `AppE` (VarE processName)
-                      `AppE` (VarE colsName))
-          )
+          (NormalB bodyExp)
           -- `where` clause
           [ ValD
               (VarP processName)
@@ -379,7 +371,7 @@ sqlSelectProcessRowDec RecordInfo {..} = do
 #if MIN_VERSION_template_haskell(2,17,0)
                     Nothing
 #endif
-                    (statements ++ [NoBindS $ (VarE 'pure) `AppE` (RecConE constructorName fieldExps)])
+                    (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE constructorName fieldExps)])
               )
               []
           ]
