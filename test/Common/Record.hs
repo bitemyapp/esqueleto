@@ -35,6 +35,15 @@ data MyRecord =
 
 $(deriveEsqueletoRecord ''MyRecord)
 
+data MyNestedRecord =
+    MyNestedRecord
+        { myName :: Text
+        , myRecord :: MyRecord
+        }
+  deriving (Show, Eq)
+
+$(deriveEsqueletoRecord ''MyNestedRecord)
+
 myRecordQuery :: SqlQuery SqlMyRecord
 myRecordQuery = do
   user :& address <- from $
