@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskellQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -338,7 +339,7 @@ sqlSelectProcessRowDec RecordInfo {..} = do
     FunD
       'sqlSelectProcessRow
       [ Clause
-          [VarP colsName]
+          [WildP, VarP colsName]
           ( NormalB $
               AppE
                 ( AppE
@@ -412,7 +413,7 @@ takeColumns = StateT (\pvs ->
         splitAt targetColCount pvs
    in if length target == targetColCount
         then do
-          value <- sqlSelectProcessRow target
+          value <- sqlSelectProcessRow (Proxy @a) target
           Right (value, other)
         else Left "Insufficient columns when trying to parse a column")
 
