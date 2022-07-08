@@ -1,3 +1,8 @@
+3.5.6.0
+=======
+- @9999years
+    - [#323](https://github.com/bitemyapp/esqueleto/pull/323)
+        - Add ability to derive esqueleto instances for records
 
 3.5.5.0
 =======

@@ -49,11 +49,8 @@ import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
-import qualified Database.Esqueleto.Experimental.From as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
-import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
-import Database.Persist.Class (OnlyOneUniqueKey)
-import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy, uniqueFields)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
@@ -328,9 +325,9 @@ insertSelectWithConflictCount unique query conflictQuery = do
       ] ++ if null updates then [TLB.fromText "NOTHING"] else [
         TLB.fromText "UPDATE SET ",
         updatesTLB
-      ]),values)
+      ]),values')
       where
-        (updatesTLB,values) = renderedUpdates conn
+        (updatesTLB,values') = renderedUpdates conn
 
 -- | Allow aggregate functions to take a filter clause.
 --

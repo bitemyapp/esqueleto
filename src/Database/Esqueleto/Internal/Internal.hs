@@ -62,7 +62,6 @@ import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
 import Database.Persist.SqlBackend
 import qualified Database.Persist
-import Database.Persist (FieldNameDB(..), EntityNameDB(..), SymbolToField(..))
 import Database.Persist.Sql.Util
        ( entityColumnCount
        , keyAndEntityColumnNames
@@ -1801,8 +1800,25 @@ instance Show FromClause where
             "(FromRaw _)"
 
       where
+        -- We just want to use this to render expressions for a `Show` instance
+        -- so we leave most of the fields undefined. But we explicitly
+        -- initialize them to `undefined` so that GHC doesn't complain.
         dummy = mkSqlBackend MkSqlBackendArgs
             { connEscapeRawName = id
+            , connPrepare = undefined
+            , connInsertSql = undefined
+            , connStmtMap = undefined
+            , connClose = undefined
+            , connMigrateSql = undefined
+            , connBegin = undefined
+            , connCommit = undefined
+            , connRollback = undefined
+            , connEscapeFieldName  = undefined
+            , connEscapeTableName = undefined
+            , connNoLimit = undefined
+            , connRDBMS = undefined
+            , connLimitOffset = undefined
+            , connLogFunc = undefined
             }
         render' = T.unpack . renderExpr dummy
 

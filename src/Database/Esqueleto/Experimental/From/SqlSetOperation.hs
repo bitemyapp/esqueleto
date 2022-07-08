@@ -126,5 +126,6 @@ intersect_ :: (ToSqlSetOperation a a', ToSqlSetOperation b a') => a -> b -> SqlS
 intersect_ = mkSetOperation " INTERSECT "
 
 {-# DEPRECATED SelectQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SelectQuery@" #-}
+pattern SelectQuery :: p -> p
 pattern SelectQuery a = a
 
