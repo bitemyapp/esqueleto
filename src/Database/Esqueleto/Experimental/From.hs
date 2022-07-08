@@ -100,9 +100,9 @@ table = From $ do
 
 {-# DEPRECATED SubQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SubQuery@" #-}
 newtype SubQuery a = SubQuery a
-instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SubQuery (SqlQuery a)) a where
+instance (SqlSelect a r, ToAlias a, ToAliasReference a a') => ToFrom (SubQuery (SqlQuery a)) a' where
     toFrom (SubQuery q) = selectQuery q
-instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a where
+instance (SqlSelect a r, ToAlias a, ToAliasReference a a') => ToFrom (SqlQuery a) a' where
     toFrom = selectQuery
 
 -- | Select from a subquery, often used in conjuction with joins but can be
@@ -120,7 +120,8 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a
 -- @
 --
 -- @since 3.5.0.0
-selectQuery :: (SqlSelect a r, ToAlias a, ToAliasReference a) => SqlQuery a -> From a
+selectQuery :: (SqlSelect a r, ToAlias a, ToAliasReference a a')
+            => SqlQuery a -> From a'
 selectQuery subquery = From $ do
     -- We want to update the IdentState without writing the query to side data
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery

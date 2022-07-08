@@ -85,8 +85,8 @@ import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
-import qualified UnliftIO.Resource as R
 import Database.Persist.Class.PersistEntity
+import qualified UnliftIO.Resource as R
 
 import Common.Test.Select
 import Common.Record (testDeriveEsqueletoRecord)
@@ -220,10 +220,7 @@ testSubSelect = do
 
     describe "subSelectMaybe" $ do
         itDb "is equivalent to joinV . subSelect" $ do
-            let query
-                    :: (SqlQuery (SqlExpr (Value (Maybe Int))) -> SqlExpr (Value (Maybe Int)))
-                    -> SqlQuery (SqlExpr (Value (Maybe Int)))
-                query selector =
+            let query selector =
                     from $ \n -> do
                     pure $
                         selector $
@@ -254,7 +251,7 @@ testSubSelect = do
                         subSelectUnsafe $
                         from $ \n' -> do
                         where_ $ n' ^. NumbersInt >=. n ^. NumbersInt
-                        pure (countRows :: SqlExpr (Value Int))
+                        pure countRows
 
             let getter (Entity _ a, b) = (a, b)
             asserting $
@@ -506,7 +503,7 @@ testSelectFrom = do
                 number = 101 :: Int
                 Right thePk = keyFromValues [toPersistValue number]
             fcPk <- insert fc
-            [Entity _ ret] <- select $ Experimental.from $ table @Frontcover 
+            [Entity _ ret] <- select $ Experimental.from $ table @Frontcover
             asserting $ do
                 ret `shouldBe` fc
                 fcPk `shouldBe` thePk

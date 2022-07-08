@@ -51,25 +51,27 @@ import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
 import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy, uniqueFields)
+import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
 --
 -- @since 2.6.0
-random_ :: (PersistField a, Num a) => SqlExpr_ ValueContext (Value a)
+random_ :: (PersistField a, Num a) => SqlExpr (Value a)
 random_ = unsafeSqlValue "RANDOM()"
 
 -- | Empty array literal. (@val []@) does unfortunately not work
-emptyArray :: SqlExpr_ ValueContext (Value [a])
+emptyArray :: SqlExpr (Value [a])
 emptyArray = unsafeSqlValue "'{}'"
 
 -- | Coalesce an array with an empty default value
 maybeArray ::
      (PersistField a, PersistField [a])
-  => SqlExpr_ ValueContext (Value (Maybe [a]))
-  -> SqlExpr_ ValueContext (Value [a])
-maybeArray x = coalesceDefault [x] (emptyArray)
+  => SqlExpr_ ctx (Value (Maybe [a]))
+  -> SqlExpr_ ctx (Value [a])
+maybeArray x = coalesceDefault [x] (veryUnsafeCoerceSqlExprValue emptyArray)
 
 -- | Aggregate mode
 data AggMode
@@ -87,7 +89,7 @@ unsafeSqlAggregateFunction
     -> AggMode
     -> a
     -> [OrderByClause]
-    -> SqlExpr_ ValueContext (Value b)
+    -> SqlAgg (Value b)
 unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
@@ -111,14 +113,14 @@ unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info
 --- into an array.
 arrayAggWith
     :: AggMode
-    -> SqlExpr_ ValueContext (Value a)
+    -> SqlExpr (Value a)
     -> [OrderByClause]
-    -> SqlExpr_ ValueContext (Value (Maybe [a]))
+    -> SqlAgg (Value (Maybe [a]))
 arrayAggWith = unsafeSqlAggregateFunction "array_agg"
 
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
-arrayAgg :: (PersistField a) => SqlExpr_ ValueContext (Value a) -> SqlExpr_ ValueContext (Value (Maybe [a]))
+arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe [a]))
 arrayAgg x = arrayAggWith AggModeAll x []
 
 -- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
@@ -127,19 +129,19 @@ arrayAgg x = arrayAggWith AggModeAll x []
 -- @since 2.5.3
 arrayAggDistinct
     :: (PersistField a, PersistField [a])
-    => SqlExpr_ ValueContext (Value a)
-    -> SqlExpr_ ValueContext (Value (Maybe [a]))
+    => SqlExpr (Value a)
+    -> SqlAgg (Value (Maybe [a]))
 arrayAggDistinct x = arrayAggWith AggModeDistinct x []
 
 -- | (@array_remove@) Remove all elements equal to the given value from the
 -- array.
 --
 -- @since 2.5.3
-arrayRemove :: SqlExpr_ ValueContext (Value [a]) -> SqlExpr_ ValueContext (Value a) -> SqlExpr_ ValueContext (Value [a])
+arrayRemove :: SqlExpr_ ctx (Value [a]) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value [a])
 arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
 
 -- | Remove @NULL@ values from an array
-arrayRemoveNull :: SqlExpr_ ValueContext (Value [Maybe a]) -> SqlExpr_ ValueContext (Value [a])
+arrayRemoveNull :: SqlExpr_ ctx (Value [Maybe a]) -> SqlExpr_ ctx (Value [a])
 -- This can't be a call to arrayRemove because it changes the value type
 arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 
@@ -149,10 +151,10 @@ arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 stringAggWith ::
      SqlString s
   => AggMode -- ^ Aggregate mode (ALL or DISTINCT)
-  -> SqlExpr_ ValueContext (Value s) -- ^ Input values.
-  -> SqlExpr_ ValueContext (Value s) -- ^ Delimiter.
+  -> SqlExpr (Value s) -- ^ Input values.
+  -> SqlExpr (Value s) -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlExpr_ ValueContext (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlAgg (Value (Maybe s)) -- ^ Concatenation.
 stringAggWith mode expr delim os =
   unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
 
@@ -162,19 +164,19 @@ stringAggWith mode expr delim os =
 -- @since 2.2.8
 stringAgg ::
      SqlString s
-  => SqlExpr_ ValueContext (Value s) -- ^ Input values.
-  -> SqlExpr_ ValueContext (Value s) -- ^ Delimiter.
-  -> SqlExpr_ ValueContext (Value (Maybe s)) -- ^ Concatenation.
+  => SqlExpr (Value s) -- ^ Input values.
+  -> SqlExpr (Value s) -- ^ Delimiter.
+  -> SqlAgg (Value (Maybe s)) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
 -- depend on the character set of your database.)
 --
 -- @since 2.2.11
-chr :: SqlString s => SqlExpr_ ValueContext (Value Int) -> SqlExpr_ ValueContext (Value s)
+chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
 chr = unsafeSqlFunction "chr"
 
-now_ :: SqlExpr_ ValueContext (Value UTCTime)
+now_ :: SqlExpr (Value UTCTime)
 now_ = unsafeSqlFunction "NOW" ()
 
 upsert
@@ -356,11 +358,11 @@ insertSelectWithConflictCount unique query conflictQuery = do
 --
 -- @since 3.3.3.3
 filterWhere
-    :: SqlExpr_ ValueContext (Value a)
+    :: SqlExpr_ ctx (Value a)
     -- ^ Aggregate function
-    -> SqlExpr_ ValueContext (Value Bool)
+    -> SqlExpr (Value Bool)
     -- ^ Filter clause
-    -> SqlExpr_ ValueContext (Value a)
+    -> SqlExpr_ ctx (Value a)
 filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     let (aggBuilder, aggValues) = case aggExpr of
             ERaw _ aggF     -> aggF Never info
@@ -399,7 +401,7 @@ filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
 -- @
 --
 -- @since 3.5.2.3
-values :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
+values :: (ToSomeValues a, Ex.ToAliasReference a a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
 values exprs = Ex.From $ do
     ident <- newIdentFor $ DBName "vq"
     alias <- Ex.toAlias $ NE.head exprs

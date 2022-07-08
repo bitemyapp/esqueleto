@@ -40,9 +40,9 @@ import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
-import qualified Database.Esqueleto.PostgreSQL.WindowFunction as Window 
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import Database.Persist.Postgresql (withPostgresqlConn, createPostgresqlPool)
+import qualified Database.Esqueleto.PostgreSQL.WindowFunction as Window
+import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
@@ -1111,29 +1111,29 @@ testFilterWhere =
       -- Person "Mitch"  Nothing   Nothing   5
       _ <- insert p5
 
-      usersByAge <- fmap coerce <$> do
+      usersByAge <- do
           select $ from $ \users -> do
             groupBy $ users ^. PersonAge
             return
-              ( users ^. PersonAge :: SqlExpr (Value (Maybe Int))
+              ( users ^. PersonAge
               -- Nothing: [Rachel { favNum = 2 }, Mitch { favNum = 5 }] = 2
               -- Just 36: [John { favNum = 1 } (excluded)] = 0
               -- Just 17: [Mike { favNum = 3 }, Livia { favNum = 4 }] = 2
               , count (users ^. PersonId) `EP.filterWhere` (users ^. PersonFavNum >=. val 2)
-                :: SqlExpr (Value Int)
               -- Nothing: [Rachel { favNum = 2 } (excluded), Mitch { favNum = 5 } (excluded)] = 0
               -- Just 36: [John { favNum = 1 }] = 1
               -- Just 17: [Mike { favNum = 3 } (excluded), Livia { favNum = 4 } (excluded)] = 0
               , count (users ^. PersonFavNum) `EP.filterWhere` (users ^. PersonFavNum <. val 2)
-                :: SqlExpr (Value Int)
               )
 
-      liftIO $ usersByAge `shouldMatchList`
-        ( [ (Nothing, 2, 0)
-          , (Just 36, 0, 1)
-          , (Just 17, 2, 0)
-          ] :: [(Maybe Int, Int, Int)]
-        )
+      asserting $ usersByAge `shouldMatchList`
+          (
+              [ (Value Nothing, Value 2, Value 0)
+              , (Value (Just 36), Value 0, Value 1)
+              , (Value (Just 17), Value 2, Value 0)
+              ] :: [(Value (Maybe Int), Value Int, Value Int)]
+          )
+
 
     itDb "adds a filter clause to sum aggregation" $  do
       -- Person "John"   (Just 36) Nothing   1
@@ -1331,12 +1331,12 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` ()
+                         , sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` ()
                          )
             result <- select query
             asserting noExceptions
-            asserting $ result `shouldMatchList` 
-                                          [ (Value 1, Value (Just 18.0)) 
+            asserting $ result `shouldMatchList`
+                                          [ (Value 1, Value (Just 18.0))
                                           , (Value 2, Value (Just 18.0))
                                           , (Value 3, Value (Just 18.0))
                                           , (Value 6, Value (Just 18.0))]
@@ -1346,18 +1346,18 @@ testWindowFunctions = do
             _ <- insert $ Numbers 2 4
             _ <- insert $ Numbers 3 5
             _ <- insert $ Numbers 6 7
-            
+
             let (%.)  = ES.unsafeSqlBinOp " % "
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @_ @Double (n ^. NumbersDouble) 
+                         , sum_ @_ @Double (n ^. NumbersDouble)
                             `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
                          )
             result <- select query
             asserting noExceptions
-            asserting $ result `shouldMatchList` 
-                                          [ (Value 1, Value (Just 7.0)) 
+            asserting $ result `shouldMatchList`
+                                          [ (Value 1, Value (Just 7.0))
                                           , (Value 2, Value (Just 11.0))
                                           , (Value 3, Value (Just 7.0))
                                           , (Value 6, Value (Just 11.0))
@@ -1371,12 +1371,12 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
-                                         <> Window.frame_ Window.unboundedPreceding) 
+                         , sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
+                                         <> Window.frame_ Window.unboundedPreceding)
                          )
             result <- select query
             asserting noExceptions
-            asserting $ result `shouldBe` [ (Value 1, Value (Just 2.0)) 
+            asserting $ result `shouldBe` [ (Value 1, Value (Just 2.0))
                                           , (Value 2, Value (Just 6.0))
                                           , (Value 3, Value (Just 11.0))
                                           , (Value 6, Value (Just 18.0))]
@@ -1390,19 +1390,37 @@ testWindowFunctions = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
                          , just (n ^. NumbersDouble) +.
-                             Window.sum_ (n ^. NumbersDouble) 
+                             sum_ (n ^. NumbersDouble)
                                 `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                              <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)
-                                             ) 
+                                             )
                          )
             result <- select query
             asserting noExceptions
-            asserting $ result `shouldBe` [ (Value 1, Value Nothing) 
+            asserting $ result `shouldBe` [ (Value 1, Value Nothing)
                                           , (Value 2, Value (Just 6.0))
                                           , (Value 3, Value (Just 11.0))
                                           , (Value 6, Value (Just 18.0))]
 
-        
+        itDb "supports postgres filter and over clauses" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , sum_ @_ @Double (n ^. NumbersDouble)
+                            `EP.filterWhere` (n ^. NumbersInt >. val 2)
+                            `Window.over_` (Window.frame_ Window.unboundedPreceding)
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldBe` [ (Value 1, Value Nothing)
+                                          , (Value 2, Value Nothing)
+                                          , (Value 3, Value (Just 5.0))
+                                          , (Value 6, Value (Just 12.0))]
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()

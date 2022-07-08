@@ -32,7 +32,7 @@ import Database.Esqueleto.Internal.PersistentImport (PersistValue)
 newtype SqlSetOperation a = SqlSetOperation
     { unSqlSetOperation :: NeedParens -> SqlQuery (a, IdentInfo -> (TLB.Builder, [PersistValue]))}
 
-instance ToAliasReference a => ToFrom (SqlSetOperation a) a where
+instance ToAliasReference a a' => ToFrom (SqlSetOperation a) a' where
     toFrom setOperation = From $ do
         ident <- newIdentFor (DBName "u")
         (a, fromClause) <- unSqlSetOperation setOperation Never
@@ -46,7 +46,7 @@ class ToSqlSetOperation a r | a -> r where
     toSqlSetOperation :: a -> SqlSetOperation r
 instance ToSqlSetOperation (SqlSetOperation a) a where
     toSqlSetOperation = id
-instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (SqlQuery a) a where
+instance (SqlSelect a r, ToAlias a, ToAliasReference a a') => ToSqlSetOperation (SqlQuery a) a where
     toSqlSetOperation subquery =
         SqlSetOperation $ \p -> do
             (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery

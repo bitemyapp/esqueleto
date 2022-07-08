@@ -390,8 +390,8 @@ rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
 -- | @HAVING@.
 --
 -- @since 1.2.2
-having :: SqlExpr (Value Bool) -> SqlQuery ()
-having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
+having :: SqlAgg (Value Bool) -> SqlQuery ()
+having expr = Q $ W.tell mempty { sdHavingClause = Where $ veryUnsafeCoerceSqlExprValue expr }
 
 -- | Add a locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.
@@ -423,7 +423,7 @@ SQL error.\n\n Instead, consider using one of the following alternatives: \n \
 -- is guaranteed to return just one row.
 --
 -- Deprecated in 3.2.0.
-sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+sub_select :: PersistField a => SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
 sub_select         = sub SELECT
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
@@ -444,7 +444,7 @@ sub_select         = sub SELECT
 -- @since 3.2.0
 subSelect
   :: PersistField a
-  => SqlQuery (SqlExpr (Value a))
+  => SqlQuery (SqlExpr_ ctx (Value a))
   -> SqlExpr (Value (Maybe a))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
@@ -458,7 +458,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 -- @since 3.2.0
 subSelectMaybe
     :: PersistField a
-    => SqlQuery (SqlExpr (Value (Maybe a)))
+    => SqlQuery (SqlExpr_ ctx (Value (Maybe a)))
     -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
@@ -664,7 +664,7 @@ nothing = unsafeSqlValue "NULL"
 joinV :: SqlExpr_ ctx (Value (Maybe (Maybe typ))) -> SqlExpr_ ctx (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
-countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr (Value a)
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlAgg (Value a)
 countHelper open close v =
     case v of
         ERaw meta f ->
@@ -673,21 +673,21 @@ countHelper open close v =
             else
                 countRawSql (f Never)
   where
-    countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
+    countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr_ ctx (Value a)
     countRawSql x = ERaw noMeta $ \_ -> first (\b -> "COUNT" <> open <> parens b <> close) . x
 
 -- | @COUNT(*)@ value.
-countRows :: Num a => SqlExpr (Value a)
+countRows :: Num a => SqlAgg (Value a)
 countRows = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+count :: Num a => SqlExpr (Value typ) -> SqlAgg (Value a)
 count = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- @since 2.4.1
-countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+countDistinct :: Num a => SqlExpr (Value typ) -> SqlAgg (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
@@ -795,13 +795,13 @@ ceiling_ = unsafeSqlFunction "CEILING"
 floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
-sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlAgg (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+min_     :: (PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe a))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe a))
 max_     = unsafeSqlFunction "MAX"
-avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlAgg (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
 
 -- | Allow a number of one type to be used as one of another
@@ -845,7 +845,7 @@ coalesce = unsafeSqlFunctionParens "COALESCE"
 -- a non-NULL result.
 --
 -- @since 1.4.3
-coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+coalesceDefault :: PersistField a => [SqlExpr_ ctx (Value (Maybe a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
 -- | @LOWER@ function.
@@ -2172,11 +2172,16 @@ data SqlExpr_ ctx a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder,
 data ValueContext
 type SqlExpr a = SqlExpr_ ValueContext a
 
+data AggregateContext
+type SqlAgg a = SqlExpr_ AggregateContext a
+
 -- Support context subsumption. 
 -- This allows binary operations to work across varied contexts when it is a 
 -- legal operation i.e. ValueContext + WindowContext == WindowContext
 type family MergeContext ctx ctx'
 type instance MergeContext ValueContext ValueContext = ValueContext
+type instance MergeContext AggregateContext ValueContext = AggregateContext 
+type instance MergeContext ValueContext AggregateContext = AggregateContext 
 
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's
 -- @OverloadedRecordDot@ extension.

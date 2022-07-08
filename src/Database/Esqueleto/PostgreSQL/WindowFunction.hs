@@ -7,7 +7,7 @@
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
     , WindowExpr
-    , over_, sum_, rowNumber_
+    , over_, rowNumber_
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
@@ -16,7 +16,8 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     where
 
 import Database.Esqueleto.Internal.Internal
-       ( MergeContext
+       ( AggregateContext
+       , MergeContext
        , NeedParens(..)
        , SqlExpr
        , SqlExpr_(..)
@@ -52,14 +53,10 @@ import Database.Esqueleto.PostgreSQL.Window
        , unboundedPreceding
        )
 
-data AggregateContext
 data WindowContext
 type instance MergeContext WindowContext ValueContext = WindowContext
 type instance MergeContext ValueContext WindowContext = WindowContext
 newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
-
-sum_ :: (PersistField a, PersistField b) => SqlExpr_ ValueContext (Value a) -> SqlExpr_ AggregateContext (Value (Maybe b))
-sum_ = unsafeSqlFunction "SUM"
 
 rowNumber_ :: WindowExpr (Value Integer)
 rowNumber_ = WindowExpr $ unsafeSqlValue "ROW_NUMBER()"
