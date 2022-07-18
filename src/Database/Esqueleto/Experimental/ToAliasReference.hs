@@ -57,42 +57,40 @@ instance ( ToAliasReference a a'
          ) => ToAliasReference (a,b,c,d) (a',b',c',d') where
     toAliasReference ident x = fmap to4 $ toAliasReference ident $ from4 x
 
-    {--
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         ) => ToAliasReference (a,b,c,d,e) where
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         ) => ToAliasReference (a,b,c,d,e) (a',b',c',d',e') where
     toAliasReference ident x = fmap to5 $ toAliasReference ident $ from5 x
 
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         ) => ToAliasReference (a,b,c,d,e,f) where
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         ) => ToAliasReference (a,b,c,d,e,f) (a',b',c',d',e',f') where
     toAliasReference ident x = to6 <$> (toAliasReference ident $ from6 x)
 
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         , ToAliasReference g
-         ) => ToAliasReference (a,b,c,d,e,f,g) where
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         , ToAliasReference g g'
+         ) => ToAliasReference (a,b,c,d,e,f,g) (a',b',c',d',e',f',g') where
     toAliasReference ident x = to7 <$> (toAliasReference ident $ from7 x)
 
-instance ( ToAliasReference a
-         , ToAliasReference b
-         , ToAliasReference c
-         , ToAliasReference d
-         , ToAliasReference e
-         , ToAliasReference f
-         , ToAliasReference g
-         , ToAliasReference h
-         ) => ToAliasReference (a,b,c,d,e,f,g,h) where
+instance ( ToAliasReference a a'
+         , ToAliasReference b b'
+         , ToAliasReference c c'
+         , ToAliasReference d d'
+         , ToAliasReference e e'
+         , ToAliasReference f f'
+         , ToAliasReference g g'
+         , ToAliasReference h h'
+         ) => ToAliasReference (a,b,c,d,e,f,g,h) (a',b',c',d',e',f',g',h') where
     toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
---}

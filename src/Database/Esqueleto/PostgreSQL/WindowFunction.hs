@@ -1,13 +1,13 @@
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
 
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
     , WindowExpr
-    , over_, rowNumber_
+    , over_, rowNumber_, sum_
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
@@ -15,48 +15,43 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     )
     where
 
-import Database.Esqueleto.Internal.Internal
-       ( AggregateContext
-       , MergeContext
-       , NeedParens(..)
-       , SqlExpr
-       , SqlExpr_(..)
-       , Value(..)
-       , ValueContext
-       , noMeta
-       , parens
-       , parensM
-       , unsafeSqlFunction
-       , unsafeSqlValue
-       )
-import Database.Esqueleto.Internal.PersistentImport (PersistField(..))
-import Database.Esqueleto.PostgreSQL.Window
-       ( Frame
-       , PartitionBy
-       , RenderWindow(..)
-       , Window
-       , between
-       , currentRow
-       , excludeCurrentRow
-       , excludeGroup
-       , excludeNoOthers
-       , excludeTies
-       , following
-       , frame_
-       , groups
-       , orderBy_
-       , partitionBy_
-       , preceding
-       , range
-       , rows
-       , unboundedFollowing
-       , unboundedPreceding
-       )
+import           Database.Esqueleto.Internal.Internal         (AggregateContext,
+                                                               MergeContext,
+                                                               NeedParens (..),
+                                                               SqlAgg, SqlExpr,
+                                                               SqlExpr_ (..),
+                                                               Value (..),
+                                                               ValueContext,
+                                                               noMeta, parens,
+                                                               parensM,
+                                                               unsafeSqlFunction,
+                                                               unsafeSqlValue)
+import           Database.Esqueleto.Internal.PersistentImport (PersistField (..))
+import           Database.Esqueleto.PostgreSQL.Window         (Frame,
+                                                               PartitionBy,
+                                                               RenderWindow (..),
+                                                               Window, between,
+                                                               currentRow,
+                                                               excludeCurrentRow,
+                                                               excludeGroup,
+                                                               excludeNoOthers,
+                                                               excludeTies,
+                                                               following,
+                                                               frame_, groups,
+                                                               orderBy_,
+                                                               partitionBy_,
+                                                               preceding, range,
+                                                               rows,
+                                                               unboundedFollowing,
+                                                               unboundedPreceding)
 
 data WindowContext
 type instance MergeContext WindowContext ValueContext = WindowContext
 type instance MergeContext ValueContext WindowContext = WindowContext
 newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
+
+sum_ :: (PersistField b, PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe b))
+sum_ = unsafeSqlFunction "SUM"
 
 rowNumber_ :: WindowExpr (Value Integer)
 rowNumber_ = WindowExpr $ unsafeSqlValue "ROW_NUMBER()"

@@ -46,7 +46,7 @@ class ToSqlSetOperation a r | a -> r where
     toSqlSetOperation :: a -> SqlSetOperation r
 instance ToSqlSetOperation (SqlSetOperation a) a where
     toSqlSetOperation = id
-instance (SqlSelect a r, ToAlias a, ToAliasReference a a') => ToSqlSetOperation (SqlQuery a) a where
+instance (SqlSelectCols a, ToAlias a, ToAliasReference a a') => ToSqlSetOperation (SqlQuery a) a where
     toSqlSetOperation subquery =
         SqlSetOperation $ \p -> do
             (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery

@@ -54,9 +54,10 @@ instance ValidOnClause (a -> SqlQuery b)
 -- identical to the tuple instance, but is provided for convenience.
 --
 -- @since 3.5.2.0
-instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
+instance (SqlSelectCols a, SqlSelectCols b) => SqlSelectCols (a :& b) where
     sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
     sqlSelectColCount = sqlSelectColCount . toTupleP
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
     sqlSelectProcessRow p = fmap (uncurry (:&)) . sqlSelectProcessRow (toTupleP p)
 
 toTupleP :: Proxy (a :& b) -> Proxy (a, b)
@@ -155,7 +156,7 @@ innerJoin lhs (rhs, on') = From $ do
 -- @since 3.5.0.0
 innerJoinLateral :: ( ToFrom a a'
                     , HasOnClause rhs (a' :& b)
-                    , SqlSelect b r
+                    , SqlSelectCols b
                     , ToAlias b
                     , ToAliasReference b b'
                     , rhs ~ (a' -> SqlQuery b, (a' :& b') -> SqlExpr_ ValueContext (Value Bool))
@@ -198,7 +199,7 @@ crossJoin lhs rhs = From $ do
 --
 -- @since 3.5.0.0
 crossJoinLateral :: ( ToFrom a a'
-                    , SqlSelect b r
+                    , SqlSelectCols b
                     , ToAlias b
                     , ToAliasReference b b'
                     )
@@ -251,7 +252,7 @@ leftJoin lhs (rhs, on') = From $ do
 --
 -- @since 3.5.0.0
 leftJoinLateral :: ( ToFrom a a'
-                   , SqlSelect b r
+                   , SqlSelectCols b
                    , HasOnClause rhs (a' :& ToMaybeT b)
                    , ToAlias b
                    , ToAliasReference b b'
@@ -354,7 +355,7 @@ instance ( ToFrom a a'
     doInnerJoin _ = innerJoin
 
 instance ( ToFrom a a'
-         , SqlSelect b r
+         , SqlSelectCols b
          , ToAlias b
          , ToAliasReference b b'
          , d ~ (a' :& b')
@@ -380,7 +381,7 @@ instance ( ToFrom a a'
 instance ( ToFrom a a'
          , ToMaybe b'
          , d ~ (a' :& ToMaybeT b')
-         , SqlSelect b r
+         , SqlSelectCols b
          , ToAlias b
          , ToAliasReference b b'
          ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr_ ValueContext (Value Bool)) d where
@@ -395,7 +396,7 @@ class DoCrossJoin lateral lhs rhs res | lateral lhs rhs -> res where
 
 instance (ToFrom a a', ToFrom b b') => DoCrossJoin NotLateral a b (a' :& b') where
     doCrossJoin _ = crossJoin
-instance (ToFrom a a', SqlSelect b r, ToAlias b, ToAliasReference b b')
+instance (ToFrom a a', SqlSelectCols b, ToAlias b, ToAliasReference b b')
   => DoCrossJoin Lateral a (a' -> SqlQuery b) (a' :& b') where
     doCrossJoin _ = crossJoinLateral
 

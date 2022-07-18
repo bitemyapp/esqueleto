@@ -15,7 +15,7 @@ import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
-import Database.Esqueleto.Internal.Internal (SqlSelect(..))
+import Database.Esqueleto.Internal.Internal (SqlSelectCols(..), SqlSelect(..))
 import Language.Haskell.TH
 import Data.Bifunctor (first)
 import Data.Text (Text)
@@ -117,10 +117,7 @@ deriveEsqueletoRecord originalName = do
   -- instance is available in GHC 8.
   recordDec <- makeSqlRecord info
   instanceDec <- makeSqlSelectInstance info
-  pure
-    [ recordDec
-    , instanceDec
-    ]
+  pure $ recordDec : instanceDec
 
 -- | Information about a record we need to generate the declarations.
 -- We compute this once and then pass it around to save on complexity /
@@ -215,19 +212,23 @@ makeSqlRecord RecordInfo {..} = do
 
 -- | Generates an `SqlSelect` instance for the given record and its
 -- @Sql@-prefixed variant.
-makeSqlSelectInstance :: RecordInfo -> Q Dec
+makeSqlSelectInstance :: RecordInfo -> Q [Dec]
 makeSqlSelectInstance info@RecordInfo {..} = do
   sqlSelectColsDec' <- sqlSelectColsDec info
   sqlSelectColCountDec' <- sqlSelectColCountDec info
   sqlSelectProcessRowDec' <- sqlSelectProcessRowDec info
   let overlap = Nothing
       instanceConstraints = []
+      sqlSelectColsType =
+          AppT (ConT ''SqlSelectCols) (ConT sqlName)
       instanceType =
         AppT
           (AppT (ConT ''SqlSelect) (ConT sqlName))
           (ConT name)
 
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
+  pure [ InstanceD overlap instanceConstraints sqlSelectColsType [ sqlSelectColsDec', sqlSelectColCountDec']
+       , InstanceD overlap instanceConstraints instanceType [ sqlSelectProcessRowDec']
+       ]
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlSelectColsDec :: RecordInfo -> Q Dec

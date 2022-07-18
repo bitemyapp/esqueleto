@@ -30,7 +30,7 @@ module Database.Esqueleto.PostgreSQL
     , filterWhere
     , values
     -- * Internal
-    , unsafeSqlAggregateFunction
+    , unsafeSqlExprAggregateFunction
     ) where
 
 #if __GLASGOW_HASKELL__ < 804
@@ -71,7 +71,7 @@ maybeArray ::
      (PersistField a, PersistField [a])
   => SqlExpr_ ctx (Value (Maybe [a]))
   -> SqlExpr_ ctx (Value [a])
-maybeArray x = coalesceDefault [x] (veryUnsafeCoerceSqlExprValue emptyArray)
+maybeArray x = coalesceDefault [x] (veryUnsafeCoerceSqlExpr emptyArray)
 
 -- | Aggregate mode
 data AggMode
@@ -83,14 +83,14 @@ data AggMode
 --
 -- /Do/ /not/ use this function directly, instead define a new function and give
 -- it a type (see `unsafeSqlBinOp`)
-unsafeSqlAggregateFunction
+unsafeSqlExprAggregateFunction
     :: UnsafeSqlFunctionArgument a
     => TLB.Builder
     -> AggMode
     -> a
     -> [OrderByClause]
-    -> SqlAgg (Value b)
-unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
+    -> SqlExpr (Value b)
+unsafeSqlExprAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
         orderTLBSpace =
@@ -115,12 +115,12 @@ arrayAggWith
     :: AggMode
     -> SqlExpr (Value a)
     -> [OrderByClause]
-    -> SqlAgg (Value (Maybe [a]))
-arrayAggWith = unsafeSqlAggregateFunction "array_agg"
+    -> SqlExpr (Value (Maybe [a]))
+arrayAggWith = unsafeSqlExprAggregateFunction "array_agg"
 
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
-arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe [a]))
+arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe [a]))
 arrayAgg x = arrayAggWith AggModeAll x []
 
 -- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
@@ -130,7 +130,7 @@ arrayAgg x = arrayAggWith AggModeAll x []
 arrayAggDistinct
     :: (PersistField a, PersistField [a])
     => SqlExpr (Value a)
-    -> SqlAgg (Value (Maybe [a]))
+    -> SqlExpr (Value (Maybe [a]))
 arrayAggDistinct x = arrayAggWith AggModeDistinct x []
 
 -- | (@array_remove@) Remove all elements equal to the given value from the
@@ -154,9 +154,9 @@ stringAggWith ::
   -> SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlAgg (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
 stringAggWith mode expr delim os =
-  unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
+  unsafeSqlExprAggregateFunction "string_agg" mode (expr, delim) os
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.
@@ -166,7 +166,7 @@ stringAgg ::
      SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
-  -> SqlAgg (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
