@@ -6,7 +6,7 @@
 
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
-    , WindowExpr
+    , WindowExpr, liftExpr
     , over_, rowNumber_, sum_
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
@@ -16,14 +16,13 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     where
 
 import           Database.Esqueleto.Internal.Internal         (AggregateContext,
-                                                               MergeContext,
                                                                NeedParens (..),
                                                                SqlAgg, SqlExpr,
                                                                SqlExpr_ (..),
                                                                Value (..),
-                                                               ValueContext,
                                                                noMeta, parens,
                                                                parensM,
+                                                               veryUnsafeCoerceSqlExpr,
                                                                unsafeSqlFunction,
                                                                unsafeSqlValue)
 import           Database.Esqueleto.Internal.PersistentImport (PersistField (..))
@@ -46,8 +45,9 @@ import           Database.Esqueleto.PostgreSQL.Window         (Frame,
                                                                unboundedPreceding)
 
 data WindowContext
-type instance MergeContext WindowContext ValueContext = WindowContext
-type instance MergeContext ValueContext WindowContext = WindowContext
+liftExpr :: SqlExpr a -> SqlExpr_ WindowContext a
+liftExpr = veryUnsafeCoerceSqlExpr
+
 newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
 
 sum_ :: (PersistField b, PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe b))

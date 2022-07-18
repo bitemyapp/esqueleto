@@ -1389,7 +1389,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , just (n ^. NumbersDouble) +.
+                         , Window.liftExpr (just (n ^. NumbersDouble)) +.
                              Window.sum_ (n ^. NumbersDouble)
                                 `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                              <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)

@@ -610,11 +610,8 @@ withNonNull field f = do
 ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
-val'  :: forall ctx typ. PersistField typ => typ -> SqlExpr_ ctx (Value typ)
-val' v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
-
-val :: PersistField typ => typ -> SqlExpr (Value typ)
-val = val' 
+val  :: PersistField typ => typ -> SqlExpr_ ctx (Value typ)
+val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
 --
@@ -660,7 +657,7 @@ just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
 nothing :: SqlExpr_ ctx (Value (Maybe typ))
-nothing = unsafeSqlValue' "NULL"
+nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
@@ -707,83 +704,83 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
 
 (==.)  :: (PersistField a) 
        => SqlExpr_ ctx (Value a) 
-       -> SqlExpr_ ctx' (Value a) 
-       -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+       -> SqlExpr_ ctx (Value a) 
+       -> SqlExpr_ ctx (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
 (>=.)  :: PersistField a 
        => SqlExpr_ ctx (Value a) 
-       -> SqlExpr_ ctx' (Value a) 
-       -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+       -> SqlExpr_ ctx (Value a) 
+       -> SqlExpr_ ctx (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
 (>.)  :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
 (<=.) :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
 (<.) :: PersistField a 
      => SqlExpr_ ctx (Value a) 
-     -> SqlExpr_ ctx' (Value a) 
-     -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+     -> SqlExpr_ ctx (Value a) 
+     -> SqlExpr_ ctx (Value Bool)
 (<.) = unsafeSqlBinOp " < "
 
 (!=.) :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
 (&&.) :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
 (||.) :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 
 (+.)  :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value a)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value a)
 (+.)  = unsafeSqlBinOp " + "
 
 (-.)  :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value a)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value a)
 (-.)  = unsafeSqlBinOp " - "
 
 (/.)  :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value a)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value a)
 (/.)  = unsafeSqlBinOp " / "
 
 (*.)  :: PersistField a 
       => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx' (Value a) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value a)
+      -> SqlExpr_ ctx (Value a) 
+      -> SqlExpr_ ctx (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
 -- | @BETWEEN@.
 --
 -- @since: 3.1.0
 between :: PersistField a 
-        => SqlExpr_ ctx1 (Value a) 
-        -> (SqlExpr_ ctx2 (Value a), SqlExpr_ ctx3 (Value a)) 
-        -> SqlExpr_ (MergeContext (MergeContext ctx1 ctx2) (MergeContext ctx1 ctx3)) (Value Bool)
+        => SqlExpr_ ctx (Value a) 
+        -> (SqlExpr_ ctx (Value a), SqlExpr_ ctx (Value a)) 
+        -> SqlExpr_ ctx (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
@@ -893,8 +890,8 @@ right_ = unsafeSqlFunction "RIGHT"
 -- | @LIKE@ operator.
 like :: SqlString s
      => SqlExpr_ ctx (Value s) 
-     -> SqlExpr_ ctx' (Value s) 
-     -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+     -> SqlExpr_ ctx (Value s) 
+     -> SqlExpr_ ctx (Value Bool)
 like = unsafeSqlBinOp " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
@@ -904,8 +901,8 @@ like = unsafeSqlBinOp " LIKE "
 -- @since 2.2.3
 ilike :: SqlString s 
       => SqlExpr_ ctx (Value s) 
-      -> SqlExpr_ ctx' (Value s) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value Bool)
+      -> SqlExpr_ ctx (Value s) 
+      -> SqlExpr_ ctx (Value Bool)
 ilike = unsafeSqlBinOp " ILIKE "
 
 -- | The string @'%'@.  May be useful while using 'like' and
@@ -929,8 +926,8 @@ concat_ = unsafeSqlFunction "CONCAT"
 -- Supported by SQLite and PostgreSQL.
 (++.) :: SqlString s 
       => SqlExpr_ ctx (Value s) 
-      -> SqlExpr_ ctx' (Value s) 
-      -> SqlExpr_ (MergeContext ctx ctx') (Value s)
+      -> SqlExpr_ ctx (Value s) 
+      -> SqlExpr_ ctx (Value s)
 (++.) = unsafeSqlBinOp " || "
 
 -- | Cast a string type into 'Text'.  This function
@@ -2178,14 +2175,6 @@ type SqlExpr a = SqlExpr_ ValueContext a
 data AggregateContext
 type SqlAgg a = SqlExpr_ AggregateContext a
 
--- Support context subsumption. 
--- This allows binary operations to work across varied contexts when it is a 
--- legal operation i.e. ValueContext + WindowContext == WindowContext
-type family MergeContext ctx ctx'
-type instance MergeContext ValueContext ValueContext = ValueContext
-type instance MergeContext AggregateContext ValueContext = ValueContext 
-type instance MergeContext ValueContext AggregateContext = ValueContext 
-
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's
 -- @OverloadedRecordDot@ extension.
 --
@@ -2352,7 +2341,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
 --
 -- In the example above, we constraint the arguments to be of the
 -- same type and constraint the result to be a boolean value.
-unsafeSqlBinOp :: TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx' (Value b) -> SqlExpr_ (MergeContext ctx ctx') (Value c)
+unsafeSqlBinOp :: TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b) -> SqlExpr_ ctx (Value c)
 unsafeSqlBinOp op (ERaw m1 f1) (ERaw m2 f2)
   | not (hasCompositeKeyMeta m1 || hasCompositeKeyMeta m2) = ERaw noMeta f
   where
@@ -2403,7 +2392,7 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 --   - If it is not a single placeholder, then it's assumed to be
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
-unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx' (Value b) -> SqlExpr_ (MergeContext ctx ctx') (Value c)
+unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b) -> SqlExpr_ ctx (Value c)
 unsafeSqlBinOpComposite op sep a b
     | isCompositeKey a || isCompositeKey b = ERaw noMeta $ const $ compose (listify a) (listify b)
     | otherwise = unsafeSqlBinOp op a b
@@ -2434,12 +2423,9 @@ unsafeSqlBinOpComposite op sep a b
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
-unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
-unsafeSqlValue = unsafeSqlValue'
+unsafeSqlValue :: TLB.Builder -> SqlExpr_ ctx (Value a)
+unsafeSqlValue v = ERaw noMeta $ \_ _ -> (v, mempty)
 {-# INLINE unsafeSqlValue #-}
-unsafeSqlValue' :: TLB.Builder -> SqlExpr_ ctx (Value a)
-unsafeSqlValue' v = ERaw noMeta $ \_ _ -> (v, mempty)
-{-# INLINE unsafeSqlValue' #-}
 
 unsafeSqlEntity :: PersistEntity ent => Ident -> SqlExpr (Entity ent)
 unsafeSqlEntity ident = ERaw noMeta $ \_ info ->
