@@ -1331,7 +1331,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @Double (n ^. NumbersDouble) `Window.over_` ()
+                         , sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` ()
                          )
             result <- select query
             asserting noExceptions
@@ -1351,7 +1351,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @Double (n ^. NumbersDouble)
+                         , sum_ @_ @Double (n ^. NumbersDouble)
                             `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
                          )
             result <- select query
@@ -1371,7 +1371,8 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @Double (n ^. NumbersDouble) `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
+                         , sum_ @_ @Double (n ^. NumbersDouble) 
+                            `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                          <> Window.frame_ Window.unboundedPreceding)
                          )
             result <- select query
@@ -1390,7 +1391,7 @@ testWindowFunctions = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
                          , Window.liftExpr (just (n ^. NumbersDouble)) +.
-                             Window.sum_ (n ^. NumbersDouble)
+                             sum_ (n ^. NumbersDouble)
                                 `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                              <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)
                                              )
@@ -1410,7 +1411,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.sum_ @Double (n ^. NumbersDouble)
+                         , sum_ @_ @Double (n ^. NumbersDouble)
                             `EP.filterWhere` (n ^. NumbersInt >. val 2)
                             `Window.over_` (Window.frame_ Window.unboundedPreceding)
                          )

@@ -664,7 +664,7 @@ nothing = unsafeSqlValue "NULL"
 joinV :: SqlExpr_ ctx (Value (Maybe (Maybe typ))) -> SqlExpr_ ctx (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
-countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr (Value a)
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx' (Value a)
 countHelper open close v =
     case v of
         ERaw meta f ->
@@ -677,17 +677,17 @@ countHelper open close v =
     countRawSql x = ERaw noMeta $ \_ -> first (\b -> "COUNT" <> open <> parens b <> close) . x
 
 -- | @COUNT(*)@ value.
-countRows :: Num a => SqlExpr (Value a)
+countRows :: Num a => SqlExpr_ ctx (Value a)
 countRows = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+count :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
 count = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- @since 2.4.1
-countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
@@ -795,13 +795,13 @@ ceiling_ = unsafeSqlFunction "CEILING"
 floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
-sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
 max_     = unsafeSqlFunction "MAX"
-avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
 
 -- | Allow a number of one type to be used as one of another
@@ -821,13 +821,13 @@ avg_     = unsafeSqlFunction "AVG"
 -- not being able to parse it.
 --
 -- @since 2.2.9
-castNum :: (Num a, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+castNum :: (Num a, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 castNum  = veryUnsafeCoerceSqlExprValue
 
 -- | Same as 'castNum', but for nullable values.
 --
 -- @since 2.2.9
-castNumM :: (Num a, Num b) => SqlExpr (Value (Maybe a)) -> SqlExpr (Value (Maybe b))
+castNumM :: (Num a, Num b) => SqlExpr_ ctx (Value (Maybe a)) -> SqlExpr_ ctx (Value (Maybe b))
 castNumM = veryUnsafeCoerceSqlExprValue
 
 -- | @COALESCE@ function. Evaluates the arguments in order and
@@ -849,42 +849,42 @@ coalesceDefault :: PersistField a => [SqlExpr_ ctx (Value (Maybe a))] -> SqlExpr
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
 -- | @LOWER@ function.
-lower_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+lower_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 lower_  = unsafeSqlFunction "LOWER"
 
 -- | @UPPER@ function.
 -- @since 3.3.0
-upper_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+upper_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 upper_  = unsafeSqlFunction "UPPER"
 
 -- | @TRIM@ function.
 -- @since 3.3.0
-trim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+trim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 trim_  = unsafeSqlFunction "TRIM"
 
 -- | @RTRIM@ function.
 -- @since 3.3.0
-rtrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+rtrim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 rtrim_  = unsafeSqlFunction "RTRIM"
 
 -- | @LTRIM@ function.
 -- @since 3.3.0
-ltrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+ltrim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 ltrim_  = unsafeSqlFunction "LTRIM"
 
 -- | @LENGTH@ function.
 -- @since 3.3.0
-length_ :: (SqlString s, Num a) => SqlExpr (Value s) -> SqlExpr (Value a)
+length_ :: (SqlString s, Num a) => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value a)
 length_ = unsafeSqlFunction "LENGTH"
 
 -- | @LEFT@ function.
 -- @since 3.3.0
-left_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+left_ :: (SqlString s, Num a) => (SqlExpr_ ctx (Value s), SqlExpr_ ctx (Value a)) -> SqlExpr_ ctx (Value s)
 left_ = unsafeSqlFunction "LEFT"
 
 -- | @RIGHT@ function.
 -- @since 3.3.0
-right_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+right_ :: (SqlString s, Num a) => (SqlExpr_ ctx (Value s), SqlExpr_ ctx (Value a)) -> SqlExpr_ ctx (Value s)
 right_ = unsafeSqlFunction "RIGHT"
 
 -- | @LIKE@ operator.
@@ -913,12 +913,12 @@ ilike = unsafeSqlBinOp " ILIKE "
 -- @
 -- name `'like`` (%) ++. 'val' \"John\" ++. (%)
 -- @
-(%) :: SqlString s => SqlExpr (Value s)
+(%) :: SqlString s => SqlExpr_ ctx (Value s)
 (%) = unsafeSqlValue "'%'"
 
 -- | The @CONCAT@ function with a variable number of
 -- parameters.  Supported by MySQL and PostgreSQL.
-concat_ :: SqlString s => [SqlExpr (Value s)] -> SqlExpr (Value s)
+concat_ :: SqlString s => [SqlExpr_ ctx (Value s)] -> SqlExpr_ ctx (Value s)
 concat_ = unsafeSqlFunction "CONCAT"
 
 -- | The @||@ string concatenation operator (named after
@@ -950,7 +950,7 @@ subList_select query = ERaw noMeta $ \_ info -> first parens $ toRawSql SELECT i
 
 
 -- | Lift a list of constant value from Haskell-land to the query.
-valList :: PersistField typ => [typ] -> SqlExpr (ValueList typ)
+valList :: PersistField typ => [typ] -> SqlExpr_ ctx (ValueList typ)
 valList []   = ERaw noMeta $ \_ _ -> ("()", [])
 valList vals = ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), map toPersistValue vals )
 
@@ -959,7 +959,7 @@ valList vals = ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), ma
 -- inside 'subList_select' or 'Just' from inside 'valList'.
 --
 -- @since 2.2.12
-justList :: SqlExpr (ValueList typ) -> SqlExpr (ValueList (Maybe typ))
+justList :: SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (ValueList (Maybe typ))
 justList (ERaw m f) = ERaw m f
 
 -- | @IN@ operator. For example if you want to select all @Person@s by a list
@@ -981,7 +981,7 @@ justList (ERaw m f) = ERaw m f
 -- @
 --
 -- Where @personIds@ is of type @[Key Person]@.
-in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
+in_ :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (Value Bool)
 (ERaw _ v) `in_` (ERaw _ list) =
     ERaw noMeta $ \_ info ->
         let (b1, vals1) = v Parens info
@@ -993,7 +993,7 @@ in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> Sql
             (b1 <> " IN " <> b2, vals1 <> vals2)
 
 -- | @NOT IN@ operator.
-notIn :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
+notIn :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (Value Bool)
 (ERaw _ v) `notIn` (ERaw _ list) =
     ERaw noMeta $ \_ info ->
         let (b1, vals1) = v Parens info

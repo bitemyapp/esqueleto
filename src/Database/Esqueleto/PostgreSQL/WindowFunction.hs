@@ -7,7 +7,7 @@
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
     , WindowExpr, liftExpr
-    , over_, rowNumber_, sum_
+    , over_, rowNumber_ 
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
@@ -17,15 +17,13 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
 
 import           Database.Esqueleto.Internal.Internal         (AggregateContext,
                                                                NeedParens (..),
-                                                               SqlAgg, SqlExpr,
+                                                               SqlExpr,
                                                                SqlExpr_ (..),
                                                                Value (..),
                                                                noMeta, parens,
                                                                parensM,
                                                                veryUnsafeCoerceSqlExpr,
-                                                               unsafeSqlFunction,
                                                                unsafeSqlValue)
-import           Database.Esqueleto.Internal.PersistentImport (PersistField (..))
 import           Database.Esqueleto.PostgreSQL.Window         (Frame,
                                                                PartitionBy,
                                                                RenderWindow (..),
@@ -50,9 +48,6 @@ liftExpr = veryUnsafeCoerceSqlExpr
 
 newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
 
-sum_ :: (PersistField b, PersistField a) => SqlExpr (Value a) -> SqlAgg (Value (Maybe b))
-sum_ = unsafeSqlFunction "SUM"
-
 rowNumber_ :: WindowExpr (Value Integer)
 rowNumber_ = WindowExpr $ unsafeSqlValue "ROW_NUMBER()"
 
@@ -61,7 +56,7 @@ class WindowExprC expr where
 
 instance WindowExprC WindowExpr where
     over_ windowExpr window = overImpl (unWindowExpr windowExpr) window
-instance WindowExprC (SqlExpr_ AggregateContext) where
+instance (ctx ~ AggregateContext) => WindowExprC (SqlExpr_ ctx) where
     over_ = overImpl
 
 overImpl :: RenderWindow window => SqlExpr_ ctx a -> window -> SqlExpr_ WindowContext a
