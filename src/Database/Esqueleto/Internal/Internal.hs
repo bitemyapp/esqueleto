@@ -610,7 +610,7 @@ withNonNull field f = do
 ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
-val  :: PersistField typ => typ -> SqlExpr_ ctx (Value typ)
+val  :: PersistField typ => typ -> SqlExpr (Value typ)
 val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
@@ -656,7 +656,7 @@ just :: SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value (Maybe typ))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
-nothing :: SqlExpr_ ctx (Value (Maybe typ))
+nothing :: SqlExpr (Value (Maybe typ))
 nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
@@ -786,13 +786,13 @@ a `between` (b, c) = a >=. b &&. a <=. c
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
 
-round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 round_   = unsafeSqlFunction "ROUND"
 
-ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 ceiling_ = unsafeSqlFunction "CEILING"
 
-floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
@@ -2165,14 +2165,21 @@ entityAsValueMaybe = coerce
 -- connection (mainly for escaping names) and returns both an
 -- string ('TLB.Builder') and a list of values to be
 -- interpolated by the SQL backend.
+--
+-- All expressions have a context associated with them. This is primarily used by window functions
+-- to prevent windowing an already windowed value at compile time. 
+--
+-- Values that come from a from clause are considered to be in the "ValueContext".
+-- Values that come from an aggregation should be in the "AggregateContext" but for backwards compatibility they are treated as having an undefined context and can be used in both Value and Aggregate contexts.
+-- Values that come from a window function are in the "WindowContext"
 data SqlExpr_ ctx a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
--- Currently there is only one context type, this is called value context in contrast with 
--- Aggregate or Window contexts 
 data ValueContext
-type SqlExpr a = SqlExpr_ ValueContext a
-
 data AggregateContext
+
+-- | Helper type for backwards compatibility and ease of reading
+type SqlExpr a = SqlExpr_ ValueContext a
+-- | Helper type denoting a value that should only be treated as an aggregate 
 type SqlAgg a = SqlExpr_ AggregateContext a
 
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's

@@ -40,7 +40,9 @@ import           Database.Esqueleto.PostgreSQL.Window.Frame   (Frame,
                                                                unboundedFollowing,
                                                                unboundedPreceding)
 
-
+-- | A monoidal representation of a Window to be used with a Window Function
+--
+-- A window is defined using the helper functions 'partitionBy_', 'orderBy_' and 'frame_'
 data Window = Window
     { windowPartitionBy :: Maybe (First (SqlExpr_ ValueContext PartitionBy))
     , windowOrderBy     :: Maybe [SqlExpr_ ValueContext OrderBy]
@@ -57,6 +59,9 @@ instance Monoid Window where
 -- Phantom helper type
 data PartitionBy
 
+-- | PARTITION BY 
+--
+-- Used to divide the result set into partitions for the window function to operate over
 partitionBy_ :: ToSomeValues a => a -> Window
 partitionBy_ expr =
     mempty{ windowPartitionBy = Just $ First $ ERaw noMeta $ const impl }
@@ -69,10 +74,19 @@ partitionBy_ expr =
       renderSomeValues info someValues =
           uncommas' $ fmap (\(SomeValue (ERaw _ f)) -> f Never info) someValues
 
+-- | ORDER BY 
+--
+-- Order the values in the given partition  
 orderBy_ :: [SqlExpr_ ValueContext OrderBy] -> Window
 orderBy_ []    = mempty
 orderBy_ exprs = mempty{ windowOrderBy = Just exprs }
 
+-- | FRAME
+--
+-- Defines a set of rows relative to the current row to include in the window
+--
+-- e.g.
+-- frame_ (between (preceding 10) (following 10))
 frame_ :: ToFrame frame => frame -> Window
 frame_ f = mempty{windowFrame = Just $ First $ toFrame f}
 
