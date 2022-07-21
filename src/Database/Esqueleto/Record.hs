@@ -23,7 +23,7 @@ import Data.Text (Text)
 import Control.Monad (forM)
 import Data.Foldable (foldl')
 import GHC.Exts (IsString(fromString))
-import Data.Maybe (mapMaybe, fromMaybe)
+import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 
 -- | Takes the name of a Haskell record type and creates a variant of that
 -- record prefixed with @Sql@ which can be used in esqueleto expressions. This
@@ -454,9 +454,7 @@ reifySqlSelectType originalType = do
                              Just sqlRecord
                  _ -> Nothing)
 
-  case filteredInstances of
-    sqlType : _ -> pure $ Just sqlType
-    _ -> pure Nothing
+  pure $ listToMaybe filteredInstances
 
 -- | Statefully parse some number of columns from a list of `PersistValue`s,
 -- where the number of columns to parse is determined by `sqlSelectColCount`
