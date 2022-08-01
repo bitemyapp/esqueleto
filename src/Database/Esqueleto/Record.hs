@@ -1,11 +1,13 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskellQuotes #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Database.Esqueleto.Record
   ( deriveEsqueletoRecord
@@ -17,11 +19,13 @@ import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
 import Database.Esqueleto.Internal.Internal (SqlSelectCols(..), SqlSelect(..))
 import Language.Haskell.TH
+import Language.Haskell.TH.Syntax
 import Data.Bifunctor (first)
 import Data.Text (Text)
 import Control.Monad (forM)
 import Data.Foldable (foldl')
 import GHC.Exts (IsString(fromString))
+import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 
 -- | Takes the name of a Haskell record type and creates a variant of that
 -- record prefixed with @Sql@ which can be used in esqueleto expressions. This
@@ -167,8 +171,9 @@ getRecordInfo name = do
           RecC name' _fields -> name'
           con -> error $ nonRecordConstructorMessage con
       fields = getFields constructor
-      sqlFields = toSqlField `map` fields
       sqlName = makeSqlName name
+
+  sqlFields <- mapM toSqlField fields
 
   pure RecordInfo {..}
   where
@@ -176,7 +181,9 @@ getRecordInfo name = do
     getFields (RecC _name fields) = [(fieldName', fieldType') | (fieldName', _bang, fieldType') <- fields]
     getFields con = error $ nonRecordConstructorMessage con
 
-    toSqlField (fieldName', ty) = (fieldName', sqlFieldType ty)
+    toSqlField (fieldName', ty) = do
+      sqlTy <- sqlFieldType ty
+      pure (fieldName', sqlTy)
 
 -- | Create a new name by prefixing @Sql@ to a given name.
 makeSqlName :: Name -> Name
@@ -187,17 +194,28 @@ makeSqlName name = mkName $ "Sql" ++ nameBase name
 -- * @'Entity' x@ is transformed into @'SqlExpr' ('Entity' x)@.
 -- * @'Maybe' ('Entity' x)@ is transformed into @'SqlExpr' ('Maybe' ('Entity' x))@.
 -- * @x@ is transformed into @'SqlExpr' ('Value' x)@.
-sqlFieldType :: Type -> Type
-sqlFieldType fieldType =
-  case fieldType of
-    -- Entity x -> SqlExpr (Entity x)
-    AppT (ConT ((==) ''Entity -> True)) _innerType -> AppT (ConT ''SqlExpr) fieldType
-    -- Maybe (Entity x) -> SqlExpr (Maybe (Entity x))
-    AppT
-      (ConT ((==) ''Maybe -> True))
-      (AppT (ConT ((==) ''Entity -> True)) _innerType) -> AppT (ConT ''SqlExpr) fieldType
-    -- x -> SqlExpr (Value x)
-    _ -> AppT (ConT ''SqlExpr) (AppT (ConT ''Value) fieldType)
+-- * If there exists an instance @'SqlSelect' sql x@, then @x@ is transformed into @sql@.
+--
+-- This function should match `sqlSelectProcessRowPat`.
+sqlFieldType :: Type -> Q Type
+sqlFieldType fieldType = do
+  maybeSqlType <- reifySqlSelectType fieldType
+
+  pure $
+    flip fromMaybe maybeSqlType $
+      case fieldType of
+        -- Entity x -> SqlExpr (Entity x)
+        AppT (ConT ((==) ''Entity -> True)) _innerType -> AppT (ConT ''SqlExpr) fieldType
+
+        -- Maybe (Entity x) -> SqlExpr (Maybe (Entity x))
+        (ConT ((==) ''Maybe -> True))
+          `AppT` ((ConT ((==) ''Entity -> True))
+                  `AppT` _innerType) -> AppT (ConT ''SqlExpr) fieldType
+
+        -- x -> SqlExpr (Value x)
+        _ -> (ConT ''SqlExpr)
+                `AppT` ((ConT ''Value)
+                        `AppT` fieldType)
 
 -- | Generates the declaration for an @Sql@-prefixed record, given the original
 -- record's information.
@@ -222,9 +240,9 @@ makeSqlSelectInstance info@RecordInfo {..} = do
       sqlSelectColsType =
           AppT (ConT ''SqlSelectCols) (ConT sqlName)
       instanceType =
-        AppT
-          (AppT (ConT ''SqlSelect) (ConT sqlName))
-          (ConT name)
+        (ConT ''SqlSelect)
+          `AppT` (ConT sqlName)
+          `AppT` (ConT name)
 
   pure [ InstanceD overlap instanceConstraints sqlSelectColsType [ sqlSelectColsDec', sqlSelectColCountDec']
        , InstanceD overlap instanceConstraints instanceType [ sqlSelectProcessRowDec']
@@ -267,9 +285,9 @@ sqlSelectColsDec RecordInfo {..} = do
           , RecP sqlName fieldPatterns
           ]
           ( NormalB $
-              AppE
-                (AppE (VarE 'sqlSelectCols) (VarE identInfo))
-                (ParensE joinedFields)
+              (VarE 'sqlSelectCols)
+                `AppE` (VarE identInfo)
+                `AppE` (ParensE joinedFields)
           )
           -- `where` clause.
           []
@@ -320,9 +338,10 @@ sqlSelectProcessRowDec RecordInfo {..} = do
   (statements, fieldExps) <-
     unzip <$> forM (zip fields sqlFields) (\((fieldName', fieldType), (_, sqlType')) -> do
       valueName <- newName (nameBase fieldName')
+      pattern <- sqlSelectProcessRowPat fieldType valueName
       pure
         ( BindS
-            (sqlSelectProcessRowPat fieldType valueName)
+            pattern
             (AppTypeE (VarE 'takeColumns) sqlType')
         , (mkName $ nameBase fieldName', VarE valueName)
         ))
@@ -336,31 +355,17 @@ sqlSelectProcessRowDec RecordInfo {..} = do
   --         (evalStateT $processName $colsName)
   --   where $processName = do $statements
   --                           pure $name {$fieldExps}
+  bodyExp <- [e|
+    first (fromString ("Failed to parse " ++ $(lift $ nameBase name) ++ ": ") <>)
+          (evalStateT $(varE processName) $(varE colsName))
+    |]
+
   pure $
     FunD
       'sqlSelectProcessRow
       [ Clause
           [WildP, VarP colsName]
-          ( NormalB $
-              AppE
-                ( AppE
-                    (VarE 'first)
-                    ( InfixE
-                        (Just $ AppE
-                          (VarE 'fromString)
-                          (LitE $ StringL $ "Failed to parse " ++ nameBase name ++ ": "))
-                        (VarE '(<>))
-                        Nothing
-                    )
-                )
-                ( AppE
-                    ( AppE
-                        (VarE 'evalStateT)
-                        (VarE processName)
-                    )
-                    (VarE colsName)
-                )
-          )
+          (NormalB bodyExp)
           -- `where` clause
           [ ValD
               (VarP processName)
@@ -381,21 +386,78 @@ sqlSelectProcessRowDec RecordInfo {..} = do
 -- * A type of @'Entity' x@ gives a pattern of @var@.
 -- * A type of @'Maybe' ('Entity' x)@ gives a pattern of @var@.
 -- * A type of @x@ gives a pattern of @'Value' var@.
-sqlSelectProcessRowPat :: Type -> Name -> Pat
-sqlSelectProcessRowPat fieldType var =
-  case fieldType of
-    -- Entity x -> var
-    AppT (ConT ((==) ''Entity -> True)) _innerType -> VarP var
-    -- Maybe (Entity x) -> var
-    AppT
-      (ConT ((==) ''Maybe -> True))
-      (AppT (ConT ((==) ''Entity -> True)) _innerType) -> VarP var
-    -- x -> Value var
+-- * If there exists an instance @'SqlSelect' sql x@, then a type of @x@ gives a pattern of @var@.
+--
+-- This function should match `sqlFieldType`.
+sqlSelectProcessRowPat :: Type -> Name -> Q Pat
+sqlSelectProcessRowPat fieldType var = do
+  maybeSqlType <- reifySqlSelectType fieldType
+
+  case maybeSqlType of
+    Just _ -> pure $ VarP var
+    Nothing -> case fieldType of
+        -- Entity x -> var
+        AppT (ConT ((==) ''Entity -> True)) _innerType -> pure $ VarP var
+        -- Maybe (Entity x) -> var
+        (ConT ((==) ''Maybe -> True))
+          `AppT` ((ConT ((==) ''Entity -> True))
+                  `AppT` _innerType) -> pure $ VarP var
+        -- x -> Value var
 #if MIN_VERSION_template_haskell(2,18,0)
-    _ -> ConP 'Value [] [VarP var]
+        _ -> pure $ ConP 'Value [] [VarP var]
 #else
-    _ -> ConP 'Value [VarP var]
+        _ -> pure $ ConP 'Value [VarP var]
 #endif
+
+-- Given a type, find the corresponding SQL type.
+--
+-- If there exists an instance `SqlSelect sql ty`, then the SQL type for `ty`
+-- is `sql`.
+--
+-- This function definitely works for records and instances generated by this
+-- module, and might work for instances outside of it.
+reifySqlSelectType :: Type -> Q (Maybe Type)
+reifySqlSelectType originalType = do
+  -- Here we query the compiler for Instances of `SqlSelect a $(originalType)`;
+  -- the API for this is super weird, it interprets a list of types as being
+  -- applied as successive arguments to the typeclass name.
+  --
+  -- See: https://gitlab.haskell.org/ghc/ghc/-/issues/21825
+  --
+  -- >>> reifyInstances ''SqlSelect [VarT (mkName "a"), ConT ''MyRecord]
+  -- [ InstanceD Nothing
+  --             []
+  --             (AppT (AppT (ConT Database.Esqueleto.Internal.Internal.SqlSelect)
+  --                         (ConT Ghci3.SqlMyRecord))
+  --                   (ConT Ghci3.MyRecord))
+  --             []
+  -- ]
+  tyVarName <- newName "a"
+  instances <- reifyInstances ''SqlSelect [VarT tyVarName, originalType]
+
+  -- Given the original type (`originalType`) and an instance type for a
+  -- `SqlSelect` instance, get the SQL type which corresponds to the original
+  -- type.
+  let extractSqlRecord :: Type -> Type -> Maybe Type
+      extractSqlRecord originalTy instanceTy =
+        case instanceTy of
+          (ConT ((==) ''SqlSelect -> True))
+            `AppT` sqlTy
+            `AppT` ((==) originalTy -> True) -> Just sqlTy
+          _ -> Nothing
+
+      -- Filter `instances` to the instances which match `originalType`.
+      filteredInstances :: [Type]
+      filteredInstances =
+        flip mapMaybe instances
+          (\case InstanceD _overlap
+                           _constraints
+                           (extractSqlRecord originalType -> Just sqlRecord)
+                           _decs ->
+                             Just sqlRecord
+                 _ -> Nothing)
+
+  pure $ listToMaybe filteredInstances
 
 -- | Statefully parse some number of columns from a list of `PersistValue`s,
 -- where the number of columns to parse is determined by `sqlSelectColCount`

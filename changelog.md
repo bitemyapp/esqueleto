@@ -1,3 +1,9 @@
+3.5.6.1
+=======
+- @9999years
+    - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
+        - Add ability to use nested records with `deriveEsqueletoRecord`
+
 3.5.6.0
 =======
 - @9999years
