@@ -129,8 +129,8 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , module Database.Esqueleto.Internal.PersistentImport
   ) where
 
-import Database.Esqueleto.Legacy
 import Database.Esqueleto.Internal.PersistentImport
+import Database.Esqueleto.Legacy
 
 
 -- $setup

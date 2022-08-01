@@ -1,13 +1,13 @@
-{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
     , WindowExpr, liftExpr
-    , over_, rowNumber_ 
+    , over_, rowNumber_
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
@@ -15,32 +15,40 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     )
     where
 
-import           Database.Esqueleto.Internal.Internal         (AggregateContext,
-                                                               NeedParens (..),
-                                                               SqlExpr,
-                                                               SqlExpr_ (..),
-                                                               Value (..),
-                                                               noMeta, parens,
-                                                               parensM,
-                                                               veryUnsafeCoerceSqlExpr,
-                                                               unsafeSqlValue)
-import           Database.Esqueleto.PostgreSQL.Window         (Frame,
-                                                               PartitionBy,
-                                                               RenderWindow (..),
-                                                               Window, between,
-                                                               currentRow,
-                                                               excludeCurrentRow,
-                                                               excludeGroup,
-                                                               excludeNoOthers,
-                                                               excludeTies,
-                                                               following,
-                                                               frame_, groups,
-                                                               orderBy_,
-                                                               partitionBy_,
-                                                               preceding, range,
-                                                               rows,
-                                                               unboundedFollowing,
-                                                               unboundedPreceding)
+import Database.Esqueleto.Internal.Internal
+       ( AggregateContext
+       , NeedParens(..)
+       , SqlExpr
+       , SqlExpr_(..)
+       , Value(..)
+       , noMeta
+       , parens
+       , parensM
+       , unsafeSqlValue
+       , veryUnsafeCoerceSqlExpr
+       )
+import Database.Esqueleto.PostgreSQL.Window
+       ( Frame
+       , PartitionBy
+       , RenderWindow(..)
+       , Window
+       , between
+       , currentRow
+       , excludeCurrentRow
+       , excludeGroup
+       , excludeNoOthers
+       , excludeTies
+       , following
+       , frame_
+       , groups
+       , orderBy_
+       , partitionBy_
+       , preceding
+       , range
+       , rows
+       , unboundedFollowing
+       , unboundedPreceding
+       )
 
 data WindowContext
 liftExpr :: SqlExpr a -> SqlExpr_ WindowContext a

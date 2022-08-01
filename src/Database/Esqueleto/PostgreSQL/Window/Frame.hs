@@ -9,10 +9,10 @@ module Database.Esqueleto.PostgreSQL.Window.Frame
     )
     where
 
-import Database.Esqueleto.Internal.Internal ( IdentInfo )
 import Data.Int (Int64)
-import Database.Esqueleto.Internal.PersistentImport (PersistValue(..))
 import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Internal.Internal (IdentInfo)
+import Database.Esqueleto.Internal.PersistentImport (PersistValue(..))
 
 data Frame = Frame (Maybe FrameKind) FrameBody (Maybe FrameExclusion)
 
@@ -50,7 +50,7 @@ groups = frameKind "GROUPS"
 
 newtype FrameExclusion = FrameExclusion { unFrameExclusion :: (TLB.Builder, [PersistValue]) }
 
-renderFrameExclusion :: IdentInfo -> FrameExclusion -> (TLB.Builder, [PersistValue]) 
+renderFrameExclusion :: IdentInfo -> FrameExclusion -> (TLB.Builder, [PersistValue])
 renderFrameExclusion _ = unFrameExclusion
 
 frameExclusion :: ToFrame frame => TLB.Builder -> frame -> Frame
@@ -85,16 +85,16 @@ instance ToFrame FrameBody where
     toFrame b = Frame Nothing b Nothing
 
 renderFrameBody :: IdentInfo -> FrameBody -> (TLB.Builder, [PersistValue])
-renderFrameBody info (FrameStart (FrameRangeFollowing b)) = 
+renderFrameBody info (FrameStart (FrameRangeFollowing b)) =
     renderFrameBody info (FrameBetween FrameRangeCurrentRow (FrameRangeFollowing b))
-renderFrameBody info (FrameStart f) = 
+renderFrameBody info (FrameStart f) =
     renderFrameRange info f
 renderFrameBody info (FrameBetween startRange endRange) =
     if startRange > endRange then
         renderFrameBody info (FrameBetween endRange startRange)
     else
         let (b, v) = renderFrameRange info startRange
-            (b', v') = renderFrameRange info endRange 
+            (b', v') = renderFrameRange info endRange
         in ("BETWEEN " <> b <> " AND " <> b', v <> v')
 
 instance ToFrame FrameRange where

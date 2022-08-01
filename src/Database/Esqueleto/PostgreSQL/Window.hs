@@ -10,35 +10,39 @@ module Database.Esqueleto.PostgreSQL.Window
     )
     where
 
-import           Data.Bifunctor                               (first)
-import           Data.Semigroup                               (First (..))
-import qualified Data.Text.Lazy.Builder                       as TLB
-import           Database.Esqueleto.Internal.Internal         (IdentInfo,
-                                                               NeedParens (..),
-                                                               OrderBy,
-                                                               SomeValue (..),
-                                                               SqlExpr_ (..),
-                                                               ValueContext,
-                                                               ToSomeValues (..),
-                                                               noMeta,
-                                                               uncommas')
-import           Database.Esqueleto.Internal.PersistentImport (PersistValue)
-import           Database.Esqueleto.PostgreSQL.Window.Frame   (Frame,
-                                                               ToFrame (..),
-                                                               between,
-                                                               currentRow,
-                                                               excludeCurrentRow,
-                                                               excludeGroup,
-                                                               excludeNoOthers,
-                                                               excludeTies,
-                                                               groups,
-                                                               following,
-                                                               preceding,
-                                                               range,
-                                                               renderFrame,
-                                                               rows,
-                                                               unboundedFollowing,
-                                                               unboundedPreceding)
+import Data.Bifunctor (first)
+import Data.Semigroup (First(..))
+import qualified Data.Text.Lazy.Builder as TLB
+import Database.Esqueleto.Internal.Internal
+       ( IdentInfo
+       , NeedParens(..)
+       , OrderBy
+       , SomeValue(..)
+       , SqlExpr_(..)
+       , ToSomeValues(..)
+       , ValueContext
+       , noMeta
+       , uncommas'
+       )
+import Database.Esqueleto.Internal.PersistentImport (PersistValue)
+import Database.Esqueleto.PostgreSQL.Window.Frame
+       ( Frame
+       , ToFrame(..)
+       , between
+       , currentRow
+       , excludeCurrentRow
+       , excludeGroup
+       , excludeNoOthers
+       , excludeTies
+       , following
+       , groups
+       , preceding
+       , range
+       , renderFrame
+       , rows
+       , unboundedFollowing
+       , unboundedPreceding
+       )
 
 -- | A monoidal representation of a Window to be used with a Window Function
 --
@@ -59,7 +63,7 @@ instance Monoid Window where
 -- Phantom helper type
 data PartitionBy
 
--- | PARTITION BY 
+-- | PARTITION BY
 --
 -- Used to divide the result set into partitions for the window function to operate over
 partitionBy_ :: ToSomeValues a => a -> Window
@@ -74,9 +78,9 @@ partitionBy_ expr =
       renderSomeValues info someValues =
           uncommas' $ fmap (\(SomeValue (ERaw _ f)) -> f Never info) someValues
 
--- | ORDER BY 
+-- | ORDER BY
 --
--- Order the values in the given partition  
+-- Order the values in the given partition
 orderBy_ :: [SqlExpr_ ValueContext OrderBy] -> Window
 orderBy_ []    = mempty
 orderBy_ exprs = mempty{ windowOrderBy = Just exprs }
