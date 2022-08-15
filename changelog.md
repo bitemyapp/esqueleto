@@ -1,4 +1,11 @@
-3.5.6.1
+3.5.7.0
+=======
+- @ivanbakel
+    - [#329](https://github.com/bitemyapp/esqueleto/pull/329)
+        - Add `ToAlias` and `ToAliasReference` instances to the type produced
+          by `deriveEsqueletoRecord`, allowing in-SQL records to be used in
+          CTEs
+
 =======
 - @9999years
     - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
