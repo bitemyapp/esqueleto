@@ -1,3 +1,10 @@
+3.5.7.0
+=======
+- @ivanbakel
+    - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
+        - Add `ToAlias` instances for 9- to 16-tuples
+        - Add `ToAliasReference` instances for 9- to 16-tuples
+
 3.5.6.1
 =======
 - @9999years
