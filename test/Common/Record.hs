@@ -144,3 +144,32 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                 }
                    } -> addr1 == addr2 -- The keys should match.
                  _ -> False)
+
+    itDb "can be used in a CTE" $ do
+        setup
+        records <- select $ do
+            recordCTE <- with myRecordQuery
+            record <- from recordCTE
+            pure record
+        let sortedRecords = sortOn (\MyRecord {myName} -> myName) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case MyRecord { myName = "Rebecca"
+                          , myAge = Just 10
+                          , myUser = Entity _ User { userAddress  = Nothing
+                                                   , userName = "Rebecca"
+                                                   }
+                          , myAddress = Nothing
+                          } -> True
+                 _ -> False)
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case MyRecord { myName = "Some Guy"
+                          , myAge = Just 10
+                          , myUser = Entity _ User { userAddress  = Just addr1
+                                                   , userName = "Some Guy"
+                                                   }
+                          , myAddress = Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"})
+                          } -> addr1 == addr2 -- The keys should match.
+                 _ -> False)
+
