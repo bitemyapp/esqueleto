@@ -125,12 +125,11 @@ deriveEsqueletoRecord originalName = do
   sqlSelectInstanceDec <- makeSqlSelectInstance info
   toAliasInstanceDec <- makeToAliasInstance info
   toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
-  pure
-    [ recordDec
-    , sqlSelectInstanceDec
-    , toAliasInstanceDec
-    , toAliasReferenceInstanceDec
-    ]
+  pure 
+    $ recordDec
+    : toAliasInstanceDec
+    : toAliasReferenceInstanceDec
+    : sqlSelectInstanceDec
 
 -- | Information about a record we need to generate the declarations.
 -- We compute this once and then pass it around to save on complexity /
@@ -569,8 +568,9 @@ makeToAliasReferenceInstance info@RecordInfo {..} = do
   let overlap = Nothing
       instanceConstraints = []
       instanceType =
-        (ConT ''ToAliasReference)
-          `AppT` (ConT sqlName)
+        ConT ''ToAliasReference
+          `AppT` ConT sqlName
+          `AppT` ConT sqlName
   pure $ InstanceD overlap instanceConstraints instanceType [toAliasReferenceDec']
 
 toAliasReferenceDec :: RecordInfo -> Q Dec
