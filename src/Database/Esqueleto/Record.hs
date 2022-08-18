@@ -18,6 +18,8 @@ import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
 import Database.Esqueleto.Internal.Internal (SqlSelectCols(..), SqlSelect(..))
+import Database.Esqueleto.Experimental.ToAlias (ToAlias(..))
+import Database.Esqueleto.Experimental.ToAliasReference (ToAliasReference(..))
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Data.Bifunctor (first)
@@ -120,8 +122,15 @@ deriveEsqueletoRecord originalName = do
   -- It would be nicer to use `mconcat` here but I don't think the right
   -- instance is available in GHC 8.
   recordDec <- makeSqlRecord info
-  instanceDec <- makeSqlSelectInstance info
-  pure $ recordDec : instanceDec
+  sqlSelectInstanceDec <- makeSqlSelectInstance info
+  toAliasInstanceDec <- makeToAliasInstance info
+  toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
+  pure
+    [ recordDec
+    , sqlSelectInstanceDec
+    , toAliasInstanceDec
+    , toAliasReferenceInstanceDec
+    ]
 
 -- | Information about a record we need to generate the declarations.
 -- We compute this once and then pass it around to save on complexity /
@@ -512,3 +521,89 @@ nonRecordConstructorMessage con =
         -- only show you the first name.
         (GadtC names _fields _ret) -> head names
         (RecGadtC names _fields _ret) -> head names
+
+makeToAliasInstance :: RecordInfo -> Q Dec
+makeToAliasInstance info@RecordInfo {..} = do
+  toAliasDec' <- toAliasDec info
+  let overlap = Nothing
+      instanceConstraints = []
+      instanceType =
+        (ConT ''ToAlias)
+          `AppT` (ConT sqlName)
+  pure $ InstanceD overlap instanceConstraints instanceType [toAliasDec']
+
+toAliasDec :: RecordInfo -> Q Dec
+toAliasDec RecordInfo {..} = do
+  (statements, fieldPatterns, fieldExps) <-
+    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+      fieldPatternName <- newName (nameBase fieldName')
+      boundValueName <- newName (nameBase fieldName')
+      pure
+        ( BindS
+            (VarP boundValueName)
+            (VarE 'toAlias `AppE` VarE fieldPatternName)
+        , (fieldName', VarP fieldPatternName)
+        , (fieldName', VarE boundValueName)
+        ))
+
+  pure $
+    FunD
+      'toAlias
+      [ Clause
+          [ RecP sqlName fieldPatterns
+          ]
+          ( NormalB $
+              DoE
+#if MIN_VERSION_template_haskell(2,17,0)
+                Nothing
+#endif
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+          )
+          -- `where` clause.
+          []
+      ]
+
+makeToAliasReferenceInstance :: RecordInfo -> Q Dec
+makeToAliasReferenceInstance info@RecordInfo {..} = do
+  toAliasReferenceDec' <- toAliasReferenceDec info
+  let overlap = Nothing
+      instanceConstraints = []
+      instanceType =
+        (ConT ''ToAliasReference)
+          `AppT` (ConT sqlName)
+  pure $ InstanceD overlap instanceConstraints instanceType [toAliasReferenceDec']
+
+toAliasReferenceDec :: RecordInfo -> Q Dec
+toAliasReferenceDec RecordInfo {..} = do
+  identInfo <- newName "identInfo"
+
+  (statements, fieldPatterns, fieldExps) <-
+    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+      fieldPatternName <- newName (nameBase fieldName')
+      boundValueName <- newName (nameBase fieldName')
+      pure
+        ( BindS
+            (VarP boundValueName)
+            (VarE 'toAliasReference `AppE` VarE identInfo `AppE` VarE fieldPatternName)
+        , (fieldName', VarP fieldPatternName)
+        , (fieldName', VarE boundValueName)
+        ))
+
+  pure $
+    FunD
+      'toAliasReference
+      [ Clause
+          [ VarP identInfo
+          , RecP sqlName fieldPatterns
+          ]
+          ( NormalB $
+              DoE
+#if MIN_VERSION_template_haskell(2,17,0)
+                Nothing
+#endif
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+          )
+          -- `where` clause.
+          []
+      ]
+
