@@ -9,6 +9,10 @@
 
 module Database.Esqueleto.Record
   ( deriveEsqueletoRecord
+  , deriveEsqueletoRecordWith
+
+  , DeriveEsqueletoRecordSettings(..)
+  , defaultDeriveEsqueletoRecordSettings
   ) where
 
 import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
@@ -115,8 +119,41 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --
 -- @since 3.5.6.0
 deriveEsqueletoRecord :: Name -> Q [Dec]
-deriveEsqueletoRecord originalName = do
-  info <- getRecordInfo originalName
+deriveEsqueletoRecord = deriveEsqueletoRecordWith defaultDeriveEsqueletoRecordSettings
+
+-- | Codegen settings for 'deriveEsqueletoRecordWith'.
+data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
+  { sqlNameModifier :: String -> String
+    -- ^ Function applied to the Haskell record's type name and constructor
+    -- name to produce the SQL record's type name and constructor name.
+  , sqlFieldModifier :: String -> String
+    -- ^ Function applied to the Haskell record's field names to produce the
+    -- SQL record's field names.
+  }
+
+-- | The default codegen settings for 'deriveEsqueletoRecord'.
+--
+-- These defaults will cause you to require @{-# LANGUAGE DuplicateRecordFields #-}@
+-- in certain cases (see 'deriveEsqueletoRecord'.) If you don't want to do this,
+-- change the value of 'sqlFieldModifier' so the field names of the generated SQL
+-- record different from those of the Haskell record.
+defaultDeriveEsqueletoRecordSettings :: DeriveEsqueletoRecordSettings
+defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
+  { sqlNameModifier = ("Sql" ++)
+  , sqlFieldModifier = id
+  }
+
+-- | Takes the name of a Haskell record type and creates a variant of that
+-- record based on the supplied settings which can be used in esqueleto
+-- expressions. This reduces the amount of pattern matching on large tuples
+-- required to interact with data extracted with esqueleto.
+--
+-- This is a variant of 'deriveEsqueletoRecord' which allows you to avoid the
+-- use of @{-# LANGUAGE DuplicateRecordFields #-}@, by configuring the
+-- 'DeriveEsqueletoRecordSettings' used to generate the SQL record.
+deriveEsqueletoRecordWith :: DeriveEsqueletoRecordSettings -> Name -> Q [Dec]
+deriveEsqueletoRecordWith settings originalName = do
+  info <- getRecordInfo settings originalName
   -- It would be nicer to use `mconcat` here but I don't think the right
   -- instance is available in GHC 8.
   recordDec <- makeSqlRecord info
@@ -136,7 +173,7 @@ deriveEsqueletoRecord originalName = do
 data RecordInfo = RecordInfo
   { -- | The original record's name.
     name :: Name
-  , -- | The generated @Sql@-prefixed record's name.
+  , -- | The generated SQL record's name.
     sqlName :: Name
   , -- | The original record's constraints. If this isn't empty it'll probably
     -- cause problems, but it's easy to pass around so might as well.
@@ -151,17 +188,19 @@ data RecordInfo = RecordInfo
     kind :: Maybe Kind
   , -- | The original record's constructor name.
     constructorName :: Name
+  , -- | The generated SQL record's constructor name.
+    sqlConstructorName :: Name
   , -- | The original record's field names and types, derived from the
     -- constructors.
     fields :: [(Name, Type)]
-  , -- | The generated @Sql@-prefixed record's field names and types, computed
+  , -- | The generated SQL record's field names and types, computed
     -- with 'sqlFieldType'.
     sqlFields :: [(Name, Type)]
   }
 
 -- | Get a `RecordInfo` instance for the given record name.
-getRecordInfo :: Name -> Q RecordInfo
-getRecordInfo name = do
+getRecordInfo :: DeriveEsqueletoRecordSettings -> Name -> Q RecordInfo
+getRecordInfo settings name = do
   TyConI dec <- reify name
   (constraints, typeVarBinders, kind, constructors) <-
         case dec of
@@ -178,7 +217,8 @@ getRecordInfo name = do
           RecC name' _fields -> name'
           con -> error $ nonRecordConstructorMessage con
       fields = getFields constructor
-      sqlName = makeSqlName name
+      sqlName = makeSqlName settings name
+      sqlConstructorName = makeSqlName settings constructorName
 
   sqlFields <- mapM toSqlField fields
 
@@ -189,12 +229,13 @@ getRecordInfo name = do
     getFields con = error $ nonRecordConstructorMessage con
 
     toSqlField (fieldName', ty) = do
+      let modifier = mkName . sqlFieldModifier settings . nameBase
       sqlTy <- sqlFieldType ty
-      pure (fieldName', sqlTy)
+      pure (modifier fieldName', sqlTy)
 
 -- | Create a new name by prefixing @Sql@ to a given name.
-makeSqlName :: Name -> Name
-makeSqlName name = mkName $ "Sql" ++ nameBase name
+makeSqlName :: DeriveEsqueletoRecordSettings -> Name -> Name
+makeSqlName settings name = mkName $ sqlNameModifier settings $ nameBase name
 
 -- | Transforms a record field type into a corresponding `SqlExpr` type.
 --
@@ -228,7 +269,7 @@ sqlFieldType fieldType = do
 -- record's information.
 makeSqlRecord :: RecordInfo -> Q Dec
 makeSqlRecord RecordInfo {..} = do
-  let newConstructor = RecC (makeSqlName constructorName) (makeField `map` sqlFields)
+  let newConstructor = RecC sqlConstructorName (makeField `map` sqlFields)
       derivingClauses = []
   pure $ DataD constraints sqlName typeVarBinders kind [newConstructor] derivingClauses
   where
