@@ -122,13 +122,19 @@ deriveEsqueletoRecord :: Name -> Q [Dec]
 deriveEsqueletoRecord = deriveEsqueletoRecordWith defaultDeriveEsqueletoRecordSettings
 
 -- | Codegen settings for 'deriveEsqueletoRecordWith'.
+--
+-- @since 3.5.8.0
 data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
   { sqlNameModifier :: String -> String
     -- ^ Function applied to the Haskell record's type name and constructor
     -- name to produce the SQL record's type name and constructor name.
+    --
+    -- @since 3.5.8.0
   , sqlFieldModifier :: String -> String
     -- ^ Function applied to the Haskell record's field names to produce the
     -- SQL record's field names.
+    --
+    -- @since 3.5.8.0
   }
 
 -- | The default codegen settings for 'deriveEsqueletoRecord'.
@@ -137,6 +143,8 @@ data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
 -- in certain cases (see 'deriveEsqueletoRecord'.) If you don't want to do this,
 -- change the value of 'sqlFieldModifier' so the field names of the generated SQL
 -- record different from those of the Haskell record.
+--
+-- @since 3.5.8.0
 defaultDeriveEsqueletoRecordSettings :: DeriveEsqueletoRecordSettings
 defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
   { sqlNameModifier = ("Sql" ++)
@@ -151,6 +159,8 @@ defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
 -- This is a variant of 'deriveEsqueletoRecord' which allows you to avoid the
 -- use of @{-# LANGUAGE DuplicateRecordFields #-}@, by configuring the
 -- 'DeriveEsqueletoRecordSettings' used to generate the SQL record.
+--
+-- @since 3.5.8.0
 deriveEsqueletoRecordWith :: DeriveEsqueletoRecordSettings -> Name -> Q [Dec]
 deriveEsqueletoRecordWith settings originalName = do
   info <- getRecordInfo settings originalName
