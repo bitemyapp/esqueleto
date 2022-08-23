@@ -171,6 +171,17 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   DateTruncTest
     created   UTCTime
     deriving Eq Show
+
+  User
+    address AddressId Maybe
+    name String
+    deriving Show
+    deriving Eq
+
+  Address
+    address String
+    deriving Show
+    deriving Eq
 |]
 
 -- Unique Test schema

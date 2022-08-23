@@ -73,7 +73,6 @@ import Control.Monad (forM_, replicateM, replicateM_, void)
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
 import Data.Either
-import Data.Monoid ((<>))
 import Database.Esqueleto
 import qualified Database.Esqueleto.Experimental as Experimental
 
@@ -90,6 +89,7 @@ import qualified UnliftIO.Resource as R
 import Database.Persist.Class.PersistEntity
 
 import Common.Test.Select
+import Common.Record (testDeriveEsqueletoRecord)
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -2353,6 +2353,7 @@ tests =
         testExperimentalFrom
         testLocking
         testOverloadedRecordDot
+        testDeriveEsqueletoRecord
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val

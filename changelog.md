@@ -1,8 +1,26 @@
-3.5.5.1
+3.5.7.1
 =======
 - @belevy
     - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
         - Fix alias name bug with union and subselect 
+
+3.5.7.0
+=======
+- @ivanbakel
+    - [#329](https://github.com/bitemyapp/esqueleto/pull/329)
+        - Add `ToAlias` and `ToAliasReference` instances to the type produced
+          by `deriveEsqueletoRecord`, allowing in-SQL records to be used in
+          CTEs
+
+- @9999years
+    - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
+        - Add ability to use nested records with `deriveEsqueletoRecord`
+
+3.5.6.0
+=======
+- @9999years
+    - [#323](https://github.com/bitemyapp/esqueleto/pull/323)
+        - Add ability to derive esqueleto instances for records
 
 3.5.5.0
 =======
