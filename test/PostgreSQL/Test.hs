@@ -41,7 +41,7 @@ import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
-import Database.Persist.Postgresql (withPostgresqlConn, createPostgresqlPool)
+import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
@@ -1318,6 +1318,23 @@ testValuesExpression = do
                                        , (Value 2, Value "str2", Value $ Just 2.5)
                                        , (Value 3, Value "str3", Value Nothing) ]
 
+testSubselectUnionError :: SpecDb
+testSubselectUnionError = do
+    describe "Subselect union error" $ do
+        itDb "doesnt erroneously repeat variable names when using subselect + union" $ do
+            let lordQuery = do
+                    l <- Experimental.from $ table @Lord
+                    pure (l ^. LordCounty, l ^. LordDogs)
+                personQuery = do
+                    p <- Experimental.from $ table @Person
+                    pure (p ^. PersonName, just $ p ^. PersonFavNum)
+            _ <- select $
+                Experimental.from $ do
+                    (str, _) <- Experimental.from $ lordQuery `union_` personQuery
+                    pure (str, val @Int 1)
+            asserting noExceptions
+
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1411,6 +1428,7 @@ spec = beforeAll mkConnectionPool $ do
                 testJSONOperators
         testLateralQuery
         testValuesExpression
+        testSubselectUnionError
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
