@@ -22,7 +22,12 @@ module Common.Record (testDeriveEsqueletoRecord) where
 import Common.Test.Import hiding (from, on)
 import Data.List (sortOn)
 import Database.Esqueleto.Experimental
-import Database.Esqueleto.Record (deriveEsqueletoRecord)
+import Database.Esqueleto.Record
+  ( DeriveEsqueletoRecordSettings(..)
+  , defaultDeriveEsqueletoRecordSettings
+  , deriveEsqueletoRecord
+  , deriveEsqueletoRecordWith
+  )
 
 data MyRecord =
     MyRecord
@@ -75,6 +80,36 @@ myNestedRecordQuery = do
             , myUser = user
             , myAddress = address
             }
+      }
+
+data MyModifiedRecord =
+    MyModifiedRecord
+        { myModifiedName :: Text
+        , myModifiedAge :: Maybe Int
+        , myModifiedUser :: Entity User
+        , myModifiedAddress :: Maybe (Entity Address)
+        }
+  deriving (Show, Eq)
+
+$(deriveEsqueletoRecordWith (defaultDeriveEsqueletoRecordSettings
+    { sqlNameModifier = (++ "Sql")
+    , sqlFieldModifier = (++ "Sql")
+    })
+    ''MyModifiedRecord)
+
+myModifiedRecordQuery :: SqlQuery MyModifiedRecordSql
+myModifiedRecordQuery = do
+  user :& address <- from $
+    table @User
+      `leftJoin`
+      table @Address
+      `on` (do \(user :& address) -> user ^. #address ==. address ?. #id)
+  pure
+    MyModifiedRecordSql
+      { myModifiedNameSql = castString $ user ^. #name
+      , myModifiedAgeSql = val $ Just 10
+      , myModifiedUserSql = user
+      , myModifiedAddressSql = address
       }
 
 testDeriveEsqueletoRecord :: SpecDb
@@ -173,3 +208,30 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                           } -> addr1 == addr2 -- The keys should match.
                  _ -> False)
 
+
+    itDb "can select user-modified records" $ do
+        setup
+        records <- select myModifiedRecordQuery
+        let sortedRecords = sortOn (\MyModifiedRecord {myModifiedName} -> myModifiedName) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case MyModifiedRecord
+                  { myModifiedName = "Rebecca"
+                  , myModifiedAge = Just 10
+                  , myModifiedUser = Entity _ User { userAddress  = Nothing
+                                           , userName = "Rebecca"
+                                           }
+                  , myModifiedAddress = Nothing
+                  } -> True
+                 _ -> False)
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case MyModifiedRecord
+                    { myModifiedName = "Some Guy"
+                    , myModifiedAge = Just 10
+                    , myModifiedUser = Entity _ User { userAddress  = Just addr1
+                                             , userName = "Some Guy"
+                                             }
+                    , myModifiedAddress = Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"})
+                    } -> addr1 == addr2 -- The keys should match.
+                 _ -> False)

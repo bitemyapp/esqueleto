@@ -1422,6 +1422,23 @@ testWindowFunctions = do
                                           , (Value 3, Value (Just 5.0))
                                           , (Value 6, Value (Just 12.0))]
 
+
+testSubselectUnionError :: SpecDb
+testSubselectUnionError = do
+    describe "Subselect union error" $ do
+        itDb "doesnt erroneously repeat variable names when using subselect + union" $ do
+            let lordQuery = do
+                    l <- Experimental.from $ table @Lord
+                    pure (l ^. LordCounty, l ^. LordDogs)
+                personQuery = do
+                    p <- Experimental.from $ table @Person
+                    pure (p ^. PersonName, just $ p ^. PersonFavNum)
+            _ <- select $
+                Experimental.from $ do
+                    (str, _) <- Experimental.from $ lordQuery `union_` personQuery
+                    pure (str, val @Int 1)
+            asserting noExceptions
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1516,7 +1533,8 @@ spec = beforeAll mkConnectionPool $ do
         testLateralQuery
         testValuesExpression
         testWindowFunctions
-
+        testSubselectUnionError
+        
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
     insertIt Null

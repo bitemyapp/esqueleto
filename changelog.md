@@ -1,3 +1,22 @@
+3.5.8.0
+=======
+- @ivanbakel
+    - [#331](https://github.com/bitemyapp/esqueleto/pull/331)
+        - Add `deriveEsqueletoRecordWith` to derive Esqueleto instances for
+          records using custom deriving settings.
+        - Add `DeriveEsqueletoRecordSettings` to control how Esqueleto record
+          instances are derived.
+        - Add `sqlNameModifier` to control how Esqueleto record instance
+          deriving generates the SQL record type name.
+        - Add `sqlFieldModifier` to control how Esqueleto record instance
+          deriving generates the SQL record fields.
+
+3.5.7.1
+=======
+- @belevy
+    - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
+        - Fix alias name bug with union and subselect 
+
 3.5.7.0
 =======
 - @ivanbakel
@@ -6,7 +25,6 @@
           by `deriveEsqueletoRecord`, allowing in-SQL records to be used in
           CTEs
 
-=======
 - @9999years
     - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
         - Add ability to use nested records with `deriveEsqueletoRecord`
