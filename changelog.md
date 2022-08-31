@@ -1,3 +1,10 @@
+3.5.8.1
+=======
+- @belevy
+    - [#336](https://github.com/bitemyapp/esqueleto/pull/336)
+        - Fix bug with multiple nested subqueries introduced in 3.5.7.1
+        - Set operations will now only reuse variable names within the context of the set operation.
+            a subquery that references the set operation will correctly pick up where the subquery left off
 3.5.8.0
 =======
 - @ivanbakel

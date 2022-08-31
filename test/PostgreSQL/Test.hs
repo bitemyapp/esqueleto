@@ -1319,7 +1319,7 @@ testValuesExpression = do
                                        , (Value 3, Value "str3", Value Nothing) ]
 
 testSubselectAliasingBehavior :: SpecDb
-testSubselectAliasingBehavior = focus $ do
+testSubselectAliasingBehavior = do
     describe "Aliasing behavior" $ do
         itDb "correctly realiases entities accross multiple subselects" $ do
             _ <- select $ do
