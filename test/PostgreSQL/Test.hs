@@ -1423,9 +1423,14 @@ testWindowFunctions = do
                                           , (Value 6, Value (Just 12.0))]
 
 
-testSubselectUnionError :: SpecDb
-testSubselectUnionError = do
-    describe "Subselect union error" $ do
+testSubselectAliasingBehavior :: SpecDb
+testSubselectAliasingBehavior = do
+    describe "Aliasing behavior" $ do
+        itDb "correctly realiases entities accross multiple subselects" $ do
+            _ <- select $ do
+                    Experimental.from $ Experimental.from $ Experimental.from $ table @Lord
+            asserting noExceptions
+
         itDb "doesnt erroneously repeat variable names when using subselect + union" $ do
             let lordQuery = do
                     l <- Experimental.from $ table @Lord
@@ -1533,8 +1538,8 @@ spec = beforeAll mkConnectionPool $ do
         testLateralQuery
         testValuesExpression
         testWindowFunctions
-        testSubselectUnionError
-        
+        testSubselectAliasingBehavior
+
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do
     insertIt Null

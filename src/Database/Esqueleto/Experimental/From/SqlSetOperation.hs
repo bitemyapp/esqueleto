@@ -50,9 +50,7 @@ instance (SqlSelectCols a, ToAlias a, ToAliasReference a a') => ToSqlSetOperatio
     toSqlSetOperation subquery =
         SqlSetOperation $ \p -> do
             (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ subquery
-            state <- Q $ lift S.get
             aliasedValue <- toAlias ret
-            Q $ lift $ S.put state
             let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
             let p' =
                   case p of
@@ -70,7 +68,9 @@ instance (SqlSelectCols a, ToAlias a, ToAliasReference a a') => ToSqlSetOperatio
 mkSetOperation :: (ToSqlSetOperation a a', ToSqlSetOperation b a')
                => TLB.Builder -> a -> b -> SqlSetOperation a'
 mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
+    state <- Q $ lift S.get
     (leftValue, leftClause) <- unSqlSetOperation (toSqlSetOperation lhs) p
+    Q $ lift $ S.put state
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
