@@ -3193,14 +3193,9 @@ makeLocking info (PostgresLockingClause (PostgresLockingKind rowStrength onLockB
     makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
     makeLockingBehavior NoWait = plain "NO WAIT"
     makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
+    makeLockingBehavior Wait = plain ""
     plain v = (v,[])
 makeLocking _ NoLockingClause = mempty
-
-
---    Just (ForUpdateOfSkipLocked rawNames) ->
---      let names = uncommas' $ (\(LockableEntity1 (ERaw _ f)) -> (f Never info)) <$> rawNames in
---      first (\n -> "\nFOR UPDATE OF " <> n <> " SKIP LOCKED") names
---    Nothing -> mempty
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
