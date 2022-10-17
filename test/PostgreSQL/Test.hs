@@ -42,6 +42,7 @@ import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
+import qualified Database.Persist.Class as P
 import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment

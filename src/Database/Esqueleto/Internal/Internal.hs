@@ -14,8 +14,8 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
@@ -396,7 +396,7 @@ rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
 having :: SqlExpr (Value Bool) -> SqlQuery ()
 having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
--- | Add a locking clause to the query.  Please read
+-- | Add a general locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.
 --
 -- If multiple calls to 'locking' are made on the same query,
@@ -406,6 +406,9 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 locking :: LockingKind -> SqlQuery ()
 locking kind = putLocking $ GeneralLockingClause kind
 
+-- | Helper to add a any type of locking clause to a query
+--
+-- @since 3.5.9.0
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
@@ -1426,22 +1429,22 @@ infixl 2 :&
 -- are no guarantees that they will behave the same.
 --
 -- @since 2.2.7
-data LockingKind where
-    ForUpdate :: LockingKind
+data LockingKind
+   = ForUpdate
       -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    ForUpdateSkipLocked :: LockingKind
+    | ForUpdateSkipLocked
       -- ^ @FOR UPDATE SKIP LOCKED@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
       -- @since 2.2.7
-    ForShare :: LockingKind
+    | ForShare
       -- ^ @FOR SHARE@ syntax.  Supported by PostgreSQL.
       --
       -- @since 2.2.7
-    LockInShareMode :: LockingKind
+    | LockInShareMode
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
@@ -1449,50 +1452,43 @@ data LockingKind where
 -- | Postgres specific locking, used only internally
 --
 -- @since 3.5.9.0
-data PostgresLockingKind where
-  PostgresLockingKind :: PostgresRowLevelLockStrength -> OnLockedBehavior -> PostgresLockingKind
+data PostgresLockingKind =
+  PostgresLockingKind
+    {
+      postgresRowLevelLockStrength :: PostgresRowLevelLockStrength
+    , postgresLockingOfClause :: Maybe LockingOfClause
+    , postgresOnLockedBehavior :: OnLockedBehavior
+    }
 
-instance Eq PostgresLockingKind where
-  (==) a b = compare a b == EQ
 
-instance Ord PostgresLockingKind where
-  compare (PostgresLockingKind rowstr1 onLockedBehavior1) (PostgresLockingKind rowstr2 onLockedBehavior2) =
-    case compare rowstr1 rowstr2 of
-      EQ -> compare onLockedBehavior1 onLockedBehavior2
-      rowStrCmp -> rowStrCmp
+comparePostgresLockStrength :: PostgresLockingKind -> PostgresLockingKind -> Ordering
+comparePostgresLockStrength a b = compare (postgresRowLevelLockStrength a) (postgresRowLevelLockStrength b)
 
+-- Arranged in order of lock strength
 data PostgresRowLevelLockStrength =
-    PostgresForUpdate (Maybe LockingOfClause)
-    | PostgresForShare (Maybe LockingOfClause)
-
--- | Eq instance of RowLevelLockStrength refers to the equality of the 
--- strength of lock specifically
-instance Eq PostgresRowLevelLockStrength where
-  (==) a b = compare a b == EQ
-
--- | Ord instance of RowLevelLockStrength refers to the order of the strength
--- of lock only. 
-instance Ord PostgresRowLevelLockStrength where
-  compare (PostgresForUpdate _) (PostgresForUpdate _) = EQ
-  compare (PostgresForUpdate _) _  = GT
-  compare _ (PostgresForUpdate _)  = LT
-  compare (PostgresForShare _) (PostgresForShare _)  = EQ
+    PostgresForUpdate
+    | PostgresForShare
+  deriving (Ord, Eq)
 
 data LockingOfClause where
   Of :: LockableEntity a => a -> LockingOfClause
 
 data OnLockedBehavior =
-  -- ^ @NOWAIT@ syntax locking behaviour.
-  --  query excutes immediately failing 
-  -- 
-  -- @since 3.5.9.0
   NoWait
-  -- ^ @SKIP LOCKED@ syntax locking behaviour.
-  --  query skips locked rows
-  -- 
+  -- ^ @NOWAIT@ syntax locking behaviour.
+  --  query excutes immediately failing on locked rows
+  --
   -- @since 3.5.9.0
     | SkipLocked
+  -- ^ @SKIP LOCKED@ syntax locking behaviour.
+  --  query skips locked rows
+  --
+  -- @since 3.5.9.0
     | Wait
+  -- ^ default locking behaviour.
+  --  query will wait on locked rows
+  --
+  -- @since 3.5.9.0
     deriving (Ord, Eq, Show)
 
 
@@ -1502,7 +1498,7 @@ data OnLockedBehavior =
 --
 -- @
 -- select $ do
---     (p :& bp) <- from $ 
+--     (p :& bp) <- from $
 --         table @Person
 --         `innerJoin` table @BlogPost
 --             `on` do
@@ -1511,13 +1507,14 @@ data OnLockedBehavior =
 --     return p
 -- @
 class LockableEntity a where
-  flattenLockableEntity :: a -> [LockableSqlExpr]
-  makeLockableEntity :: LockableEntity a => IdentInfo -> a -> (TLB.Builder, [PersistValue])
-  makeLockableEntity info lockableEntity =
-    uncommas' $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> flattenLockableEntity lockableEntity
+  flattenLockableEntity :: a -> NonEmpty LockableSqlExpr
+
+makeLockableEntity :: LockableEntity a => IdentInfo -> a -> (TLB.Builder, [PersistValue])
+makeLockableEntity info lockableEntity =
+  uncommas' $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
 
 instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
-  flattenLockableEntity e = [LockableSqlExpr e]
+  flattenLockableEntity e = LockableSqlExpr e :| []
 
 instance (LockableEntity a, LockableEntity b) => LockableEntity (a :& b) where
   flattenLockableEntity (a :& b) = flattenLockableEntity a <> flattenLockableEntity b
@@ -2097,13 +2094,13 @@ data LockingClause =
 -- specific locks of differing strength
 -- 2. Rightmost (last) locking clause otherwise
 instance Semigroup LockingClause where
-  (<>) pleft@(PostgresLockingClause cl1) pright@(PostgresLockingClause cl2)  =
-    case compare cl1 cl2 of
+  (<>) pleft@(PostgresLockingClause a) pright@(PostgresLockingClause b)  =
+    case comparePostgresLockStrength a b of
       GT -> pleft
       _ -> pright
   (<>) mleft NoLockingClause = mleft
   (<>) _ mright = mright
-
+--
 instance Monoid LockingClause where
   mempty = NoLockingClause
   mappend = (<>)
@@ -3180,21 +3177,27 @@ makeLocking _ (GeneralLockingClause lockingClause) =
     ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
     ForShare            -> ("\nFOR SHARE", [])
     LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
-makeLocking info (PostgresLockingClause (PostgresLockingKind rowStrength onLockBehaviour)) = 
-  makeLockingStrength info rowStrength <> plain " " <> makeLockingBehavior onLockBehaviour
-  where
-    makeLockingStrength :: IdentInfo -> PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
-    makeLockingStrength info (PostgresForUpdate Nothing) = plain "FOR UPDATE" 
-    makeLockingStrength info (PostgresForUpdate (Just (Of lockableEnts))) =
-      plain "FOR UPDATE OF " <> makeLockableEntity info lockableEnts
-    makeLockingStrength info (PostgresForShare Nothing) = plain "FOR SHARE"
-    makeLockingStrength info (PostgresForShare (Just (Of lockableEnts))) =
-      plain "FOR SHARE OF " <> makeLockableEntity info lockableEnts
-    makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
-    makeLockingBehavior NoWait = plain "NO WAIT"
-    makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
-    makeLockingBehavior Wait = plain ""
-    plain v = (v,[])
+makeLocking info (PostgresLockingClause l) =
+    makeLockingStrength (postgresRowLevelLockStrength l)
+      <> plain " "
+      <> makeOfClause (postgresLockingOfClause l)
+      <> plain " "
+      <> makeLockingBehavior (postgresOnLockedBehavior l)
+    where
+      makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
+      makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
+      makeLockingStrength PostgresForShare = plain "FOR SHARE"
+
+      makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
+      makeLockingBehavior NoWait = plain "NO WAIT"
+      makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
+      makeLockingBehavior Wait = plain ""
+
+      makeOfClause :: Maybe LockingOfClause -> (TLB.Builder, [PersistValue])
+      makeOfClause (Just (Of lockableEnts)) = plain "OF " <> makeLockableEntity info lockableEnts
+      makeOfClause Nothing = plain ""
+
+      plain v = (v,[])
 makeLocking _ NoLockingClause = mempty
 
 parens :: TLB.Builder -> TLB.Builder
@@ -3205,7 +3208,7 @@ aliasedEntityColumnIdent (I baseIdent) field =
     I (baseIdent <> "_" <> (unDBName $ coerce $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
-aliasedColumnName (I baseIdent) info columnName =
+aliasedColumnName (I baseIdent) infoqualified  columnName =
     useIdent info (I (baseIdent <> "_" <> columnName))
 
 -- | (Internal) Class for mapping results coming from 'SqlQuery'

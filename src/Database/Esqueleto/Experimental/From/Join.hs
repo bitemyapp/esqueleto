@@ -13,6 +13,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Database.Esqueleto.Experimental.From.Join
+  (module Database.Esqueleto.Experimental.From.Join
+  , (:&)
+  )
     where
 
 import Data.Bifunctor (first)
