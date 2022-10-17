@@ -443,27 +443,27 @@ values exprs = Ex.From $ do
 -- `NO WAIT` syntax for postgres locking
 -- error will be thrown if locked rows are attempted to be selected
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 noWait :: OnLockedBehavior
 noWait = NoWait
 
 -- `SKIP LOCKED` syntax for postgres locking
 -- locked rows will be skipped
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 skipLocked :: OnLockedBehavior
 skipLocked = SkipLocked
 
 -- default behaviour of postgres locks. will attempt to wait for locks to expire
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 wait :: OnLockedBehavior
 wait = Wait
 
 -- | `FOR UPDATE OF` syntax for postgres locking
 -- allows locking of specific tables
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forUpdateOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClause (PostgresLockingKind (PostgresForUpdate $ Just $ Of lockableEntities) onLockedBehavior)
@@ -471,7 +471,7 @@ forUpdateOf lockableEntities onLockedBehavior =
 -- | `FOR SHARE OF` syntax for postgres locking
 -- allows locking of specific tables
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClause (PostgresLockingKind (PostgresForUpdate $ Just $ Of lockableEntities) onLockedBehavior)

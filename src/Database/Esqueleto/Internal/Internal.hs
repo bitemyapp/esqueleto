@@ -1448,7 +1448,7 @@ data LockingKind where
 
 -- | Postgres specific locking, used only internally
 --
--- @since 3.5.8.0
+-- @since 3.5.9.0
 data PostgresLockingKind where
   PostgresLockingKind :: PostgresRowLevelLockStrength -> OnLockedBehavior -> PostgresLockingKind
 
@@ -1485,12 +1485,12 @@ data OnLockedBehavior =
   -- ^ @NOWAIT@ syntax locking behaviour.
   --  query excutes immediately failing 
   -- 
-  -- @since 3.5.8.0
+  -- @since 3.5.9.0
   NoWait
   -- ^ @SKIP LOCKED@ syntax locking behaviour.
   --  query skips locked rows
   -- 
-  -- @since 3.5.8.0
+  -- @since 3.5.9.0
     | SkipLocked
     | Wait
     deriving (Ord, Eq, Show)
