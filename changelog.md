@@ -1,7 +1,7 @@
 3.5.9.0
 =======
 - @josephsumabat
-    - [#333](https://github.com/bitemyapp/esqueleto/pull/333)
+    - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
       - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
 
 3.5.8.1
