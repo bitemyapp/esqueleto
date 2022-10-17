@@ -27,21 +27,6 @@ import Database.Esqueleto.Internal.Internal hiding
        (From(..), from, fromJoin, on)
 import GHC.TypeLits
 
--- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
--- that have been joined together.
---
--- The precedence behavior can be demonstrated by:
---
--- @
--- a :& b :& c == ((a :& b) :& c)
--- @
---
--- See the examples at the beginning of this module to see how this
--- operator is used in 'JOIN' operations.
-data (:&) a b = a :& b
-    deriving (Eq, Show)
-infixl 2 :&
-
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
     toMaybe (a :& b) = (toMaybe a :& toMaybe b)

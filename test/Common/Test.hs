@@ -86,6 +86,7 @@ import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
 import qualified UnliftIO.Resource as R
+import Database.Esqueleto.PostgreSQL as EP
 import Database.Persist.Class.PersistEntity
 
 import Common.Test.Select
@@ -1613,32 +1614,31 @@ testCase = do
 
         asserting $ ret `shouldBe` [ Value (3) ]
 
-
-
-
-
 testLocking :: SpecDb
 testLocking = do
+  let toText conn q =
+        let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+         in TLB.toLazyText tlb
+      complexQuery =
+        from $ \(p1' `InnerJoin` p2') -> do
+        on (p1' ^. PersonName ==. p2' ^. PersonName)
+        where_ (p1' ^. PersonFavNum >. val 2)
+        orderBy [desc (p2' ^. PersonAge)]
+        limit 3
+        offset 9
+        groupBy (p1' ^. PersonId)
+        having (countRows <. val (0 :: Int))
+        return (p1', p2')
   describe "locking" $ do
     -- The locking clause is the last one, so try to use many
     -- others to test if it's at the right position.  We don't
     -- care about the text of the rest, nor with the RDBMS'
     -- reaction to the clause.
     let sanityCheck kind syntax = do
-          let complexQuery =
-                from $ \(p1' `InnerJoin` p2') -> do
-                on (p1' ^. PersonName ==. p2' ^. PersonName)
-                where_ (p1' ^. PersonFavNum >. val 2)
-                orderBy [desc (p2' ^. PersonAge)]
-                limit 3
-                offset 9
-                groupBy (p1' ^. PersonId)
-                having (countRows <. val (0 :: Int))
-                return (p1', p2')
-              queryWithClause1 = do
-                r <- complexQuery
-                locking kind
-                return r
+          let queryWithClause1 = do
+                 r <- complexQuery
+                 locking kind
+                 return r
               queryWithClause2 = do
                 locking ForUpdate
                 r <- complexQuery
@@ -1648,9 +1648,6 @@ testLocking = do
               queryWithClause3 = do
                 locking kind
                 complexQuery
-              toText conn q =
-                let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
-                in TLB.toLazyText tlb
           conn <- ask
           [complex, with1, with2, with3] <-
             return $
@@ -1658,14 +1655,52 @@ testLocking = do
           let expected = complex <> "\n" <> syntax
           asserting $
               (with1, with2, with3) `shouldBe` (expected, expected, expected)
-
     itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
     itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
+  describe "Monoid instance" $ do
+    let forUpdateOfQuery = do
+            p <- Experimental.from $ table @Person
+            EP.forUpdateOf p EP.skipLocked
+        forShareOfQuery = do
+            p <- Experimental.from $ table @Person
+            EP.forShareOf p EP.skipLocked
+        forUpdateQuery = do
+          _ <- Experimental.from $ table @Person
+          locking ForUpdate
+        forShareQuery = do
+          _ <- Experimental.from $ table @Person
+          locking ForShare
+    itDb "takes the last locking clause when mixing general and postgres locks" $ do
+        let multipleLockingQuery = do
+              p <- Experimental.from $ table @Person
+              EP.forUpdateOf p EP.skipLocked
+              locking ForUpdate
+              locking ForShare
+        conn <- ask
+        let res1 = toText conn multipleLockingQuery
+            res2 = toText conn forShareQuery
+        asserting $ res1 `shouldBe` res2
+    
+    itDb "takes the strongest postgres lock" $ do
+        let shareAndUpdatePostgresQuery= do
+                p <- Experimental.from $ table @Person
+                EP.forUpdateOf p EP.skipLocked
+                EP.forShareOf p EP.skipLocked
+            updateAndSharePostgresQuery = do
+                p <- Experimental.from $ table @Person
+                EP.forShareOf p EP.skipLocked
+                EP.forUpdateOf p EP.skipLocked
 
-
+        conn <- ask
+        let res1 = toText conn shareAndUpdatePostgresQuery
+            res2 = toText conn updateAndSharePostgresQuery
+            expected = toText conn forUpdateOfQuery
+        liftIO $ print res1
+        asserting $ res1 `shouldBe` expected
+        asserting $ res2 `shouldBe` expected
 
 
 testCountingRows :: SpecDb
