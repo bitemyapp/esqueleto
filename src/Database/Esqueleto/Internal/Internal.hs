@@ -1449,6 +1449,37 @@ data LockingKind
       --
       -- @since 2.2.7
 
+newtype (ComparableLockStrength a) => StrongestLock a =
+  StrongestLock { getStrongestLock :: Maybe a}
+
+class ComparableLockStrength a where
+  -- | Create a lock that is at least as strong as both locks and at most as
+  -- strong as the stronger lock
+  -- Should satisfy:
+  --    If compare a b = GT
+  --        compareLockStrength (unionLocks a b) b = GT
+  --        compareLockStrength a (unionLocks a b) = EQ
+  --    If compare a b = EQ
+  --        compareLockStrength (unionLocks a b) b = EQ
+  --        compareLockStrength a (unionLocks a b) = EQ
+  --    If compare a b = LT
+  --        compareLockStrength (unionLocks a b) b = EQ
+  --        compareLockStrength a (unionLocks a b) = LT
+  unionLocks :: ComparableLockStrength a => a -> a -> a
+  compareLockStrength :: ComparableLockStrength a => a -> a -> Ordering
+
+instance ComparableLockStrength a => Semigroup (StrongestLock a) where
+  (<>) (StrongestLock Nothing) pright = pright
+  (<>) pleft (StrongestLock Nothing) = pleft
+  (<>) (StrongestLock (Just pright)) (StrongestLock (Just pleft)) =
+    case compareLockStrength pleft pright of
+      GT -> StrongestLock (Just pright)
+      EQ -> StrongestLock (Just $ unionLocks pright pleft)
+      LT -> StrongestLock (Just pleft)
+
+instance ComparableLockStrength a => Monoid (StrongestLock a) where
+  mempty = StrongestLock Nothing
+
 -- | Postgres specific locking, used only internally
 --
 -- @since 3.5.9.0
@@ -1460,9 +1491,17 @@ data PostgresLockingKind =
     , postgresOnLockedBehavior :: OnLockedBehavior
     }
 
-
-comparePostgresLockStrength :: PostgresLockingKind -> PostgresLockingKind -> Ordering
-comparePostgresLockStrength a b = compare (postgresRowLevelLockStrength a) (postgresRowLevelLockStrength b)
+instance ComparableLockStrength PostgresLockingKind where
+  unionLocks pl1 pl2 =
+    let newOfClause = do
+          (Of e1) <- postgresLockingOfClause pl1
+          (Of e2) <- postgresLockingOfClause pl2
+          pure $ Of (e1 :& e2) in
+    case compareLockStrength pl1 pl2 of
+      GT -> pl1 { postgresLockingOfClause = newOfClause }
+      EQ -> pl1 { postgresLockingOfClause = newOfClause }
+      LT -> pl2 { postgresLockingOfClause = newOfClause }
+  compareLockStrength a b = compare (postgresRowLevelLockStrength a) (postgresRowLevelLockStrength b)
 
 -- Arranged in order of lock strength
 data PostgresRowLevelLockStrength =
@@ -1472,6 +1511,9 @@ data PostgresRowLevelLockStrength =
 
 data LockingOfClause where
   Of :: LockableEntity a => a -> LockingOfClause
+
+unionOfClause :: LockingOfClause -> LockingOfClause -> LockingOfClause
+unionOfClause (Of a) (Of b) = (Of (a :& b))
 
 data OnLockedBehavior =
   NoWait
@@ -1511,7 +1553,7 @@ class LockableEntity a where
 
 makeLockableEntity :: LockableEntity a => IdentInfo -> a -> (TLB.Builder, [PersistValue])
 makeLockableEntity info lockableEntity =
-  uncommas' $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
+  uncommas' $ Set.toList . Set.fromList $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
 
 instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
   flattenLockableEntity e = LockableSqlExpr e :| []
@@ -2092,14 +2134,25 @@ data LockingClause =
 -- | Monoid instance prioritization is:
 -- 1. "Strongest" lock (FOR UPDATE > FOR SHARE) if comparing two postgres
 -- specific locks of differing strength
--- 2. Rightmost (last) locking clause otherwise
+-- 2. Taking a "union" of postgres locks of equal strength (two locks which lock
+-- multiple tables will lock tables specified in either lock) for lock strength. Lock BEHAVIOUR will prioritize the first lock
+-- 3. Rightmost (last) locking clause if between two general locks for
+-- backwards compatibility
+-- 4. ForUpdate/ForUpdateSkipLocked > Postgres For Update Of > ForShare/LockInShareMode > PostgresFor Share Of if comparing between postgres and non-postgres locks
 instance Semigroup LockingClause where
-  (<>) pleft@(PostgresLockingClause a) pright@(PostgresLockingClause b)  =
-    case comparePostgresLockStrength a b of
-      GT -> pleft
-      _ -> pright
+  (<>) (PostgresLockingClause pleft) (PostgresLockingClause pright) =
+    Maybe.maybe mempty PostgresLockingClause
+    (getStrongestLock $ StrongestLock (Just pleft) <> StrongestLock (Just pright))
+  -- For backwards compatibility reasons we use the monoid instance of last for
+  -- general locking cluase
+  (<>) (GeneralLockingClause gleft) (GeneralLockingClause gright)  =
+    Maybe.maybe mempty GeneralLockingClause
+      (Monoid.getLast $ Monoid.Last (Just gleft) <> Monoid.Last (Just gright))
+  
+  (<>) gleft@(GeneralLockingClause _) (PostgresLockingClause _)  = gleft
+  (<>) (PostgresLockingClause _) gright@(GeneralLockingClause _) = gright
   (<>) mleft NoLockingClause = mleft
-  (<>) _ mright = mright
+  (<>) NoLockingClause mright = mright
 --
 instance Monoid LockingClause where
   mempty = NoLockingClause
@@ -3208,7 +3261,7 @@ aliasedEntityColumnIdent (I baseIdent) field =
     I (baseIdent <> "_" <> (unDBName $ coerce $ fieldDB field))
 
 aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
-aliasedColumnName (I baseIdent) infoqualified  columnName =
+aliasedColumnName (I baseIdent) info columnName =
     useIdent info (I (baseIdent <> "_" <> columnName))
 
 -- | (Internal) Class for mapping results coming from 'SqlQuery'
