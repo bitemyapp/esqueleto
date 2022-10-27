@@ -446,12 +446,12 @@ ascNullsFirst = orderByExpr " ASC NULLS FIRST"
 -- | Ascending order of this field or SqlExpression with nulls coming last.
 -- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
 ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-ascNullsLast = orderByExpr " ASC NULLS FIRST"
+ascNullsLast = orderByExpr " ASC NULLS LAST"
 
 -- | Descending order of this field or SqlExpression with nulls coming first.
 -- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
-ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
-ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsFirst = orderByExpr " DESC NULLS FIRST"
 
 -- | Descending order of this field or SqlExpression with nulls coming last.
 descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
