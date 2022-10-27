@@ -1374,7 +1374,7 @@ testPostgresqlNullsOrdering = do
                orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
                return p
         -- nulls come first
-        asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+        asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
       itDb "DESC NULLS LAST works" $ do
         p1e <- insert' p1
         p2e <- insert' p2 -- p2 has a null age
