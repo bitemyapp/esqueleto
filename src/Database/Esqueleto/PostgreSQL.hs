@@ -29,6 +29,10 @@ module Database.Esqueleto.PostgreSQL
     , insertSelectWithConflictCount
     , filterWhere
     , values
+    , ascNullsFirst
+    , ascNullsLast
+    , descNullsFirst
+    , descNullsLast
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -434,3 +438,21 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+-- | Ascending order of this field or SqlExpression with nulls coming first.
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Ascending order of this field or SqlExpression with nulls coming last.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsLast = orderByExpr " ASC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming first.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming last.
+descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsLast = orderByExpr " DESC NULLS LAST"
