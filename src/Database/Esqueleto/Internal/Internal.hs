@@ -2131,6 +2131,8 @@ data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [Per
 --
 -- If you do have a SQL function, then you can provide a safe type and introduce
 -- it with 'unsafeSqlFunction' or 'unsafeSqlBinOp'.
+--
+-- @since 3.5.8.2
 instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
     fmap = error "impossible"
 
