@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -72,6 +74,7 @@ import Text.Blaze.Html (Html)
 import Data.Coerce (coerce)
 import Data.Kind (Type)
 import GHC.Records
+import GHC.TypeLits
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -2128,7 +2131,8 @@ data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [Per
 --
 -- If you do have a SQL function, then you can provide a safe type and introduce
 -- it with 'unsafeSqlFunction' or 'unsafeSqlBinOp'.
-instance TypeError SqlExprFunctorMessage => Functor SqlExpr
+instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
+    fmap = error "impossible"
 
 type SqlExprFunctorMessage =
     'Text "You're trying to treat `SqlExpr` like a `Functor`, but it cannot be one."
