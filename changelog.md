@@ -1,3 +1,10 @@
+3.5.8.2
+=======
+- @parsonsmatt
+    - []()
+        - Create a `TypeError` instance for `Functor SqlExpr`, adding
+          documentation and work arounds for the need.
+
 3.5.8.1
 =======
 - @belevy
@@ -22,7 +29,7 @@
 =======
 - @belevy
     - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
-        - Fix alias name bug with union and subselect 
+        - Fix alias name bug with union and subselect
 
 3.5.7.0
 =======
