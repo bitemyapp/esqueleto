@@ -1,7 +1,7 @@
 3.5.8.2
 =======
 - @parsonsmatt
-    - []()
+    - [#342](https://github.com/bitemyapp/esqueleto/pull/342)
         - Create a `TypeError` instance for `Functor SqlExpr`, adding
           documentation and work arounds for the need.
 
