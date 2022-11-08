@@ -2136,6 +2136,11 @@ data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [Per
 instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
     fmap = error "impossible"
 
+-- | The type error message given when you try to do 'fmap' on a 'SqlExpr'. This
+-- is intended to guide folks towards the docs, which should guide them towards
+-- alternative implementations.
+--
+-- @since 3.5.8.2
 type SqlExprFunctorMessage =
     'Text "You're trying to treat `SqlExpr` like a `Functor`, but it cannot be one."
     ':$$: 'Text "We would need to send arbitrary functions to the database for interpretation to support that instance."
