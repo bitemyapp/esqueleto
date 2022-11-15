@@ -75,6 +75,7 @@ import Database.Persist.Sql.Util
 import Database.Persist.SqlBackend
 import GHC.Records
 import Text.Blaze.Html (Html)
+import qualified Data.List as List
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -1449,37 +1450,6 @@ data LockingKind
       --
       -- @since 2.2.7
 
-newtype (ComparableLockStrength a) => StrongestLock a =
-  StrongestLock { getStrongestLock :: Maybe a}
-
-class ComparableLockStrength a where
-  -- | Create a lock that is at least as strong as both locks and at most as
-  -- strong as the stronger lock
-  -- Should satisfy:
-  --    If compare a b = GT
-  --        compareLockStrength (unionLocks a b) b = GT
-  --        compareLockStrength a (unionLocks a b) = EQ
-  --    If compare a b = EQ
-  --        compareLockStrength (unionLocks a b) b = EQ
-  --        compareLockStrength a (unionLocks a b) = EQ
-  --    If compare a b = LT
-  --        compareLockStrength (unionLocks a b) b = EQ
-  --        compareLockStrength a (unionLocks a b) = LT
-  unionLocks :: ComparableLockStrength a => a -> a -> a
-  compareLockStrength :: ComparableLockStrength a => a -> a -> Ordering
-
-instance ComparableLockStrength a => Semigroup (StrongestLock a) where
-  (<>) (StrongestLock Nothing) pright = pright
-  (<>) pleft (StrongestLock Nothing) = pleft
-  (<>) (StrongestLock (Just pright)) (StrongestLock (Just pleft)) =
-    case compareLockStrength pleft pright of
-      GT -> StrongestLock (Just pright)
-      EQ -> StrongestLock (Just $ unionLocks pright pleft)
-      LT -> StrongestLock (Just pleft)
-
-instance ComparableLockStrength a => Monoid (StrongestLock a) where
-  mempty = StrongestLock Nothing
-
 -- | Postgres specific locking, used only internally
 --
 -- @since 3.5.9.0
@@ -1491,18 +1461,6 @@ data PostgresLockingKind =
     , postgresOnLockedBehavior :: OnLockedBehavior
     }
 
-instance ComparableLockStrength PostgresLockingKind where
-  unionLocks pl1 pl2 =
-    let newOfClause = do
-          (Of e1) <- postgresLockingOfClause pl1
-          (Of e2) <- postgresLockingOfClause pl2
-          pure $ Of (e1 :& e2) in
-    case compareLockStrength pl1 pl2 of
-      GT -> pl1 { postgresLockingOfClause = newOfClause }
-      EQ -> pl1 { postgresLockingOfClause = newOfClause }
-      LT -> pl2 { postgresLockingOfClause = newOfClause }
-  compareLockStrength a b = compare (postgresRowLevelLockStrength a) (postgresRowLevelLockStrength b)
-
 -- Arranged in order of lock strength
 data PostgresRowLevelLockStrength =
     PostgresForUpdate
@@ -1510,10 +1468,7 @@ data PostgresRowLevelLockStrength =
   deriving (Ord, Eq)
 
 data LockingOfClause where
-  Of :: LockableEntity a => a -> LockingOfClause
-
-unionOfClause :: LockingOfClause -> LockingOfClause -> LockingOfClause
-unionOfClause (Of a) (Of b) = (Of (a :& b))
+  LockingOfClause :: LockableEntity a => a -> LockingOfClause
 
 data OnLockedBehavior =
   NoWait
@@ -2127,30 +2082,21 @@ instance Monoid LimitClause where
 data LockingClause =
   GeneralLockingClause LockingKind
   -- ^ Locking clause not specific to any database implementation
-  | PostgresLockingClause PostgresLockingKind
+  | PostgresLockingClauses [PostgresLockingKind]
   -- ^ Locking clause specific to postgres
   | NoLockingClause
 
--- | Monoid instance prioritization is:
--- 1. "Strongest" lock (FOR UPDATE > FOR SHARE) if comparing two postgres
--- specific locks of differing strength
--- 2. Taking a "union" of postgres locks of equal strength (two locks which lock
--- multiple tables will lock tables specified in either lock) for lock strength. Lock BEHAVIOUR will prioritize the first lock
--- 3. Rightmost (last) locking clause if between two general locks for
--- backwards compatibility
--- 4. ForUpdate/ForUpdateSkipLocked > Postgres For Update Of > ForShare/LockInShareMode > PostgresFor Share Of if comparing between postgres and non-postgres locks
 instance Semigroup LockingClause where
-  (<>) (PostgresLockingClause pleft) (PostgresLockingClause pright) =
-    Maybe.maybe mempty PostgresLockingClause
-    (getStrongestLock $ StrongestLock (Just pleft) <> StrongestLock (Just pright))
+  -- Postgres allows us to have multiple locking clauses
+  (<>) (PostgresLockingClauses pleft) (PostgresLockingClauses pright) = PostgresLockingClauses (pleft <> pright)
   -- For backwards compatibility reasons we use the monoid instance of last for
   -- general locking cluase
   (<>) (GeneralLockingClause gleft) (GeneralLockingClause gright)  =
     Maybe.maybe mempty GeneralLockingClause
       (Monoid.getLast $ Monoid.Last (Just gleft) <> Monoid.Last (Just gright))
   
-  (<>) gleft@(GeneralLockingClause _) (PostgresLockingClause _)  = gleft
-  (<>) (PostgresLockingClause _) gright@(GeneralLockingClause _) = gright
+  (<>) gleft@(GeneralLockingClause _) (PostgresLockingClauses _)  = gleft
+  (<>) (PostgresLockingClauses _) gright@(GeneralLockingClause _) = gright
   (<>) mleft NoLockingClause = mleft
   (<>) NoLockingClause mright = mright
 --
@@ -3230,13 +3176,19 @@ makeLocking _ (GeneralLockingClause lockingClause) =
     ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
     ForShare            -> ("\nFOR SHARE", [])
     LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
-makeLocking info (PostgresLockingClause l) =
-    makeLockingStrength (postgresRowLevelLockStrength l)
-      <> plain " "
-      <> makeOfClause (postgresLockingOfClause l)
-      <> plain " "
-      <> makeLockingBehavior (postgresOnLockedBehavior l)
+makeLocking info (PostgresLockingClauses clauses) =
+  List.foldl' combineBuilderValPairs ("",[]) (makePostgresLockingClauses <$> clauses)
     where
+      combineBuilderValPairs (builder1, persistvals1) (builder2,persistvals2) =
+        (builder1 <> builder2 <> "\n", persistvals1 <> persistvals2)
+
+      makePostgresLockingClauses :: PostgresLockingKind -> (TLB.Builder , [PersistValue])
+      makePostgresLockingClauses l =
+        makeLockingStrength (postgresRowLevelLockStrength l)
+          <> plain " "
+          <> makeOfClause (postgresLockingOfClause l)
+          <> plain " "
+          <> makeLockingBehavior (postgresOnLockedBehavior l)
       makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
       makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
       makeLockingStrength PostgresForShare = plain "FOR SHARE"
@@ -3247,7 +3199,7 @@ makeLocking info (PostgresLockingClause l) =
       makeLockingBehavior Wait = plain ""
 
       makeOfClause :: Maybe LockingOfClause -> (TLB.Builder, [PersistValue])
-      makeOfClause (Just (Of lockableEnts)) = plain "OF " <> makeLockableEntity info lockableEnts
+      makeOfClause (Just (LockingOfClause lockableEnts)) = plain "OF " <> makeLockableEntity info lockableEnts
       makeOfClause Nothing = plain ""
 
       plain v = (v,[])

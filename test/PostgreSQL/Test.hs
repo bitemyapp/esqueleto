@@ -32,6 +32,8 @@ import qualified Data.Map.Strict as Map
 import Data.Ord (comparing)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
+import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import Data.Time
 import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Database.Esqueleto hiding (random_)
@@ -1231,7 +1233,7 @@ testCommonTableExpressions = do
         asserting $ vals `shouldBe` fmap Value [2..11]
 
 testPostgresqlLocking :: SpecDb
-testPostgresqlLocking =
+testPostgresqlLocking = do
     describe "For update skip locked locking" $ sequential $ do
       let mkInitialStateForLockingTest connection =
             flip runSqlPool connection $ do
@@ -1396,6 +1398,30 @@ testPostgresqlLocking =
 
                       asserting sideThreadAsserts
                       asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
+
+    describe "Monoid instance" $ do
+      let toText conn q =
+            let (tlb, _) = ES.toRawSql ES.SELECT (conn, ES.initialIdentState) q
+             in TLB.toLazyText tlb
+      itDb "concatenates postgres locking clauses" $ do
+          let multipleLockingQuery = do
+                p <- Experimental.from $ table @Person
+                EP.forUpdateOf p EP.skipLocked
+                EP.forUpdateOf p EP.skipLocked
+                EP.forShareOf p EP.skipLocked
+          conn <- ask
+          let res1 = toText conn multipleLockingQuery
+              resExpected =
+                TL.unlines
+                  [
+                    "SELECT 1"
+                    ,"FROM \"Person\""
+                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                  ]
+
+          asserting $ res1 `shouldBe` resExpected
 
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module

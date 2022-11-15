@@ -1661,68 +1661,31 @@ testLocking = do
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
   describe "Monoid instance" $ do
-    let forUpdateOfQuery = do
-            p <- Experimental.from $ table @Person
-            EP.forUpdateOf p EP.skipLocked
-        forShareOfQuery = do
-            p <- Experimental.from $ table @Person
-            EP.forShareOf p EP.skipLocked
-        forUpdateQuery = do
-          _ <- Experimental.from $ table @Person
-          locking ForUpdate
-        forShareQuery = do
-          _ <- Experimental.from $ table @Person
-          locking ForShare
-    itDb "takes the last locking clause when mixing general and postgres locks" $ do
-        let multipleLockingQuery = do
+
+    itDb "prioritizes general lock over postgres specific lock"   $ do
+        let multipleLockingQueryGeneralFirst = do
               p <- Experimental.from $ table @Person
-              EP.forUpdateOf p EP.skipLocked
               locking ForUpdate
-              locking ForShare
+              EP.forUpdateOf p EP.skipLocked
+              EP.forUpdateOf p EP.skipLocked
+              EP.forShareOf p EP.skipLocked
+            multipleLockingQueryGeneralLast = do
+              p <- Experimental.from $ table @Person
+              locking ForUpdate
+              EP.forUpdateOf p EP.skipLocked
+              EP.forUpdateOf p EP.skipLocked
+              EP.forShareOf p EP.skipLocked
+            generalLockingQuery= do
+              p <- Experimental.from $ table @Person
+              locking ForUpdate
+ 
         conn <- ask
-        let res1 = toText conn multipleLockingQuery
-            res2 = toText conn forShareQuery
-        asserting $ res1 `shouldBe` res2
-    
-    itDb "takes the strongest postgres lock" $ do
-        let shareAndUpdatePostgresQuery= do
-                p <- Experimental.from $ table @Person
-                EP.forUpdateOf p EP.skipLocked
-                EP.forShareOf p EP.skipLocked
-            updateAndSharePostgresQuery = do
-                p <- Experimental.from $ table @Person
-                EP.forShareOf p EP.skipLocked
-                EP.forUpdateOf p EP.skipLocked
+        let res1 = toText conn multipleLockingQueryGeneralFirst
+            res2 = toText conn multipleLockingQueryGeneralFirst
+            resExpected = toText conn generalLockingQuery
 
-        conn <- ask
-        let res1 = toText conn shareAndUpdatePostgresQuery
-            res2 = toText conn updateAndSharePostgresQuery
-            expected = toText conn forUpdateOfQuery
-        liftIO $ print res1
-        asserting $ res1 `shouldBe` expected
-        asserting $ res2 `shouldBe` expected
-    
-    itDb "takes the union of equal postgres table specific locks" $ do
-        let twoUpdateQuery = do
-                (p :& bp) <-
-                  Experimental.from $ table @Person
-                    `Experimental.innerJoin` table @BlogPost
-                    `Experimental.on` (\(p :& bp) -> p ^. PersonId ==. bp ^. BlogPostAuthorId)
-                EP.forUpdateOf p EP.skipLocked
-                EP.forUpdateOf bp EP.skipLocked
-            expectedQuery = do
-                (p :& bp) <-
-                  Experimental.from $ table @Person
-                    `Experimental.innerJoin` table @BlogPost
-                    `Experimental.on` (\(p :& bp) -> p ^. PersonId ==. bp ^. BlogPostAuthorId)
-                EP.forUpdateOf (p :& bp) EP.skipLocked
-
-        conn <- ask
-        let res1 = toText conn twoUpdateQuery
-            res2 = toText conn expectedQuery
-        liftIO $ print res1
-        asserting $ res1 `shouldBe` res2
-
+        asserting $ res1 `shouldBe` resExpected
+        asserting $ res2 `shouldBe` resExpected
 
 testCountingRows :: SpecDb
 testCountingRows = do

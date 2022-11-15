@@ -466,12 +466,13 @@ wait = Wait
 -- @since 3.5.9.0
 forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forUpdateOf lockableEntities onLockedBehavior =
-  putLocking $ PostgresLockingClause (PostgresLockingKind PostgresForUpdate (Just $ Of lockableEntities) onLockedBehavior)
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
 -- | `FOR SHARE OF` syntax for postgres locking
 -- allows locking of specific tables
 --
 -- @since 3.5.9.0
+
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
-  putLocking $ PostgresLockingClause (PostgresLockingKind PostgresForUpdate (Just $ Of lockableEntities) onLockedBehavior)
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
