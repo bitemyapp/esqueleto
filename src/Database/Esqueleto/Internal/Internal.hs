@@ -1431,7 +1431,7 @@ infixl 2 :&
 --
 -- @since 2.2.7
 data LockingKind
-   = ForUpdate
+    = ForUpdate
       -- ^ @FOR UPDATE@ syntax.  Supported by MySQL, Oracle and
       -- PostgreSQL.
       --
