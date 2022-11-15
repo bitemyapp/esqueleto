@@ -1234,6 +1234,30 @@ testCommonTableExpressions = do
 
 testPostgresqlLocking :: SpecDb
 testPostgresqlLocking = do
+    describe "Monoid instance" $ do
+      let toText conn q =
+            let (tlb, _) = ES.toRawSql ES.SELECT (conn, ES.initialIdentState) q
+             in TLB.toLazyText tlb
+      itDb "concatenates postgres locking clauses" $ do
+          let multipleLockingQuery = do
+                p <- Experimental.from $ table @Person
+                EP.forUpdateOf p EP.skipLocked
+                EP.forUpdateOf p EP.skipLocked
+                EP.forShareOf p EP.skipLocked
+          conn <- ask
+          let res1 = toText conn multipleLockingQuery
+              resExpected =
+                TL.unlines
+                  [
+                    "SELECT 1"
+                    ,"FROM \"Person\""
+                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                  ]
+
+          asserting $ res1 `shouldBe` resExpected
+
     describe "For update skip locked locking" $ sequential $ do
       let mkInitialStateForLockingTest connection =
             flip runSqlPool connection $ do
@@ -1398,30 +1422,6 @@ testPostgresqlLocking = do
 
                       asserting sideThreadAsserts
                       asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-
-    describe "Monoid instance" $ do
-      let toText conn q =
-            let (tlb, _) = ES.toRawSql ES.SELECT (conn, ES.initialIdentState) q
-             in TLB.toLazyText tlb
-      itDb "concatenates postgres locking clauses" $ do
-          let multipleLockingQuery = do
-                p <- Experimental.from $ table @Person
-                EP.forUpdateOf p EP.skipLocked
-                EP.forUpdateOf p EP.skipLocked
-                EP.forShareOf p EP.skipLocked
-          conn <- ask
-          let res1 = toText conn multipleLockingQuery
-              resExpected =
-                TL.unlines
-                  [
-                    "SELECT 1"
-                    ,"FROM \"Person\""
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR SHARE OF \"Person\" SKIP LOCKED"
-                  ]
-
-          asserting $ res1 `shouldBe` resExpected
 
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
