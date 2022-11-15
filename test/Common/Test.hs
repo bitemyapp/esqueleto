@@ -85,12 +85,12 @@ import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
-import qualified UnliftIO.Resource as R
 import Database.Esqueleto.PostgreSQL as EP
 import Database.Persist.Class.PersistEntity
+import qualified UnliftIO.Resource as R
 
-import Common.Test.Select
 import Common.Record (testDeriveEsqueletoRecord)
+import Common.Test.Select
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -1678,7 +1678,7 @@ testLocking = do
             generalLockingQuery= do
               p <- Experimental.from $ table @Person
               locking ForUpdate
- 
+
         conn <- ask
         let res1 = toText conn multipleLockingQueryGeneralFirst
             res2 = toText conn multipleLockingQueryGeneralFirst

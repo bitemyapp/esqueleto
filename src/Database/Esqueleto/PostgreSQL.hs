@@ -55,7 +55,8 @@ import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
-import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy, uniqueFields)
+import Database.Esqueleto.Internal.PersistentImport hiding
+       (uniqueFields, upsert, upsertBy)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules

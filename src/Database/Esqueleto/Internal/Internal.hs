@@ -53,6 +53,7 @@ import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
 import Data.Kind (Type)
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
@@ -75,7 +76,6 @@ import Database.Persist.Sql.Util
 import Database.Persist.SqlBackend
 import GHC.Records
 import Text.Blaze.Html (Html)
-import qualified Data.List as List
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -2094,7 +2094,7 @@ instance Semigroup LockingClause where
   (<>) (GeneralLockingClause gleft) (GeneralLockingClause gright)  =
     Maybe.maybe mempty GeneralLockingClause
       (Monoid.getLast $ Monoid.Last (Just gleft) <> Monoid.Last (Just gright))
-  
+
   (<>) gleft@(GeneralLockingClause _) (PostgresLockingClauses _)  = gleft
   (<>) (PostgresLockingClauses _) gright@(GeneralLockingClause _) = gright
   (<>) mleft NoLockingClause = mleft
