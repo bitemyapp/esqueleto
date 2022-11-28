@@ -702,84 +702,84 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
                     let (b, vals) = f Never info
                     in (parensM p b, vals)
 
-(==.)  :: (PersistField a) 
-       => SqlExpr_ ctx (Value a) 
-       -> SqlExpr_ ctx (Value a) 
+(==.)  :: (PersistField a)
+       => SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value a)
        -> SqlExpr_ ctx (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
-(>=.)  :: PersistField a 
-       => SqlExpr_ ctx (Value a) 
-       -> SqlExpr_ ctx (Value a) 
+(>=.)  :: PersistField a
+       => SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value a)
        -> SqlExpr_ ctx (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
-(>.)  :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(>.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
-(<=.) :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(<=.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
-(<.) :: PersistField a 
-     => SqlExpr_ ctx (Value a) 
-     -> SqlExpr_ ctx (Value a) 
+(<.) :: PersistField a
+     => SqlExpr_ ctx (Value a)
+     -> SqlExpr_ ctx (Value a)
      -> SqlExpr_ ctx (Value Bool)
 (<.) = unsafeSqlBinOp " < "
 
-(!=.) :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(!=.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(&&.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(||.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 
-(+.)  :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(+.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value a)
 (+.)  = unsafeSqlBinOp " + "
 
-(-.)  :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(-.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value a)
 (-.)  = unsafeSqlBinOp " - "
 
-(/.)  :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(/.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value a)
 (/.)  = unsafeSqlBinOp " / "
 
-(*.)  :: PersistField a 
-      => SqlExpr_ ctx (Value a) 
-      -> SqlExpr_ ctx (Value a) 
+(*.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
       -> SqlExpr_ ctx (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
 -- | @BETWEEN@.
 --
 -- @since: 3.1.0
-between :: PersistField a 
-        => SqlExpr_ ctx (Value a) 
-        -> (SqlExpr_ ctx (Value a), SqlExpr_ ctx (Value a)) 
+between :: PersistField a
+        => SqlExpr_ ctx (Value a)
+        -> (SqlExpr_ ctx (Value a), SqlExpr_ ctx (Value a))
         -> SqlExpr_ ctx (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
 
@@ -889,8 +889,8 @@ right_ = unsafeSqlFunction "RIGHT"
 
 -- | @LIKE@ operator.
 like :: SqlString s
-     => SqlExpr_ ctx (Value s) 
-     -> SqlExpr_ ctx (Value s) 
+     => SqlExpr_ ctx (Value s)
+     -> SqlExpr_ ctx (Value s)
      -> SqlExpr_ ctx (Value Bool)
 like = unsafeSqlBinOp " LIKE "
 
@@ -899,9 +899,9 @@ like = unsafeSqlBinOp " LIKE "
 -- Supported by PostgreSQL only.
 --
 -- @since 2.2.3
-ilike :: SqlString s 
-      => SqlExpr_ ctx (Value s) 
-      -> SqlExpr_ ctx (Value s) 
+ilike :: SqlString s
+      => SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value s)
       -> SqlExpr_ ctx (Value Bool)
 ilike = unsafeSqlBinOp " ILIKE "
 
@@ -924,9 +924,9 @@ concat_ = unsafeSqlFunction "CONCAT"
 -- | The @||@ string concatenation operator (named after
 -- Haskell's '++' in order to avoid naming clash with '||.').
 -- Supported by SQLite and PostgreSQL.
-(++.) :: SqlString s 
-      => SqlExpr_ ctx (Value s) 
-      -> SqlExpr_ ctx (Value s) 
+(++.) :: SqlString s
+      => SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value s)
       -> SqlExpr_ ctx (Value s)
 (++.) = unsafeSqlBinOp " || "
 
@@ -1610,31 +1610,31 @@ instance ( FromPreprocess (SqlExpr (Maybe (Entity val)) ))
     from_ = fromPreprocess >>= fromFinish
 
 instance (FromPreprocess (InnerJoin a b))
-  => 
+  =>
     From (InnerJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (LeftOuterJoin a b)) 
-  => 
+instance (FromPreprocess (LeftOuterJoin a b))
+  =>
     From (LeftOuterJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (CrossJoin a b)) 
-  => 
+instance (FromPreprocess (CrossJoin a b))
+  =>
     From ( (CrossJoin a b))
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (RightOuterJoin a b)) 
-  => 
+instance (FromPreprocess (RightOuterJoin a b))
+  =>
     From (RightOuterJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (FullOuterJoin a b)) 
-  => 
+instance (FromPreprocess (FullOuterJoin a b))
+  =>
     From (FullOuterJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
@@ -2167,7 +2167,7 @@ entityAsValueMaybe = coerce
 -- interpolated by the SQL backend.
 --
 -- All expressions have a context associated with them. This is primarily used by window functions
--- to prevent windowing an already windowed value at compile time. 
+-- to prevent windowing an already windowed value at compile time.
 --
 -- Values that come from a from clause are considered to be in the "ValueContext".
 -- Values that come from an aggregation should be in the "AggregateContext" but for backwards compatibility they are treated as having an undefined context and can be used in both Value and Aggregate contexts.
@@ -2179,7 +2179,7 @@ data AggregateContext
 
 -- | Helper type for backwards compatibility and ease of reading
 type SqlExpr a = SqlExpr_ ValueContext a
--- | Helper type denoting a value that should only be treated as an aggregate 
+-- | Helper type denoting a value that should only be treated as an aggregate
 type SqlAgg a = SqlExpr_ AggregateContext a
 
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's
@@ -2298,7 +2298,7 @@ setAux field value = \ent -> ERaw noMeta $ \_ info ->
     in (fieldName info field <> " = " <> valueToSet, valueVals)
 
 sub :: forall a ctx. PersistField a => Mode -> SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
-sub mode query = ERaw noMeta $ \_ info -> 
+sub mode query = ERaw noMeta $ \_ info ->
     first parens $ toRawSql mode info (coerce query :: SqlQuery (SqlExpr (Value a)))
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
@@ -2481,7 +2481,7 @@ unsafeSqlFunctionParens name arg =
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
-unsafeSqlCastAs :: T.Text -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
+unsafeSqlCastAs :: forall a b ctx. T.Text -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 unsafeSqlCastAs t (ERaw _ f) = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . f Never)
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
@@ -3033,7 +3033,7 @@ makeSelect info mode_ distinctClause ret = process mode_
                 first (("SELECT DISTINCT ON (" <>) . (<> ") "))
                 $ uncommas' (processExpr <$> exprs)
       where
-        processExpr e = materializeExpr info e 
+        processExpr e = materializeExpr info e
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
@@ -3322,7 +3322,7 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
       in colCountFst `seq` processRow
          -- Avoids recalculating 'colCountFst'.
 
-instance ( SqlSelectCols a 
+instance ( SqlSelectCols a
          , SqlSelectCols b
          , SqlSelectCols c
          ) => SqlSelectCols (a, b, c) where
