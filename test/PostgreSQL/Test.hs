@@ -1341,6 +1341,65 @@ testWindowFunctions = do
                                           , (Value 3, Value (Just 18.0))
                                           , (Value 6, Value (Just 18.0))]
 
+        itDb "can countRows" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , countRows @Int `Window.over_` ()
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldMatchList`
+                                          [ (Value 1, Value 4)
+                                          , (Value 2, Value 4)
+                                          , (Value 3, Value 4)
+                                          , (Value 6, Value 4)]
+
+        itDb "can countRows" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let (%.)  = ES.unsafeSqlBinOp " % "
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , countRows @Int
+                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldMatchList`
+                                          [ (Value 1, Value 2)
+                                          , (Value 2, Value 2)
+                                          , (Value 3, Value 2)
+                                          , (Value 6, Value 2)]
+
+        itDb "countRows over is OK as null" $ do
+            _ <- insert $ Numbers 1 2
+            _ <- insert $ Numbers 1 3
+            _ <- insert $ Numbers 2 4
+            _ <- insert $ Numbers 3 5
+            _ <- insert $ Numbers 6 7
+            let (%.)  = ES.unsafeSqlBinOp " % "
+            let query = do
+                    n <- Experimental.from $ table @Numbers
+                    pure ( n ^. NumbersInt
+                         , countRows @Int
+                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
+                         )
+            result <- select query
+            asserting noExceptions
+            asserting $ result `shouldMatchList`
+                                          [ (Value 1, Value 3)
+                                          , (Value 1, Value 3)
+                                          , (Value 2, Value 2)
+                                          , (Value 3, Value 3)
+                                          , (Value 6, Value 2)]
         itDb "supports partitioning" $ do
             _ <- insert $ Numbers 1 2
             _ <- insert $ Numbers 2 4
@@ -1371,7 +1430,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , sum_ @_ @Double (n ^. NumbersDouble) 
+                         , sum_ @_ @Double (n ^. NumbersDouble)
                             `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                          <> Window.frame_ Window.unboundedPreceding)
                          )

@@ -18,5 +18,5 @@ spec = do
         describe "MySQL" $ do
             sequential $ MySQL.spec
         describe "Postgresql" $ do
-            sequential $ Postgres.spec
+            focus $ sequential $ Postgres.spec
 

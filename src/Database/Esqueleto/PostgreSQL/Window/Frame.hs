@@ -5,7 +5,7 @@ module Database.Esqueleto.PostgreSQL.Window.Frame
     , renderFrame
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
-    , between, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
+    , between_, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
     )
     where
 
@@ -137,8 +137,8 @@ instance Ord FrameRangeBound where
     FrameRangeBounded _ <= FrameRangeUnbounded = True
     FrameRangeBounded a <= FrameRangeBounded b = a <= b
 
-between :: FrameRange -> FrameRange -> FrameBody
-between = FrameBetween
+between_ :: FrameRange -> FrameRange -> FrameBody
+between_ = FrameBetween
 
 unboundedPreceding :: FrameRange
 unboundedPreceding = FrameRangePreceding FrameRangeUnbounded

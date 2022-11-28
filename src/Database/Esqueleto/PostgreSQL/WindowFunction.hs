@@ -7,11 +7,12 @@
 module Database.Esqueleto.PostgreSQL.WindowFunction
     ( Window, Frame, PartitionBy
     , WindowExpr, liftExpr
+    , SqlWindow
     , over_, rowNumber_
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
-    , between, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
+    , between_, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
     )
     where
 
@@ -32,7 +33,7 @@ import Database.Esqueleto.PostgreSQL.Window
        , PartitionBy
        , RenderWindow(..)
        , Window
-       , between
+       , between_
        , currentRow
        , excludeCurrentRow
        , excludeGroup
@@ -53,6 +54,9 @@ import Database.Esqueleto.PostgreSQL.Window
 data WindowContext
 liftExpr :: SqlExpr a -> SqlExpr_ WindowContext a
 liftExpr = veryUnsafeCoerceSqlExpr
+
+-- | Helper type indicating that the 'SqlExpr_' is for a 'WindowContext'.
+type SqlWindow = SqlExpr_ WindowContext
 
 newtype WindowExpr a = WindowExpr { unWindowExpr :: SqlExpr a }
 

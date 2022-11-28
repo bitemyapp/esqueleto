@@ -6,7 +6,7 @@ module Database.Esqueleto.PostgreSQL.Window
     , frame_, partitionBy_, orderBy_
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
-    , between, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
+    , between_, unboundedFollowing, unboundedPreceding, preceding, following, currentRow
     )
     where
 
@@ -28,7 +28,7 @@ import Database.Esqueleto.Internal.PersistentImport (PersistValue)
 import Database.Esqueleto.PostgreSQL.Window.Frame
        ( Frame
        , ToFrame(..)
-       , between
+       , between_
        , currentRow
        , excludeCurrentRow
        , excludeGroup
