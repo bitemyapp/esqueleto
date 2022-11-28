@@ -2,6 +2,7 @@
 module Database.Esqueleto.PostgreSQL.Window.Frame
     ( Frame
     , ToFrame(..)
+    , FrameRange
     , renderFrame
     , range, rows, groups
     , excludeCurrentRow, excludeGroup, excludeTies, excludeNoOthers
