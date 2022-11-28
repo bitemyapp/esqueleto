@@ -2174,6 +2174,10 @@ entityAsValueMaybe = coerce
 -- Values that come from a window function are in the "WindowContext"
 data SqlExpr_ ctx a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
+-- Without this, you can `coerce` at will. This is a pretty gnarly and bad
+-- thing.
+type role SqlExpr_ nominal nominal
+
 data ValueContext
 data AggregateContext
 
@@ -2612,16 +2616,18 @@ instance ( UnsafeSqlFunctionArgument a
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
-veryUnsafeCoerceSqlExprValue :: SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
+veryUnsafeCoerceSqlExprValue :: forall a b ctx. SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 veryUnsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
-veryUnsafeCoerceSqlExprValueList :: SqlExpr_ ctx (ValueList a) -> SqlExpr_ ctx (Value a)
+veryUnsafeCoerceSqlExprValueList :: forall a ctx. SqlExpr_ ctx (ValueList a) -> SqlExpr_ ctx (Value a)
 veryUnsafeCoerceSqlExprValueList = veryUnsafeCoerceSqlExpr
 
-veryUnsafeCoerceSqlExpr :: SqlExpr_ ctx a -> SqlExpr_ ctx2 b
-veryUnsafeCoerceSqlExpr = coerce
+-- | (Internal) Coerce a 'SqlExpr_' into any other kind of 'SqlExlr_'. You
+-- should /not/ use this function unless you know what you're doing!
+veryUnsafeCoerceSqlExpr :: forall a b ctx ctx2. SqlExpr_ ctx a -> SqlExpr_ ctx2 b
+veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
 
 ----------------------------------------------------------------------
 
