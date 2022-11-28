@@ -1104,7 +1104,7 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --      reproduce this via 'nothing'.
 --
 -- @since 2.1.2
-case_ :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+case_ :: forall a ctx. PersistField a => [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 case_ = unsafeSqlCase
 
 -- | Convert an entity's key into another entity's.
@@ -2184,6 +2184,7 @@ data AggregateContext
 
 -- | Helper type for backwards compatibility and ease of reading
 type SqlExpr a = SqlExpr_ ValueContext a
+
 -- | Helper type denoting a value that should only be treated as an aggregate
 type SqlAgg a = SqlExpr_ AggregateContext a
 
@@ -2318,7 +2319,7 @@ existsHelper = sub SELECT . (>> return true)
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
-unsafeSqlCase :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+unsafeSqlCase :: forall a ctx. PersistField a => [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 unsafeSqlCase when v = ERaw noMeta buildCase
   where
     buildCase :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
@@ -2327,18 +2328,18 @@ unsafeSqlCase when v = ERaw noMeta buildCase
             (whenText, whenVals) = mapWhen when Parens info
         in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
-    mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mapWhen :: [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     mapWhen []    _ _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
     mapWhen when' p info = foldl (foldHelp p info) (mempty, mempty) when'
 
 
-    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
+    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a)) -> (TLB.Builder, [PersistValue])
     foldHelp p info (b0, vals0) (v1, v2) =
         let (b1, vals1) = valueToSql v1 p info
             (b2, vals2) = valueToSql v2 p info
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
-    valueToSql :: SqlExpr (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+    valueToSql :: forall a. SqlExpr_ ctx (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     valueToSql (ERaw _ f) p = f p
 
 -- | (Internal) Create a custom binary operator.  You /should/
