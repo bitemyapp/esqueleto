@@ -7,7 +7,6 @@
 module Database.Esqueleto.Experimental.ToAliasReference
     where
 
-import Data.Coerce
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
@@ -22,21 +21,21 @@ instance ToAliasReference (SqlExpr_ ctx (Value a)) (SqlExpr_ ValueContext (Value
     toAliasReference aliasSource (ERaw m _)
       | Just alias <- sqlExprMetaAlias m = pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
           (useIdent info aliasSource <> "." <> useIdent info alias, [])
-    toAliasReference _ e = pure $ coerce e
+    toAliasReference _ e = pure $ veryUnsafeCoerceSqlExpr e
 
 instance ToAliasReference (SqlExpr_ ctx (Entity a)) (SqlExpr_ ValueContext (Entity a)) where
     toAliasReference aliasSource (ERaw m _)
       | Just _ <- sqlExprMetaAlias m =
           pure $ ERaw m{sqlExprMetaIsReference = True} $ \_ info ->
             (useIdent info aliasSource, [])
-    toAliasReference _ e = pure $ coerce e
+    toAliasReference _ e = pure $ veryUnsafeCoerceSqlExpr e
 
 instance ToAliasReference (SqlExpr_ ctx (Maybe (Entity a))) (SqlExpr_ ValueContext (Maybe (Entity a))) where
     toAliasReference aliasSource e =
         let maybelizeExpr :: SqlExpr_ ctx (Maybe (Entity a)) -> SqlExpr_ ctx (Entity a)
-            maybelizeExpr = coerce
+            maybelizeExpr = veryUnsafeCoerceSqlExpr
             unmaybelizeExpr :: SqlExpr_ ctx (Entity a) -> SqlExpr_ ctx (Maybe (Entity a))
-            unmaybelizeExpr = coerce
+            unmaybelizeExpr = veryUnsafeCoerceSqlExpr
         in
         unmaybelizeExpr <$> toAliasReference aliasSource (maybelizeExpr e)
 

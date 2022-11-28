@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE TypeApplications #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ConstraintKinds #-}
@@ -113,7 +114,7 @@ fromStartMaybe = maybelize <$> fromStart
     maybelize
         :: PreprocessedFrom (SqlExpr_ ctx (Entity a))
         -> PreprocessedFrom (SqlExpr_ ctx (Maybe (Entity a)))
-    maybelize (PreprocessedFrom e f') = PreprocessedFrom (coerce e) f'
+    maybelize (PreprocessedFrom e f') = PreprocessedFrom (veryUnsafeCoerceSqlExpr e) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -347,7 +348,7 @@ distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
-don = coerce
+don = veryUnsafeCoerceSqlExpr
 
 -- | A convenience function that calls both 'distinctOn' and
 -- 'orderBy'.  In other words,
@@ -2150,12 +2151,12 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 entityAsValue
     :: SqlExpr (Entity val)
     -> SqlExpr (Value (Entity val))
-entityAsValue = coerce
+entityAsValue = veryUnsafeCoerceSqlExpr
 
 entityAsValueMaybe
     :: SqlExpr (Maybe (Entity val))
     -> SqlExpr (Value (Maybe (Entity val)))
-entityAsValueMaybe = coerce
+entityAsValueMaybe = veryUnsafeCoerceSqlExpr
 
 -- | An expression on the SQL backend.
 --
@@ -2303,7 +2304,7 @@ setAux field value = \ent -> ERaw noMeta $ \_ info ->
 
 sub :: forall a ctx. PersistField a => Mode -> SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
 sub mode query = ERaw noMeta $ \_ info ->
-    first parens $ toRawSql mode info (coerce query :: SqlQuery (SqlExpr (Value a)))
+    first parens $ toRawSql mode info (fmap veryUnsafeCoerceSqlExpr query :: SqlQuery (SqlExpr (Value a)))
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
 fromDBName (conn, _) = TLB.fromText . flip getEscapedRawName conn . unDBName
@@ -3270,7 +3271,7 @@ getEntityVal :: Proxy (SqlExpr_ ctx (Entity a)) -> Proxy a
 getEntityVal = const Proxy
 
 instance PersistEntity a => SqlSelectCols (SqlExpr_ ctx (Maybe (Entity a))) where
-    sqlSelectCols info e = sqlSelectCols info (coerce e :: SqlExpr (Entity a))
+    sqlSelectCols info e = sqlSelectCols info (veryUnsafeCoerceSqlExpr e :: SqlExpr (Entity a))
     sqlSelectColCount = sqlSelectColCount . fromEMaybe
       where
         fromEMaybe :: Proxy (SqlExpr_ ctx (Maybe e)) -> Proxy (SqlExpr_ ctx e)
