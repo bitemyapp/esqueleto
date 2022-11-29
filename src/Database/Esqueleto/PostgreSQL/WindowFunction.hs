@@ -68,6 +68,7 @@ class WindowExprC expr where
 
 instance WindowExprC WindowExpr where
     over_ windowExpr window = overImpl (unWindowExpr windowExpr) window
+
 instance (ctx ~ AggregateContext) => WindowExprC (SqlExpr_ ctx) where
     over_ = overImpl
 

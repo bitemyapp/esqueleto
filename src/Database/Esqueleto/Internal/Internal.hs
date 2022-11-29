@@ -611,7 +611,7 @@ withNonNull field f = do
 ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
-val  :: PersistField typ => typ -> SqlExpr (Value typ)
+val  :: forall typ ctx. PersistField typ => typ -> SqlExpr_ ctx (Value typ)
 val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
