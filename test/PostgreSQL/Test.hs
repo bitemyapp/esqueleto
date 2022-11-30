@@ -39,6 +39,7 @@ import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Internal as ES
 import Database.Esqueleto.PostgreSQL (random_)
 import qualified Database.Esqueleto.PostgreSQL as EP
+import Database.Esqueleto.PostgreSQL ((%.))
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
 import qualified Database.Esqueleto.PostgreSQL.WindowFunction as Window
@@ -1341,6 +1342,74 @@ testWindowFunctions = do
                                           , (Value 3, Value (Just 18.0))
                                           , (Value 6, Value (Just 18.0))]
 
+        describe "rowNumber_" $ do
+            itDb "no partition" $ do
+                insertMany_
+                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
+                    , Numbers 2 4
+                    , Numbers 3 5
+                    , Numbers 6 7
+                    ]
+                let query = do
+                        n <- Experimental.from $ table @Numbers
+                        orderBy [asc $ n ^. NumbersInt]
+                        pure ( n ^. NumbersInt
+                             , Window.rowNumber_ `Window.over_` ()
+                             )
+                result <- select query
+                asserting noExceptions
+                asserting $ result `shouldMatchList`
+                                              [ (Value 1, Value 1)
+                                              , (Value 2, Value 2)
+                                              , (Value 3, Value 3)
+                                              , (Value 6, Value 4)]
+
+            itDb "partition" $ do
+                insertMany_
+                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
+                    , Numbers 2 4
+                    , Numbers 3 5
+                    , Numbers 6 7
+                    ]
+                let query = do
+                        n <- Experimental.from $ table @Numbers
+                        orderBy [asc $ n ^. NumbersInt]
+                        pure ( n ^. NumbersInt
+                             , Window.rowNumber_ `Window.over_`
+                                Window.partitionBy_ (n ^. NumbersInt %. val 2 ==. val 0)
+                             )
+                result <- select query
+                asserting noExceptions
+                asserting $ result `shouldMatchList`
+                                              [ (Value 1, Value 1)
+                                              , (Value 2, Value 1)
+                                              , (Value 3, Value 2)
+                                              , (Value 6, Value 2)]
+
+        describe "lag_" $ do
+            itDb "over ()" $ do
+                insertMany_
+                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
+                    , Numbers 2 4
+                    , Numbers 3 5
+                    , Numbers 6 7
+                    ]
+                let query = do
+                        n <- Experimental.from $ table @Numbers
+                        orderBy [asc $ n ^. NumbersInt]
+                        pure ( n ^. NumbersInt
+                             , Window.lag_ (n ^. NumbersInt) Nothing `Window.over_` ()
+                             )
+                result <- select query
+                asserting noExceptions
+                asserting $ result `shouldMatchList`
+                                              [ (Value 1, Value Nothing)
+                                              , (Value 2, Value (Just 1))
+                                              , (Value 3, Value (Just 2))
+                                              , (Value 6, Value (Just 3))
+                                              ]
+
+
         itDb "can countRows" $ do
             _ <- insert $ Numbers 1 2
             _ <- insert $ Numbers 2 4
@@ -1364,7 +1433,6 @@ testWindowFunctions = do
             _ <- insert $ Numbers 2 4
             _ <- insert $ Numbers 3 5
             _ <- insert $ Numbers 6 7
-            let (%.)  = ES.unsafeSqlBinOp " % "
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
@@ -1385,7 +1453,6 @@ testWindowFunctions = do
             _ <- insert $ Numbers 2 4
             _ <- insert $ Numbers 3 5
             _ <- insert $ Numbers 6 7
-            let (%.)  = ES.unsafeSqlBinOp " % "
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
@@ -1406,7 +1473,6 @@ testWindowFunctions = do
             _ <- insert $ Numbers 3 5
             _ <- insert $ Numbers 6 7
 
-            let (%.)  = ES.unsafeSqlBinOp " % "
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
@@ -1423,23 +1489,28 @@ testWindowFunctions = do
                                           ]
 
         itDb "supports running total" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
+            insertMany_
+                [ Numbers 1 2
+                , Numbers 2 4
+                , Numbers 3 5
+                , Numbers 6 7
+                ]
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
+                         , n ^. NumbersDouble
                          , sum_ @_ @Double (n ^. NumbersDouble)
                             `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
-                                         <> Window.frame_ Window.unboundedPreceding)
+                            )-- <> Window.frame_ Window.unboundedPreceding)
                          )
             result <- select query
             asserting noExceptions
-            asserting $ result `shouldBe` [ (Value 1, Value (Just 2.0))
-                                          , (Value 2, Value (Just 6.0))
-                                          , (Value 3, Value (Just 11.0))
-                                          , (Value 6, Value (Just 18.0))]
+            asserting $ result `shouldBe`
+                [ (Value 1, Value 2, Value (Just 2.0))
+                , (Value 2, Value 4, Value (Just 6.0))
+                , (Value 3, Value 5, Value (Just 11.0))
+                , (Value 6, Value 7, Value (Just 18.0))
+                ]
 
         itDb "supports running total excluding current row and addition to sum" $ do
             _ <- insert $ Numbers 1 2
@@ -1449,7 +1520,7 @@ testWindowFunctions = do
             let query = do
                     n <- Experimental.from $ table @Numbers
                     pure ( n ^. NumbersInt
-                         , Window.liftExpr (just (n ^. NumbersDouble)) +.
+                         , Window.sqlExprToWindowContext (just (n ^. NumbersDouble)) +.
                              sum_ (n ^. NumbersDouble)
                                 `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
                                              <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)

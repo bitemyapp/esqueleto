@@ -19,6 +19,7 @@ data Frame = Frame (Maybe FrameKind) FrameBody (Maybe FrameExclusion)
 
 class ToFrame a where
     toFrame :: a -> Frame
+
 instance ToFrame Frame where
     toFrame = id
 

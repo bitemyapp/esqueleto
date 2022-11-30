@@ -29,6 +29,7 @@ module Database.Esqueleto.PostgreSQL
     , insertSelectWithConflictCount
     , filterWhere
     , values
+    , (%.)
     -- * Internal
     , unsafeSqlExprAggregateFunction
     ) where
@@ -437,3 +438,16 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+-- | Modulo operator for postgres.
+--
+-- @
+-- select $ do
+--     pure (val 10 %. val 2)
+-- @
+(%.)
+    :: (PersistFieldSql a, Num a)
+    => SqlExpr_ ctx (Value a)
+    -> SqlExpr_ ctx (Value a)
+    -> SqlExpr_ ctx (Value a)
+(%.)  = unsafeSqlBinOp " % "
