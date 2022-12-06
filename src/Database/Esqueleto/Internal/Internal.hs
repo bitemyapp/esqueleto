@@ -697,26 +697,33 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
                     let (b, vals) = f Never info
                     in (parensM p b, vals)
 
+-- | @==@, for in a where expression for example.
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
+-- | @>=@, for in a where expression for example.
 (>=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
+-- | @>@, for in a where expression for example.
 (>.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
+-- | @<=@, for in a where expression for example.
 (<=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
+-- | @<@, for in a where expression for example.
 (<.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (<.)  = unsafeSqlBinOp " < "
 (!=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
+-- | @AND@, for in a where expression for example.
 (&&.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
+-- | @OR@, for in a where expression for example.
 (||.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 

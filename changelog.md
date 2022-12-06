@@ -1,3 +1,10 @@
+
+3.5.8.2
+=======
+-@jappeace
+    - [#346](https://github.com/bitemyapp/esqueleto/pull/346)
+       - Add docs for boolean operators
+
 3.5.8.1
 =======
 - @belevy
