@@ -1,4 +1,8 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -8,24 +12,30 @@
 {-# LANGUAGE ViewPatterns #-}
 
 module Database.Esqueleto.Record
-  ( deriveEsqueletoRecord
-  , deriveEsqueletoRecordWith
+    ( deriveEsqueletoRecord
+    , deriveEsqueletoRecordWith
 
-  , DeriveEsqueletoRecordSettings(..)
-  , defaultDeriveEsqueletoRecordSettings
-  ) where
+    , DeriveEsqueletoRecordSettings(..)
+    , defaultDeriveEsqueletoRecordSettings
+    , projectMaybeRecord
+    , getFieldP
+    ) where
 
+import GHC.Records
+import Data.Typeable
+import Database.Esqueleto.Experimental.ToMaybe
 import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
-       (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
+       (just, Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
 import Database.Esqueleto.Experimental.ToAlias (ToAlias(..))
 import Database.Esqueleto.Experimental.ToAliasReference (ToAliasReference(..))
-import Database.Esqueleto.Internal.Internal (SqlSelect(..))
+import Database.Esqueleto.Internal.Internal (SqlSelect(..), nullsFor, noMeta, SqlExpr(..))
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Data.Bifunctor (first)
 import Data.Text (Text)
+import qualified Data.Text as Text
 import Control.Monad (forM)
 import Data.Foldable (foldl')
 import GHC.Exts (IsString(fromString))
@@ -163,19 +173,54 @@ defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
 -- @since 3.5.8.0
 deriveEsqueletoRecordWith :: DeriveEsqueletoRecordSettings -> Name -> Q [Dec]
 deriveEsqueletoRecordWith settings originalName = do
-  info <- getRecordInfo settings originalName
-  -- It would be nicer to use `mconcat` here but I don't think the right
-  -- instance is available in GHC 8.
-  recordDec <- makeSqlRecord info
-  sqlSelectInstanceDec <- makeSqlSelectInstance info
-  toAliasInstanceDec <- makeToAliasInstance info
-  toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
-  pure
-    [ recordDec
-    , sqlSelectInstanceDec
-    , toAliasInstanceDec
-    , toAliasReferenceInstanceDec
-    ]
+    info <- getRecordInfo settings originalName
+    -- It would be nicer to use `mconcat` here but I don't think the right
+    -- instance is available in GHC 8.
+    recordDec <- makeSqlRecord info
+    sqlSelectInstanceDec <- makeSqlSelectInstance info
+    toAliasInstanceDec <- makeToAliasInstance info
+    let sqlNameTyp = conT (sqlName info)
+        nameTyp = conT (name info)
+        -- sym = varT (mkName "sym")
+    maybeInstances <-
+        [d|
+        instance SqlSelect (Maybe $(sqlNameTyp)) (Maybe $(nameTyp)) where
+            sqlSelectProcessRow = sqlSelectProcessRowOptional
+            sqlSelectColCount = sqlSelectColCount . unMaybeProxy
+            sqlSelectCols = $(sqlSelectColsExpMaybe info)
+
+        instance ToAlias (Maybe $(sqlNameTyp)) where
+            toAlias = traverse toAlias
+
+        instance ToAliasReference (Maybe $(sqlNameTyp)) where
+            toAliasReference aliasSource = traverse (toAliasReference aliasSource)
+
+        instance ToMaybe $(sqlNameTyp) where
+            type ToMaybeT $(sqlNameTyp) = Maybe $(sqlNameTyp)
+            toMaybe = Just
+
+        instance HasNulls $(sqlNameTyp) where
+            mkNothing _ = Nothing
+                |]
+
+
+    maybeHasFieldInstances <- fmap mconcat $ forM (sqlFields info) $ \(sqlFieldName, sqlFieldType) -> do
+        nm <- newName (show sqlFieldName)
+        let binding =
+                LamE [RecP (sqlName info) [ (sqlFieldName, VarP nm) ]] (VarE nm)
+        [d|
+            instance (r ~ ToMaybeT $(pure sqlFieldType) ) => HasField $(litT (strTyLit $ show sqlFieldName)) (Maybe $(sqlNameTyp)) r where
+                    getField mrec =
+                        projectMaybeRecord mrec $(pure binding)
+            |]
+
+    toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
+    pure $
+        [ recordDec
+        , sqlSelectInstanceDec
+        , toAliasInstanceDec
+        , toAliasReferenceInstanceDec
+        ] <> maybeInstances <> maybeHasFieldInstances
 
 -- | Information about a record we need to generate the declarations.
 -- We compute this once and then pass it around to save on complexity /
@@ -249,10 +294,10 @@ makeSqlName settings name = mkName $ sqlNameModifier settings $ nameBase name
 
 -- | Transforms a record field type into a corresponding `SqlExpr` type.
 --
+-- * If there exists an instance @'SqlSelect' sql x@, then @x@ is transformed into @sql@.
 -- * @'Entity' x@ is transformed into @'SqlExpr' ('Entity' x)@.
 -- * @'Maybe' ('Entity' x)@ is transformed into @'SqlExpr' ('Maybe' ('Entity' x))@.
 -- * @x@ is transformed into @'SqlExpr' ('Value' x)@.
--- * If there exists an instance @'SqlSelect' sql x@, then @x@ is transformed into @sql@.
 --
 -- This function should match `sqlSelectProcessRowPat`.
 sqlFieldType :: Type -> Q Type
@@ -274,6 +319,31 @@ sqlFieldType fieldType = do
         _ -> (ConT ''SqlExpr)
                 `AppT` ((ConT ''Value)
                         `AppT` fieldType)
+
+applyMaybeInsideValue :: Type -> Type
+applyMaybeInsideValue typ =
+    fromMaybe typ $ do
+        inner <- takeValueType typ
+        let mkValue = AppT (ConT ''Value)
+            mkMaybe = AppT (ConT ''Maybe)
+        pure $ mkValue (mkMaybe inner)
+
+takeTypeConstructorApplicationName :: Name -> Type -> Maybe Type
+takeTypeConstructorApplicationName nm typ = do
+    AppT (ConT ((==) nm -> True)) rest <- Just typ
+    pure rest
+
+takeValueType :: Type -> Maybe Type
+takeValueType =
+    takeTypeConstructorApplicationName ''Value
+
+takeEntityType :: Type -> Maybe Type
+takeEntityType =
+    takeTypeConstructorApplicationName ''Entity
+
+takeMaybeType :: Type -> Maybe Type
+takeMaybeType =
+    takeTypeConstructorApplicationName ''Maybe
 
 -- | Generates the declaration for an @Sql@-prefixed record, given the original
 -- record's information.
@@ -301,6 +371,34 @@ makeSqlSelectInstance info@RecordInfo {..} = do
           `AppT` (ConT name)
 
   pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
+
+makeSqlSelectMaybeInstance :: RecordInfo -> Q [Dec]
+makeSqlSelectMaybeInstance info@RecordInfo {..} = do
+    sqlTypeT <- [t| Maybe $(conT sqlName) |]
+    regularTypeT <- [t| Maybe $(conT name) |]
+    [d|
+        instance SqlSelect (Maybe $(conT sqlName)) (Maybe $(conT name)) where
+            sqlSelectProcessRow = sqlSelectProcessRowOptional
+            sqlSelectColCount = sqlSelectColCount . unMaybeProxy
+            sqlSelectCols = $(sqlSelectColsExpMaybe info)
+        |]
+
+-- | Generates the `sqlSelectCols` declaration for an `SqlSelect`  for a 'Maybe'
+-- of a record.
+--
+-- If the record is present, then we delegate to the underlying functions. If
+-- the record is absent, then we summon up sufficient @NULL@ values to account
+-- for each column using 'nullsFor'.
+sqlSelectColsExpMaybe :: RecordInfo -> Q Exp
+sqlSelectColsExpMaybe RecordInfo {..} = do
+    let mkNullForType typ =
+            [e|nullsFor (Proxy @( $(pure typ) )) |]
+        nullFields =
+            map (mkNullForType . snd) $ sqlFields
+
+    [e|
+            maybe (uncommas' $(listE nullFields)) . sqlSelectCols
+        |]
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlSelectColsDec :: RecordInfo -> Q Dec
@@ -346,6 +444,9 @@ sqlSelectColsDec RecordInfo {..} = do
           -- `where` clause.
           []
       ]
+
+unMaybeProxy :: Proxy (Maybe a) -> Proxy a
+unMaybeProxy _ = Proxy
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
 sqlSelectColCountDec :: RecordInfo -> Q Dec
@@ -523,16 +624,28 @@ takeColumns ::
   forall a b.
   SqlSelect a b =>
   StateT [PersistValue] (Either Text) b
-takeColumns = StateT (\pvs ->
-  let targetColCount =
-        sqlSelectColCount (Proxy @a)
-      (target, other) =
-        splitAt targetColCount pvs
-   in if length target == targetColCount
+takeColumns = StateT $ \pvs -> do
+    let targetColCount =
+            sqlSelectColCount (Proxy @a)
+        (target, other) =
+            splitAt targetColCount pvs
+        targetLength =
+            length target
+    if targetLength == targetColCount
         then do
-          value <- sqlSelectProcessRow target
-          Right (value, other)
-        else Left "Insufficient columns when trying to parse a column")
+            value <- sqlSelectProcessRow target
+            pure (value, other)
+        else
+            Left $ mconcat
+                [ "Insufficient columns when trying to parse a column: "
+                , "Expected ", tshow targetColCount, " columns, but got: "
+                , tshow targetLength, ".\n\n"
+                , "Columns:\n\t", tshow target
+                , "Other:\n\t", tshow other
+                ]
+
+tshow :: Show a => a -> Text
+tshow = Text.pack . show
 
 -- | Get an error message for a non-record constructor.
 -- This module does not yet support non-record constructors, so we'll tell the
@@ -652,3 +765,144 @@ toAliasReferenceDec RecordInfo {..} = do
           []
       ]
 
+sqlSelectProcessRowOptional
+    :: forall r a. (Typeable a, Typeable r, SqlSelect a r)
+    => [PersistValue]
+    -> Either Text (Maybe r)
+sqlSelectProcessRowOptional pvs =
+    case sqlSelectProcessRow pvs of
+        Left err -> do
+            let actualLength =
+                    length pvs
+                expectedLength =
+                    sqlSelectColCount (Proxy :: Proxy a)
+
+            if actualLength == expectedLength
+            then pure Nothing -- assuming that the problem is an "unexpected null"
+            else Left $ mconcat
+                [ "Column count incorrect: expected "
+                , tshow expectedLength
+                , " but got ", tshow actualLength," when trying to parse a "
+                , Text.pack (show (typeRep (Proxy @r))), " from a "
+                , Text.pack (show (typeRep (Proxy @a)))
+                , ".\nGiven error: ", err
+                ]
+        Right a ->
+            pure (Just a)
+
+
+{- Uh oh...
+
+So, we start with a record.
+
+    data X = X { x :: Int }
+
+Then we turn that into a SQL record.
+
+    data SqlX = SqlX { x :: SqlExpr (Value Int) }
+
+With `OverloadedRecordDot`, you can refer to `sqlX.x` and get back what you
+want.
+
+You can carry `Maybe`, `Entity`, and other records, and it works out fine.
+
+However, we need *something* for dealing with a nullable `SqlX`. Otherwise, we
+cannot bring them into scope from left joins.
+
+My first attempt used `Maybe`. The nice thing here is that we get a totally
+reasonable implementation, right up until we need to do field access. A first
+attempt is something like:
+
+    fmap (\SqlMyRecord {..} -> myName) myRecord
+
+However, this gives us a @Maybe (SqlExpr (Value Text))@, and not a @SqlExpr
+(Value (Maybe Text))@.
+
+Consider the type of the maybe projection operator:
+
+    (?.) :: ( PersistEntity val , PersistField typ)
+        => SqlExpr (Maybe (Entity val))
+        -> EntityField val typ
+        -> SqlExpr (Value (Maybe typ))
+
+`SqlExpr (Maybe (Entity val))` is merely `Maybe val` for a record.
+So the type we need for a function is something like:
+
+    _f
+        :: Maybe val
+        -> (val -> SqlExpr ret)
+        -> SqlExpr (Maybe ret)
+
+We cannot write an instance of `HasField` for `Maybe`, at all, due to
+restrictions around what can or cannot be a valid instance. So `Maybe` isn't
+a suitable type.
+
+However, we can't even assume `SqlExpr`. We don't have a `SqlExpr` that wraps
+a record - only entity and maybe. So, we have to start with this:
+
+    _f
+        ::
+         ( ToMaybe ret
+         )
+        => Maybe val
+        -> (val -> ret)
+        -> ToMaybeT ret
+
+If the field has type `Entity a`, then the Sql record will have type `SqlExpr
+(Entity a)`, and that tracks. If the field has type `Int`, then we get `SqlExpr
+(Value Int)`, and that tracks fine too. If the field has type `Record`, then
+we'll get `ToMaybeT Record`, which is `Maybe Record` - which is also fine.
+
+But what do we provide if the value is `Nothing`?
+
+If the value is 'Nothing', then we need to figure out how to produce a @ToMaybeT ret@ such that we get a @NULL@ for it back.
+
+This suggests that 'ToMaybeT' needs to evolve to give us a @nulls@, or
+something...
+
+But, for now, let's make a separate class.
+
+ -}
+
+projectMaybeRecord
+    :: forall val val' ret .
+        (ToMaybe ret, HasNulls ret )
+    => Maybe val
+    -> (val -> ret)
+    -> ToMaybeT ret
+projectMaybeRecord mrecord k =
+    case mrecord of
+        Nothing ->
+            mkNothing k
+        Just record ->
+            toMaybe $ k record
+
+getFieldP :: forall sym rec typ. HasField sym rec typ => Proxy sym -> rec -> typ
+getFieldP _ = getField @sym
+
+projectMaybeRecordHasField
+    :: forall val ret sym.
+        (ToMaybe ret, HasNulls ret, HasField sym val ret)
+    => Proxy ret -> Proxy sym
+    -> Maybe val
+    -> ToMaybeT ret
+projectMaybeRecordHasField _ _ mrec =
+    projectMaybeRecord mrec (getField @sym)
+
+data SqlX = SqlX { x :: SqlExpr (Value Int) }
+
+instance
+    ( maybeR ~ ToMaybeT r
+    , HasField sym SqlX r
+    , ToMaybe r
+    , HasNulls r
+    )
+    => HasField sym (Maybe SqlX) maybeR where
+    getField mrec =
+        projectMaybeRecord  mrec (getField @sym)
+
+x' :: (HasField "x" (Maybe SqlX) r) => Proxy r
+x' = Proxy
+
+-- blah :: Maybe SqlX -> ToMaybeT (SqlExpr (Value Int))
+-- blah a = getField @"x" a

@@ -653,6 +653,21 @@ just = veryUnsafeCoerceSqlExprValue
 nothing :: SqlExpr (Value (Maybe typ))
 nothing = unsafeSqlValue "NULL"
 
+-- | Provides a query fragment for an amount of @NULL@ values that would work
+-- for the given input type.
+nullsFor :: SqlSelect db typ => proxy db -> (TLB.Builder, [PersistValue])
+nullsFor prxy =
+    ( uncommas (replicate (sqlSelectColCount (fromVar prxy)) "NULL")
+    , mempty
+    )
+  where
+    fromVar :: proxy a -> Proxy a
+    fromVar _ = Proxy
+
+just' :: PersistEntity a => SqlExpr a -> SqlExpr (Maybe a)
+just' = coerce
+
+
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
 joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
