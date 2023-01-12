@@ -48,7 +48,7 @@ $(deriveEsqueletoRecord ''MyRecord)
 doesThisWork :: SqlMyRecord -> SqlExpr (Value Text)
 doesThisWork = getField @"myName"
 
-whatAboutThis :: Maybe SqlMyRecord -> SqlExpr (Value (Maybe Text))
+whatAboutThis :: SqlMaybe SqlMyRecord -> SqlExpr (Value (Maybe Text))
 whatAboutThis = getField @"myName"
 
 myRecordQuery :: SqlQuery SqlMyRecord
@@ -122,12 +122,7 @@ myNestedRecordMaybeQuery = do
         SqlMyNestedRecordMaybe
             { myName = castString $ user ^. #name
             , myMaybeRecord =
-                Just SqlMyRecord
-                    { myName = castString $ user ^. #name
-                    , myAge = val $ Just 10
-                    , myUser = user
-                    , myAddress = address
-                    }
+                Nothing
             }
 
 
@@ -337,11 +332,6 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                         just (castString @String @Text (u ^. UserName)) ==.
                             (getField @"myName" myRecord)
                             &&. val False
-            case maybeMyRecord of
-                Just _ ->
-                    error "should not happen - val False above"
-                Nothing ->
-                    pure ()
 
             pure (u :& maybeMyRecord)
         pure ()

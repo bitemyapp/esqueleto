@@ -1,4 +1,8 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -19,6 +23,7 @@ module Database.Esqueleto.Record
     , defaultDeriveEsqueletoRecordSettings
     , projectMaybeRecord
     , getFieldP
+    , SqlMaybe(..)
     ) where
 
 import GHC.Records
@@ -184,23 +189,25 @@ deriveEsqueletoRecordWith settings originalName = do
         -- sym = varT (mkName "sym")
     maybeInstances <-
         [d|
-        instance SqlSelect (Maybe $(sqlNameTyp)) (Maybe $(nameTyp)) where
+        instance SqlSelect (SqlMaybe $(sqlNameTyp)) (Maybe $(nameTyp)) where
             sqlSelectProcessRow = sqlSelectProcessRowOptional
             sqlSelectColCount = sqlSelectColCount . unMaybeProxy
             sqlSelectCols = $(sqlSelectColsExpMaybe info)
 
-        instance ToAlias (Maybe $(sqlNameTyp)) where
-            toAlias = traverse toAlias
+        instance ToAlias (SqlMaybe $(sqlNameTyp)) where
+            toAlias (SqlMaybe a) =
+                fmap SqlMaybe (toAlias a)
 
-        instance ToAliasReference (Maybe $(sqlNameTyp)) where
-            toAliasReference aliasSource = traverse (toAliasReference aliasSource)
+        instance ToAliasReference (SqlMaybe $(sqlNameTyp)) where
+            toAliasReference aliasSource (SqlMaybe a) =
+                fmap SqlMaybe (toAliasReference aliasSource a)
 
         instance ToMaybe $(sqlNameTyp) where
-            type ToMaybeT $(sqlNameTyp) = Maybe $(sqlNameTyp)
-            toMaybe = Just
+            type ToMaybeT $(sqlNameTyp) = SqlMaybe $(sqlNameTyp)
+            toMaybe = SqlMaybe
 
-        instance HasNulls $(sqlNameTyp) where
-            mkNothing _ = Nothing
+--         instance HasNulls $(sqlNameTyp) where
+--             mkNothing _ = SqlMaybe _f
                 |]
 
 
@@ -209,7 +216,7 @@ deriveEsqueletoRecordWith settings originalName = do
         let binding =
                 LamE [RecP (sqlName info) [ (sqlFieldName, VarP nm) ]] (VarE nm)
         [d|
-            instance (r ~ ToMaybeT $(pure sqlFieldType) ) => HasField $(litT (strTyLit $ show sqlFieldName)) (Maybe $(sqlNameTyp)) r where
+            instance (r ~ ToMaybeT $(pure sqlFieldType) ) => HasField $(litT (strTyLit $ show sqlFieldName)) (SqlMaybe $(sqlNameTyp)) r where
                     getField mrec =
                         projectMaybeRecord mrec $(pure binding)
             |]
@@ -372,33 +379,48 @@ makeSqlSelectInstance info@RecordInfo {..} = do
 
   pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
 
-makeSqlSelectMaybeInstance :: RecordInfo -> Q [Dec]
-makeSqlSelectMaybeInstance info@RecordInfo {..} = do
-    sqlTypeT <- [t| Maybe $(conT sqlName) |]
-    regularTypeT <- [t| Maybe $(conT name) |]
-    [d|
-        instance SqlSelect (Maybe $(conT sqlName)) (Maybe $(conT name)) where
-            sqlSelectProcessRow = sqlSelectProcessRowOptional
-            sqlSelectColCount = sqlSelectColCount . unMaybeProxy
-            sqlSelectCols = $(sqlSelectColsExpMaybe info)
-        |]
 
--- | Generates the `sqlSelectCols` declaration for an `SqlSelect`  for a 'Maybe'
--- of a record.
---
--- If the record is present, then we delegate to the underlying functions. If
--- the record is absent, then we summon up sufficient @NULL@ values to account
--- for each column using 'nullsFor'.
+-- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance of
+-- `SqlMaybe`
 sqlSelectColsExpMaybe :: RecordInfo -> Q Exp
 sqlSelectColsExpMaybe RecordInfo {..} = do
-    let mkNullForType typ =
-            [e|nullsFor (Proxy @( $(pure typ) )) |]
-        nullFields =
-            map (mkNullForType . snd) $ sqlFields
+  -- Pairs of record field names and local variable names.
+  fieldNames <- forM sqlFields (\(name', _type) -> do
+    var <- newName $ nameBase name'
+    pure (name', var))
 
-    [e|
-            maybe (uncommas' $(listE nullFields)) . sqlSelectCols
-        |]
+  -- Patterns binding record fields to local variables.
+  let fieldPatterns :: [Q FieldPat]
+      fieldPatterns = map pure [(name', VarP var) | (name', var) <- fieldNames]
+
+      -- Local variables for fields joined with `:&` in a single expression.
+      joinedFields :: Exp
+      joinedFields =
+        case snd `map` fieldNames of
+          [] -> TupE []
+          [f1] -> VarE f1
+          f1 : rest ->
+            let helper lhs field =
+                  InfixE
+                    (Just lhs)
+                    (ConE '(:&))
+                    (Just $ AppE (VarE 'toMaybe) (VarE field))
+             in foldl' helper (AppE (VarE 'toMaybe) (VarE f1)) rest
+
+  identInfo <- newName "identInfo"
+  -- Roughly:
+  -- sqlSelectCols $identInfo SqlFoo{..} = sqlSelectCols $identInfo $joinedFields
+  [e| \ $(varP identInfo) (SqlMaybe $(recP sqlName fieldPatterns)) ->
+        sqlSelectCols $(varE identInfo) ( $(pure joinedFields) ) |]
+--   pure $
+--       LamE
+--           [ VarP identInfo
+--           , RecP sqlName fieldPatterns
+--           ]
+--           (VarE 'sqlSelectCols
+--           `AppE` VarE identInfo
+--           `AppE` ParensE joinedFields
+--           )
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlSelectColsDec :: RecordInfo -> Q Dec
@@ -445,7 +467,7 @@ sqlSelectColsDec RecordInfo {..} = do
           []
       ]
 
-unMaybeProxy :: Proxy (Maybe a) -> Proxy a
+unMaybeProxy :: Proxy (SqlMaybe a) -> Proxy a
 unMaybeProxy _ = Proxy
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
@@ -866,38 +888,34 @@ But, for now, let's make a separate class.
 
 projectMaybeRecord
     :: forall val val' ret .
-        (ToMaybe ret, HasNulls ret )
-    => Maybe val
+        (ToMaybe ret )
+    => SqlMaybe val
     -> (val -> ret)
     -> ToMaybeT ret
-projectMaybeRecord mrecord k =
-    case mrecord of
-        Nothing ->
-            mkNothing k
-        Just record ->
-            toMaybe $ k record
+projectMaybeRecord (SqlMaybe record) k =
+    toMaybe (k record)
 
 getFieldP :: forall sym rec typ. HasField sym rec typ => Proxy sym -> rec -> typ
 getFieldP _ = getField @sym
 
 projectMaybeRecordHasField
     :: forall val ret sym.
-        (ToMaybe ret, HasNulls ret, HasField sym val ret)
+        (ToMaybe ret, HasField sym val ret)
     => Proxy ret -> Proxy sym
-    -> Maybe val
+    -> SqlMaybe val
     -> ToMaybeT ret
 projectMaybeRecordHasField _ _ mrec =
     projectMaybeRecord mrec (getField @sym)
 
+data X = X { x :: Int }
 data SqlX = SqlX { x :: SqlExpr (Value Int) }
 
 instance
     ( maybeR ~ ToMaybeT r
     , HasField sym SqlX r
     , ToMaybe r
-    , HasNulls r
     )
-    => HasField sym (Maybe SqlX) maybeR where
+    => HasField sym (SqlMaybe SqlX) maybeR where
     getField mrec =
         projectMaybeRecord  mrec (getField @sym)
 
@@ -906,3 +924,18 @@ x' = Proxy
 
 -- blah :: Maybe SqlX -> ToMaybeT (SqlExpr (Value Int))
 -- blah a = getField @"x" a
+
+-- | A 'SqlMaybe' is a type used to indicate that a record is nullable.
+--
+-- To construct one, use 'toMaybe' on the 'ToMaybe' class.
+--
+-- To access fields, use the 'HasField' interface, or the 'liftSqlMaybe'
+-- function.
+newtype SqlMaybe a = SqlMaybe a
+
+instance ToMaybe (SqlMaybe a) where
+    type ToMaybeT (SqlMaybe a) = SqlMaybe a
+    toMaybe = id
+
+-- instance (ToMaybeT a ~ SqlMaybe a) => HasNulls (SqlMaybe a) where
+--     mkNothing _ = mkNothing (Proxy :: Proxy a)

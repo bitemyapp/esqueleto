@@ -23,13 +23,6 @@ class ToMaybe a where
 class (ToMaybe a) => HasNulls a where
     mkNothing :: proxy a -> ToMaybeT a
 
-instance HasNulls a => HasNulls (Maybe a) where
-    mkNothing _ = Nothing
-
-instance ToMaybe (Maybe a) where
-    type ToMaybeT (Maybe a) = Maybe a
-    toMaybe = id
-
 instance ToMaybe (SqlExpr (Maybe a)) where
     type ToMaybeT (SqlExpr (Maybe a)) = SqlExpr (Maybe a)
     toMaybe = id
