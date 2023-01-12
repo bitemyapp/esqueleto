@@ -327,3 +327,22 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                         just (castString @String @Text (u ^. UserName)) ==.
                             (getField @"myName" myRecord)
         pure ()
+
+    itDb "casing breaks stuff?" $ do
+        setup
+        records <- select $ do
+            u :& maybeMyRecord <- from $ table @User `leftJoin` myRecordQuery
+                `on` do
+                    \(u :& myRecord) ->
+                        just (castString @String @Text (u ^. UserName)) ==.
+                            (getField @"myName" myRecord)
+                            &&. val False
+            case maybeMyRecord of
+                Just _ ->
+                    error "should not happen - val False above"
+                Nothing ->
+                    pure ()
+
+            pure (u :& maybeMyRecord)
+        pure ()
+
