@@ -409,7 +409,7 @@ locking kind = putLocking $ GeneralLockingClause kind
 
 -- | Helper to add a any type of locking clause to a query
 --
--- @since 3.5.9.0
+-- @since 3.5.9.2
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
@@ -1452,7 +1452,7 @@ data LockingKind
 
 -- | Postgres specific locking, used only internally
 --
--- @since 3.5.9.0
+-- @since 3.5.9.2
 data PostgresLockingKind =
   PostgresLockingKind
     {
@@ -1475,17 +1475,17 @@ data OnLockedBehavior =
   -- ^ @NOWAIT@ syntax locking behaviour.
   --  query excutes immediately failing on locked rows
   --
-  -- @since 3.5.9.0
+  -- @since 3.5.9.2
     | SkipLocked
   -- ^ @SKIP LOCKED@ syntax locking behaviour.
   --  query skips locked rows
   --
-  -- @since 3.5.9.0
+  -- @since 3.5.9.2
     | Wait
   -- ^ default locking behaviour.
   --  query will wait on locked rows
   --
-  -- @since 3.5.9.0
+  -- @since 3.5.9.2
     deriving (Ord, Eq, Show)
 
 
