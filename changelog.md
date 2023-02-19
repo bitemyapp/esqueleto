@@ -4,6 +4,12 @@
     - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
       - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
 
+3.5.8.2
+=======
+- @9999years
+    - [#327](https://github.com/bitemyapp/esqueleto/pull/327)
+        - Fixed a Haddock typo causing documentation to render incorrectly
+
 3.5.8.1
 =======
 - @belevy
