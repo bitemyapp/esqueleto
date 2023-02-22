@@ -1661,31 +1661,46 @@ testLocking = do
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
   describe "Monoid instance" $ do
+    let
+        multiplePostgresLockingClauses p = do
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
+        
+        multipleLegacyLockingClauses = do
+            locking ForShare
+            locking ForUpdate
 
-    itDb "prioritizes general lock over postgres specific lock"   $ do
-        let multipleLockingQueryGeneralFirst = do
-              p <- Experimental.from $ table @Person
-              locking ForUpdate
-              EP.forUpdateOf p EP.skipLocked
-              EP.forUpdateOf p EP.skipLocked
-              EP.forShareOf p EP.skipLocked
-            multipleLockingQueryGeneralLast = do
-              p <- Experimental.from $ table @Person
-              locking ForUpdate
-              EP.forUpdateOf p EP.skipLocked
-              EP.forUpdateOf p EP.skipLocked
-              EP.forShareOf p EP.skipLocked
-            generalLockingQuery= do
-              p <- Experimental.from $ table @Person
-              locking ForUpdate
+        multipleLockingQueryPostgresLast = do
+            p <- Experimental.from $ table @Person
+            multipleLegacyLockingClauses
+            multiplePostgresLockingClauses p
+
+        multipleLockingQueryLegacyLast = do
+            p <- Experimental.from $ table @Person
+            multiplePostgresLockingClauses p
+            multipleLegacyLockingClauses
+        
+        expectedPostgresQuery = do
+            p <- Experimental.from $ table @Person
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
+
+        expectedLegacyQuery = do
+            p <- Experimental.from $ table @Person
+            locking ForUpdate
+
+    itDb "prioritizes last grouping of locks when mixing legacy and postgres specific locks" $ do
 
         conn <- ask
-        let res1 = toText conn multipleLockingQueryGeneralFirst
-            res2 = toText conn multipleLockingQueryGeneralFirst
-            resExpected = toText conn generalLockingQuery
+        let resPostgresLast = toText conn multipleLockingQueryPostgresLast
+            resLegacyLast = toText conn multipleLockingQueryLegacyLast
+            resExpectedPostgres = toText conn expectedPostgresQuery
+            resExpectedLegacy = toText conn expectedLegacyQuery
 
-        asserting $ res1 `shouldBe` resExpected
-        asserting $ res2 `shouldBe` resExpected
+        asserting $ resPostgresLast `shouldBe` resExpectedPostgres
+        asserting $ resLegacyLast `shouldBe` resExpectedLegacy
 
 testCountingRows :: SpecDb
 testCountingRows = do
