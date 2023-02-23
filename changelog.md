@@ -1,4 +1,4 @@
-3.5.9.0
+3.5.9.0 (unreleased)
 =======
 - @josephsumabat
     - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
