@@ -1,5 +1,9 @@
-3.5.9.0 (unreleased)
-=======
+3.5.9.0
+========
+- @9999years
+    - #350
+      - Add `GetFirstTable`, `getTable`, `getTableMaybe` helpers for selecting
+        tables from `:&` chains
 - @josephsumabat
     - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
       - Add `forUpdateOf`, `forShareOf` locking kinds for postgres

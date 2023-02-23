@@ -2,7 +2,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
@@ -13,10 +12,31 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Database.Esqueleto.Experimental.From.Join
-  (module Database.Esqueleto.Experimental.From.Join
-  , (:&)
-  )
-    where
+    ( (:&)(..)
+    , ValidOnClause
+    , on
+    , ErrorOnLateral
+    , fromJoin
+    , HasOnClause
+    , innerJoin
+    , innerJoinLateral
+    , crossJoin
+    , crossJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , GetFirstTable(..)
+    , getTable
+    , getTableMaybe
+    -- Compatability for old syntax
+    , Lateral
+    , NotLateral
+    , IsLateral
+    , DoInnerJoin(..)
+    , DoLeftJoin(..)
+    , DoCrossJoin(..)
+    ) where
 
 import Data.Bifunctor (first)
 import Data.Kind (Constraint)
@@ -28,6 +48,7 @@ import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Experimental.ToMaybe
 import Database.Esqueleto.Internal.Internal hiding
        (From(..), from, fromJoin, on)
+import Database.Esqueleto.Internal.PersistentImport (Entity)
 import GHC.TypeLits
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
@@ -319,6 +340,66 @@ infixl 2 `innerJoin`,
          `rightJoin`,
          `fullOuterJoin`
 
+-- | Typeclass for selecting tables using type application syntax.
+--
+-- If you have a long chain of tables joined with `(:&)`, like
+-- @a :& b :& c :& d@, then @getTable \@c (a :& b :& c :& d)@ will give you the
+-- @c@ table back.
+--
+-- Note that this typeclass will only select the first table of the given type;
+-- it may be less useful if there's multiple tables of the same type.
+--
+-- @since 3.5.9.0
+class GetFirstTable t ts where
+  -- | Get the first table of type `t` from the tables `ts`.
+  --
+  -- @since 3.5.9.0
+  getFirstTable :: ts -> t
+
+instance GetFirstTable t (t :& ts) where
+  getFirstTable (t :& _) = t
+
+instance GetFirstTable t (x :& t) where
+  getFirstTable (_ :& t) = t
+
+-- The associativity of (:&) means we do the recursion along the left-hand side.
+instance {-# OVERLAPPABLE #-} GetFirstTable t ts => GetFirstTable t (ts :& x) where
+  getFirstTable (ts :& _) = getFirstTable ts
+
+-- | Get the first table of a given type from a chain of tables joined with `(:&)`.
+--
+-- This can make it easier to write queries with a large number of join clauses:
+--
+-- @
+-- select $ do
+-- (people :& followers :& blogPosts) <-
+--     from $ table \@Person
+--     \`innerJoin` table \@Follow
+--     \`on\` (\\(person :& follow) ->
+--             person ^. PersonId ==. follow ^. FollowFollowed)
+--     \`innerJoin` table \@BlogPost
+--     \`on\` (\\((getTable \@Follow -> follow) :& blogPost) ->
+--             blogPost ^. BlogPostAuthorId ==. follow ^. FollowFollower)
+-- where_ (people1 ^. PersonName ==. val \"John\")
+-- pure (followers, people2)
+-- @
+--
+-- This example is a bit trivial, but once you've joined five or six tables it
+-- becomes enormously helpful.
+--
+-- @since 3.5.9.0
+getTable :: forall t ts. GetFirstTable (SqlExpr (Entity t)) ts
+         => ts
+         -> SqlExpr (Entity t)
+getTable = getFirstTable
+
+-- | A variant of `getTable` that operates on possibly-null entities.
+--
+-- @since 3.5.9.0
+getTableMaybe :: forall t ts. GetFirstTable (SqlExpr (Maybe (Entity t))) ts
+              => ts
+              -> SqlExpr (Maybe (Entity t))
+getTableMaybe = getFirstTable
 
 ------ Compatibility for old syntax
 
