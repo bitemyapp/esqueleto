@@ -1,4 +1,4 @@
-3.5.9.2
+3.5.9.0
 =======
 - @josephsumabat
     - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
@@ -34,7 +34,7 @@
 =======
 - @belevy
     - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
-        - Fix alias name bug with union and subselect 
+        - Fix alias name bug with union and subselect
 
 3.5.7.0
 =======
