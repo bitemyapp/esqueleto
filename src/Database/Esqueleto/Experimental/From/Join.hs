@@ -348,8 +348,12 @@ infixl 2 `innerJoin`,
 --
 -- Note that this typeclass will only select the first table of the given type;
 -- it may be less useful if there's multiple tables of the same type.
+--
+-- @since 3.5.9.0
 class GetFirstTable t ts where
   -- | Get the first table of type `t` from the tables `ts`.
+  --
+  -- @since 3.5.9.0
   getFirstTable :: ts -> t
 
 instance GetFirstTable t (t :& ts) where
@@ -382,12 +386,16 @@ instance {-# OVERLAPPABLE #-} GetFirstTable t ts => GetFirstTable t (ts :& x) wh
 --
 -- This example is a bit trivial, but once you've joined five or six tables it
 -- becomes enormously helpful.
+--
+-- @since 3.5.9.0
 getTable :: forall t ts. GetFirstTable (SqlExpr (Entity t)) ts
          => ts
          -> SqlExpr (Entity t)
 getTable = getFirstTable
 
 -- | A variant of `getTable` that operates on possibly-null entities.
+--
+-- @since 3.5.9.0
 getTableMaybe :: forall t ts. GetFirstTable (SqlExpr (Maybe (Entity t))) ts
               => ts
               -> SqlExpr (Maybe (Entity t))
