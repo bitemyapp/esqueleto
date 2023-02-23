@@ -385,7 +385,85 @@ instance {-# OVERLAPPABLE #-} GetFirstTable t ts => GetFirstTable t (ts :& x) wh
 -- @
 --
 -- This example is a bit trivial, but once you've joined five or six tables it
--- becomes enormously helpful.
+-- becomes enormously helpful. The above example uses a @ViewPattern@ to call
+-- the function and assign the variable directly, but you can also imagine it
+-- being written like this:
+--
+-- @
+--     \`on\` (\\(prev :& blogPost) ->
+--             let
+--                 follow = getTable \@Follow prev
+--              in
+--                 blogPost ^. BlogPostAuthorId ==. follow ^. FollowFollower)
+-- @
+--
+-- This function will pluck out the first table that matches the applied type,
+-- so if you join on the same table multiple times, it will always select the
+-- first one provided.
+--
+-- The `(:&)` operator associates so that the left hand side can be a wildcard
+-- for an arbitrary amount of nesting, and the "most recent" or "newest" table
+-- in a join sequence is always available on the rightmost - so @(prev :& bar)@
+-- is a pattern that matches @bar@ table (the most recent table added) and
+-- @prev@ tables (all prior tables in the join match).
+--
+-- By calling 'getTable' on the @prev@, you can select exactly the table you
+-- want, allowing you to omit a large number of spurious pattern matches.
+-- Consider a query that does several @LEFT JOIN@ on a first table:
+--
+-- @
+-- SELECT *
+-- FROM person
+-- LEFT JOIN car
+--   ON person.id = car.person_id
+-- LEFT JOIN bike
+--   ON person.id = bike.person_id
+-- LEFT JOIN food
+--   ON person.id = food.person_id
+-- LEFT JOIN address
+--   ON person.id = address.person_id
+-- @
+--
+-- The final 'on' clause in esqueleto would look like this:
+--
+-- @
+--     \`on\` do
+--         \\(person :& _car :& _bike :& _food :& address) ->
+--             person.id ==. address.personId
+-- @
+--
+-- First, we can change it to a @prev :& newest@ match. We can do this because
+-- of the operator associativity. This is kind of like how a list @:@ operator
+-- associates, but in the other direction: @a : (b : c) = a : b : c@.
+--
+-- @
+--     \`on\` do
+--         \\(prev :& address) ->
+--             let (person :& _car :& _bike :& _food) = prev
+--              in person.id ==. address.personId
+-- @
+--
+-- Then, we can use 'getTable' to select the @Person@ table directly, instead of
+-- pattern matching manually.
+--
+-- @
+--     \`on\` do
+--         \\(prev :& address) ->
+--             let person = getTable \@Person prev
+--              in person.id ==. address.personId
+-- @
+--
+-- Finally, we can use a @ViewPattern@ language extension to "inline" the
+-- access.
+--
+-- @
+--     \`on\` do
+--         \\((getTable \@Person -> person) :& address) ->
+--            person.id ==. address.personId
+-- @
+--
+-- With this form, you do not need to be concerned about the number and wildcard
+-- status of tables that do not matter to the specific @ON@ clause.
 --
 -- @since 3.5.9.0
 getTable :: forall t ts. GetFirstTable (SqlExpr (Entity t)) ts
@@ -492,4 +570,3 @@ instance ( ToFrom a a'
          , rhs ~ (b, (ma :& mb) -> SqlExpr (Value Bool))
          ) => ToFrom (FullOuterJoin a rhs) (ma :& mb) where
     toFrom (FullOuterJoin a b) = fullOuterJoin a b
-

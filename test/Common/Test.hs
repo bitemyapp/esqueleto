@@ -1666,7 +1666,7 @@ testLocking = do
             EP.forUpdateOf p EP.skipLocked
             EP.forUpdateOf p EP.skipLocked
             EP.forShareOf p EP.skipLocked
-        
+
         multipleLegacyLockingClauses = do
             locking ForShare
             locking ForUpdate
@@ -1680,7 +1680,7 @@ testLocking = do
             p <- Experimental.from $ table @Person
             multiplePostgresLockingClauses p
             multipleLegacyLockingClauses
-        
+
         expectedPostgresQuery = do
             p <- Experimental.from $ table @Person
             EP.forUpdateOf p EP.skipLocked
@@ -2364,6 +2364,7 @@ tests :: SpecDb
 tests =
     describe "Esqueleto" $ do
         testSelect
+        testGetTable
         testSubSelect
         testSelectOne
         testSelectSource
@@ -2509,3 +2510,27 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
     it "is only supported in GHC 9.2 or above" $ \_ -> do
         pending
 #endif
+
+testGetTable :: SpecDb
+testGetTable =
+    describe "GetFirstTable" $ do
+        itDb "works to make long join chains easier" $ do
+            select $ do
+                (person :& blogPost :& profile :& reply) <-
+                    Experimental.from $
+                        table @Person
+                        `leftJoin` table @BlogPost
+                            `Experimental.on` do
+                                \(p :& bp) ->
+                                    just (p ^. PersonId) ==. bp ?. BlogPostAuthorId
+                        `leftJoin` table @Profile
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& profile) ->
+                                    just (p ^. PersonId) ==. profile ?. ProfilePerson
+                        `leftJoin` table @Reply
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& reply) ->
+                                    just (p ^. PersonId) ==. reply ?. ReplyGuy
+                pure (person, blogPost, profile, reply)
+            asserting noExceptions
+
