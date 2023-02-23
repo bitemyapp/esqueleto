@@ -27,6 +27,11 @@ module Database.Esqueleto.PostgreSQL
     , upsertBy
     , insertSelectWithConflict
     , insertSelectWithConflictCount
+    , noWait
+    , wait
+    , skipLocked
+    , forUpdateOf
+    , forShareOf
     , filterWhere
     , values
     -- * Internal
@@ -50,7 +55,8 @@ import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
 import Database.Esqueleto.Internal.Internal hiding (random_)
-import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy, uniqueFields)
+import Database.Esqueleto.Internal.PersistentImport hiding
+       (uniqueFields, upsert, upsertBy)
 import Database.Persist.SqlBackend
 
 -- | (@random()@) Split out into database specific modules
@@ -434,3 +440,40 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+-- | `NO WAIT` syntax for postgres locking
+-- error will be thrown if locked rows are attempted to be selected
+--
+-- @since 3.5.9.2
+noWait :: OnLockedBehavior
+noWait = NoWait
+
+-- | `SKIP LOCKED` syntax for postgres locking
+-- locked rows will be skipped
+--
+-- @since 3.5.9.2
+skipLocked :: OnLockedBehavior
+skipLocked = SkipLocked
+
+-- | default behaviour of postgres locks. will attempt to wait for locks to expire
+--
+-- @since 3.5.9.2
+wait :: OnLockedBehavior
+wait = Wait
+
+-- | `FOR UPDATE OF` syntax for postgres locking
+-- allows locking of specific tables with an update lock in a view or join
+--
+-- @since 3.5.9.2
+forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forUpdateOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | `FOR SHARE OF` syntax for postgres locking
+-- allows locking of specific tables with a share lock in a view or join
+--
+-- @since 3.5.9.2
+
+forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forShareOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
