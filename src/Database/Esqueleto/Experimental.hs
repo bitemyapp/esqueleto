@@ -185,6 +185,10 @@ module Database.Esqueleto.Experimental
     , FullOuterJoin(..)
     , JoinKind(..)
     , OnClauseWithoutMatchingJoinException(..)
+      -- *** Join Helpers
+    , getTable
+    , getTableMaybe
+    , GetFirstTable(..)
 
       -- ** SQL backend
     , SqlQuery
