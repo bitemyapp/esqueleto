@@ -3,19 +3,24 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
+
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
@@ -28,8 +33,6 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NEL
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -40,6 +43,8 @@ import Control.Monad.Trans.Resource (MonadResource, release)
 import Data.Acquire (Acquire, allocateAcquire, with)
 import Data.Int (Int64)
 import Data.List (intersperse)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NEL
 import qualified Data.Maybe as Maybe
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
@@ -48,9 +53,12 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
+import Data.Kind (Type)
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
@@ -62,19 +70,18 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist.SqlBackend
+import Database.Persist (EntityNameDB(..), FieldNameDB(..), SymbolToField(..))
 import qualified Database.Persist
 import Database.Persist.Sql.Util
        ( entityColumnCount
-       , keyAndEntityColumnNames
        , isIdField
+       , keyAndEntityColumnNames
        , parseEntityValues
        )
-import Text.Blaze.Html (Html)
-import Data.Coerce (coerce)
-import Data.Kind (Type)
+import Database.Persist.SqlBackend
 import GHC.Records
 import GHC.TypeLits
+import Text.Blaze.Html (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -398,13 +405,20 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
 -- | Add a locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.
+-- Unsafe since not all locking clauses are implemented for every RDBMS
 --
 -- If multiple calls to 'locking' are made on the same query,
 -- the last one is used.
 --
 -- @since 2.2.7
 locking :: LockingKind -> SqlQuery ()
-locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
+locking kind = putLocking $ LegacyLockingClause kind
+
+-- | Helper to add a any type of locking clause to a query
+--
+-- @since 3.5.9.0
+putLocking :: LockingClause -> SqlQuery ()
+putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
 {-#
   DEPRECATED
@@ -1399,6 +1413,21 @@ data Update
 -- | Phantom type used by 'insertSelect'.
 data Insertion a
 
+-- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
+-- that have been joined together.
+--
+-- The precedence behavior can be demonstrated by:
+--
+-- @
+-- a :& b :& c == ((a :& b) :& c)
+-- @
+--
+-- See the examples at the beginning of this module to see how this
+-- operator is used in 'JOIN' operations.
+data (:&) a b = a :& b
+    deriving (Eq, Show)
+infixl 2 :&
+
 -- | Different kinds of locking clauses supported by 'locking'.
 --
 -- Note that each RDBMS has different locking support.  The
@@ -1427,6 +1456,75 @@ data LockingKind
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
+
+-- | Postgres specific locking, used only internally
+--
+-- @since 3.5.9.0
+data PostgresLockingKind =
+    PostgresLockingKind
+        {
+          postgresRowLevelLockStrength :: PostgresRowLevelLockStrength
+        , postgresLockingOfClause :: Maybe LockingOfClause
+        , postgresOnLockedBehavior :: OnLockedBehavior
+        }
+
+-- Arranged in order of lock strength
+data PostgresRowLevelLockStrength =
+    PostgresForUpdate
+    | PostgresForShare
+  deriving (Ord, Eq)
+
+data LockingOfClause where
+    LockingOfClause :: LockableEntity a => a -> LockingOfClause
+
+data OnLockedBehavior =
+    NoWait
+    -- ^ @NOWAIT@ syntax locking behaviour.
+    --  query excutes immediately failing on locked rows
+    --
+    -- @since 3.5.9.0
+      | SkipLocked
+    -- ^ @SKIP LOCKED@ syntax locking behaviour.
+    --  query skips locked rows
+    --
+    -- @since 3.5.9.0
+      | Wait
+    -- ^ default locking behaviour.
+    --  query will wait on locked rows
+    --
+    -- @since 3.5.9.0
+      deriving (Ord, Eq, Show)
+
+
+-- | Lockable entity
+--
+-- Example use:
+--
+-- @
+-- select $ do
+--     (p :& bp) <- from $
+--         table @Person
+--         `innerJoin` table @BlogPost
+--             `on` do
+--                 \(p :& bp) -> p ^. PersonId ==. b ^. BlogPostAuthorId
+--     forUpdateOf (p :& b) skipLocked
+--     return p
+-- @
+class LockableEntity a where
+    flattenLockableEntity :: a -> NonEmpty LockableSqlExpr
+
+makeLockableEntity :: LockableEntity a => IdentInfo -> a -> (TLB.Builder, [PersistValue])
+makeLockableEntity info lockableEntity =
+    uncommas' $ Set.toList . Set.fromList $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
+
+instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
+    flattenLockableEntity e = LockableSqlExpr e :| []
+
+instance (LockableEntity a, LockableEntity b) => LockableEntity (a :& b) where
+    flattenLockableEntity (a :& b) = flattenLockableEntity a <> flattenLockableEntity b
+
+data LockableSqlExpr where
+    LockableSqlExpr :: PersistEntity val => (SqlExpr (Entity val)) -> LockableSqlExpr
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -1986,10 +2084,24 @@ instance Semigroup LimitClause where
 
 instance Monoid LimitClause where
   mempty = Limit mzero mzero
-  mappend = (<>)
 
 -- | A locking clause.
-type LockingClause = Monoid.Last LockingKind
+data LockingClause =
+    LegacyLockingClause LockingKind
+    -- ^ Locking clause not specific to any database implementation
+    | PostgresLockingClauses [PostgresLockingKind]
+    -- ^ Locking clause specific to postgres
+    | NoLockingClause
+
+instance Semigroup LockingClause where
+  -- Postgres allows us to have multiple locking clauses
+    (<>) (PostgresLockingClauses pleft) (PostgresLockingClauses pright) = PostgresLockingClauses (pleft <> pright)
+    (<>) mleft NoLockingClause = mleft
+    (<>) _ mright = mright
+--
+instance Monoid LockingClause where
+    mempty = NoLockingClause
+    mappend = (<>)
 
 ----------------------------------------------------------------------
 
@@ -2863,7 +2975,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeHaving     info havingClause
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
-        , makeLocking         lockingClause
+        , makeLocking    info lockingClause
         ]
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
@@ -3096,13 +3208,41 @@ makeLimit (conn, _) (Limit ml mo) =
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
-makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
-  where
-    toTLB ForUpdate           = "\nFOR UPDATE"
-    toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
-    toTLB ForShare            = "\nFOR SHARE"
-    toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
+makeLocking :: IdentInfo -> LockingClause -> (TLB.Builder, [PersistValue])
+makeLocking _ (LegacyLockingClause lockingClause) =
+    case lockingClause of
+        ForUpdate           -> ("\nFOR UPDATE", [])
+        ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
+        ForShare            -> ("\nFOR SHARE", [])
+        LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
+makeLocking info (PostgresLockingClauses clauses) =
+    List.foldl' combineBuilderValPairs ("",[]) (makePostgresLockingClauses <$> clauses)
+        where
+            combineBuilderValPairs (builder1, persistvals1) (builder2,persistvals2) =
+                (builder1 <> builder2 <> "\n", persistvals1 <> persistvals2)
+
+            makePostgresLockingClauses :: PostgresLockingKind -> (TLB.Builder , [PersistValue])
+            makePostgresLockingClauses l =
+                makeLockingStrength (postgresRowLevelLockStrength l)
+                    <> plain " "
+                    <> makeOfClause (postgresLockingOfClause l)
+                    <> plain " "
+                    <> makeLockingBehavior (postgresOnLockedBehavior l)
+            makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
+            makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
+            makeLockingStrength PostgresForShare = plain "FOR SHARE"
+
+            makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
+            makeLockingBehavior NoWait = plain "NO WAIT"
+            makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
+            makeLockingBehavior Wait = plain ""
+
+            makeOfClause :: Maybe LockingOfClause -> (TLB.Builder, [PersistValue])
+            makeOfClause (Just (LockingOfClause lockableEnts)) = plain "OF " <> makeLockableEntity info lockableEnts
+            makeOfClause Nothing = plain ""
+
+            plain v = (v,[])
+makeLocking _ NoLockingClause = mempty
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
