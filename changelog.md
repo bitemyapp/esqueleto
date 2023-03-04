@@ -1,5 +1,6 @@
+
 3.5.9.0
-========
+=======
 - @9999years
     - [#350](https://github.com/bitemyapp/esqueleto/pull/350)
       - Add `GetFirstTable`, `getTable`, `getTableMaybe` helpers for selecting
@@ -7,9 +8,10 @@
 - @josephsumabat
     - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
       - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
-
-3.5.8.2
-=======
+- @parsonsmatt
+    - [#342](https://github.com/bitemyapp/esqueleto/pull/342)
+        - Create a `TypeError` instance for `Functor SqlExpr`, adding
+          documentation and work arounds for the need.
 - @9999years
     - [#327](https://github.com/bitemyapp/esqueleto/pull/327)
         - Fixed a Haddock typo causing documentation to render incorrectly

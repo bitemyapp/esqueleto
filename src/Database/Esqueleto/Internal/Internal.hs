@@ -1,4 +1,9 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeApplications #-}
+{-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
+
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DerivingStrategies #-}
@@ -75,6 +80,7 @@ import Database.Persist.Sql.Util
        )
 import Database.Persist.SqlBackend
 import GHC.Records
+import GHC.TypeLits
 import Text.Blaze.Html (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
@@ -2212,6 +2218,46 @@ entityAsValueMaybe = coerce
 -- string ('TLB.Builder') and a list of values to be
 -- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
+
+-- | Folks often want the ability to promote a Haskell function into the
+-- 'SqlExpr' expression language - and naturally reach for 'fmap'.
+-- Unfortunately, this is impossible. We cannot send *functions* to the
+-- database, which is what we would need to do in order for this to make sense.
+-- Let's consider the type of 'fmap' for 'SqlExpr':
+--
+-- @
+-- fmap :: (a -> b) -> 'SqlExpr' a -> 'SqlExpr' b
+-- @
+--
+-- This type signature is making a pretty strong claim: "Give me a Haskell
+-- function from @a -> b@. I will then transform a SQL expression representing
+-- a Haskell value of type @a@ and turn it into a SQL expression representing
+-- a Haskell value of type @b@."
+--
+-- Let's suppose we *could* do this - @fmap (+1)@ would have to somehow inspect
+-- the function expression means "add one", and then translate that to the
+-- appropriate SQL.
+--
+-- This is why @esqueleto@ defines a bunch of operators: @x '+.' ('val' 1)@ can
+-- be used instead of @'fmap' (+1) x@.
+--
+-- If you do have a SQL function, then you can provide a safe type and introduce
+-- it with 'unsafeSqlFunction' or 'unsafeSqlBinOp'.
+--
+-- @since 3.5.8.2
+instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
+    fmap = error "impossible"
+
+-- | The type error message given when you try to do 'fmap' on a 'SqlExpr'. This
+-- is intended to guide folks towards the docs, which should guide them towards
+-- alternative implementations.
+--
+-- @since 3.5.8.2
+type SqlExprFunctorMessage =
+    'Text "You're trying to treat `SqlExpr` like a `Functor`, but it cannot be one."
+    ':$$: 'Text "We would need to send arbitrary functions to the database for interpretation to support that instance."
+    ':$$: 'Text "See the docs for the fake instance of `Functor SqlExpr` for more information."
+    ':$$: 'Text "Consider using a SQL function with `unsafeSqlFunction` and a good type signature."
 
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's
 -- @OverloadedRecordDot@ extension.
