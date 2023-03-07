@@ -23,14 +23,16 @@ import Database.Persist.MySQL
        , connectPassword
        , connectPort
        , connectUser
+       , createMySQLPool
        , defaultConnectInfo
        , withMySQLConn
-       , createMySQLPool
        )
 
 import Test.Hspec
 
 import Common.Test
+import Data.Maybe (fromMaybe)
+import System.Environment (lookupEnv)
 
 testMysqlSum :: SpecDb
 testMysqlSum = do
@@ -189,6 +191,7 @@ migrateIt = do
 mkConnectionPool :: IO ConnectionPool
 mkConnectionPool = do
     ci <- isCI
+    mysqlHost <- (fromMaybe "localhost" <$> lookupEnv "MYSQL_HOST")
     let connInfo
             | ci =
                 defaultConnectInfo
@@ -200,7 +203,7 @@ mkConnectionPool = do
                     }
             | otherwise =
                 defaultConnectInfo
-                    { connectHost     = "localhost"
+                    { connectHost     = mysqlHost
                     , connectUser     = "travis"
                     , connectPassword = "esqutest"
                     , connectDatabase = "esqutest"

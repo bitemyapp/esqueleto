@@ -1,3 +1,9 @@
+3.5.12.0
+========
+- @JoelMcCracken
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354)
+      - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
+
 3.5.11.2
 ========
 - @arguri

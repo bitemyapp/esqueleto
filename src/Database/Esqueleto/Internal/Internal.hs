@@ -1876,8 +1876,10 @@ data CommonTableExpressionKind
     | NormalCommonTableExpression
     deriving Eq
 
-data CommonTableExpressionClause =
-    CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+type CommonTableExpressionModifierAfterAs = CommonTableExpressionClause -> IdentInfo -> TLB.Builder
+
+data CommonTableExpressionClause
+  = CommonTableExpressionClause CommonTableExpressionKind CommonTableExpressionModifierAfterAs Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data SubQueryType
     = NormalSubQuery
@@ -3090,14 +3092,15 @@ makeCte info cteClauses =
         | hasRecursive = "WITH RECURSIVE "
         | otherwise = "WITH "
       where
+
         hasRecursive =
             elem RecursiveCommonTableExpression
-            $ fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind)
+            $ fmap (\(CommonTableExpressionClause cteKind _ _ _) -> cteKind)
             $ cteClauses
 
-    cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
+    cteClauseToText clause@(CommonTableExpressionClause _ cteModifier cteIdent cteFn) =
         first
-            (\tlb -> useIdent info cteIdent <> " AS " <> parens tlb)
+            (\tlb -> useIdent info cteIdent <> " AS " <> cteModifier clause info <> parens tlb)
             (cteFn info)
 
     cteBody =
