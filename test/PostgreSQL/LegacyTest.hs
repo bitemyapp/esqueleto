@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module PostgreSQL.Test where
+module PostgreSQL.LegacyTest where
 
 import Control.Arrow ((&&&))
 import Control.Concurrent (forkIO)
@@ -36,8 +36,8 @@ import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import Data.Time
 import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
-import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Internal as ES
+import Database.Esqueleto.Legacy hiding (random_)
 import Database.Esqueleto.PostgreSQL (random_, (%.))
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
@@ -51,7 +51,7 @@ import Test.Hspec
 import Test.Hspec.Core.Spec (sequential)
 import Test.Hspec.QuickCheck
 
-import Common.Test
+import Common.LegacyTest
 import Common.Test.Import hiding (from, on)
 import PostgreSQL.MigrateJSON
 
@@ -61,8 +61,9 @@ returningType a = a
 testPostgresqlCoalesce :: SpecDb
 testPostgresqlCoalesce = do
     itDb "works on PostgreSQL and MySQL with <2 arguments" $ do
-        void $ select $ do
-            p <- from $ table @Person
+        void $ returningType @[Value (Maybe Int)] $
+            select $
+            from $ \p -> do
             return (coalesce [p ^. PersonAge])
         asserting noExceptions
 
@@ -71,8 +72,8 @@ testPostgresqlTextFunctions = do
     describe "text functions" $ do
         itDb "like, (%) and (++.) work on a simple example" $ do
             let nameContains t =
-                    select $ do
-                    p <- from $ table @Person
+                    select $
+                    from $ \p -> do
                     where_
                         (like
                         (p ^. PersonName)
@@ -90,11 +91,12 @@ testPostgresqlTextFunctions = do
 
         itDb "ilike, (%) and (++.) work on a simple example on PostgreSQL" $ do
             [p1e, _, p3e, _, p5e] <- mapM insert' [p1, p2, p3, p4, p5]
-            let nameContains t = select $ do
-                    p <- from $ table @Person
-                    where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
-                    orderBy [asc (p ^. PersonName)]
-                    return p
+            let nameContains t = do
+                    select $
+                     from $ \p -> do
+                     where_ (p ^. PersonName `ilike` (%) ++. val t ++. (%))
+                     orderBy [asc (p ^. PersonName)]
+                     return p
             mi <- nameContains "mi"
             john <- nameContains "JOHN"
             asserting $ do
@@ -115,8 +117,8 @@ testPostgresqlUpdate = do
         n   <- updateCount $ \p -> do
                set p [ PersonAge +=. just (val 1) ]
                where_ (p ^. PersonName !=. val "Mike")
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p -> do
                orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
                return p
         -- PostgreSQL: nulls are bigger than data, and update returns
@@ -142,8 +144,8 @@ testPostgresqlSum = do
         _ <- insert' p2
         _ <- insert' p3
         _ <- insert' p4
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p->
                return $ joinV $ sum_ (p ^. PersonAge)
         asserting $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Rational ) ]
 
@@ -154,8 +156,8 @@ testPostgresqlTwoAscFields = do
         p2e <- insert' p2
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p -> do
                orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
                return p
         -- in PostgreSQL nulls are bigger than everything
@@ -169,8 +171,8 @@ testPostgresqlOneAscOneDesc = do
       p2e <- insert' p2
       p3e <- insert' p3
       p4e <- insert' p4
-      ret <- select $ do
-             p <- from $ table @Person
+      ret <- select $
+             from $ \p -> do
              orderBy [desc (p ^. PersonAge)]
              orderBy [asc (p ^. PersonName)]
              return p
@@ -186,10 +188,11 @@ testSelectDistinctOn = do
           [ BlogPost "A" p1k
           , BlogPost "B" p1k
           , BlogPost "C" p2k ]
-        ret <- select $ do
-                   bp <- from $ table @BlogPost
-                   orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
-                   distinctOn [don (bp ^. BlogPostAuthorId)] $ pure bp
+        ret <- select $
+               from $ \bp ->
+               distinctOn [don (bp ^. BlogPostAuthorId)] $ do
+               orderBy [asc (bp ^. BlogPostAuthorId), desc (bp ^. BlogPostTitle)]
+               return bp
         liftIO $ ret `shouldBe` L.sortBy (comparing (blogPostAuthorId . entityVal)) [bpB, bpC]
 
     let slightlyLessSimpleTest q =
@@ -199,8 +202,8 @@ testSelectDistinctOn = do
               [ BlogPost "A" p1k
               , BlogPost "B" p1k
               , BlogPost "C" p2k ]
-            ret <- select $ do
-                   bp <- from $ table @BlogPost
+            ret <- select $
+                   from $ \bp ->
                    q bp $ return bp
             let cmp = (blogPostAuthorId &&& blogPostTitle) . entityVal
             liftIO $ ret `shouldBe` L.sortBy (comparing cmp) [bpA, bpB, bpC]
@@ -236,8 +239,7 @@ testArrayAggWith :: SpecDb
 testArrayAggWith = do
   describe "ALL, no ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
         "SELECT array_agg(\"Person\".\"age\")\n\
@@ -248,15 +250,13 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-            p <- from $ table @Person
-            return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
+        select $ from $ \p ->
+          return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
   describe "DISTINCT, no ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
         "SELECT array_agg(DISTINCT \"Person\".\"age\")\n\
@@ -267,15 +267,13 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-          p <- from $ table @Person
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ L.sort ret `shouldBe` [Nothing, Just 17, Just 36]
 
   describe "ALL, ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge)
                     [ asc $ p ^. PersonName
                     , desc $ p ^. PersonFavNum
@@ -290,15 +288,13 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-          p <- from $ table @Person
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeAll (p ^. PersonName) [])
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
   describe "DISTINCT, ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-          p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
       liftIO $ query `shouldBe`
@@ -311,18 +307,20 @@ testArrayAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-          p <- from $ table @Person
+        select $ from $ \p ->
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
       liftIO $ ret `shouldBe` [Just 17, Just 36, Nothing]
+
+
+
+
 
 testStringAggWith :: SpecDb
 testStringAggWith = do
   describe "ALL, no ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.stringAggWith EP.AggModeAll (p ^. PersonName)
                      (val " ") [])
       liftIO $ query `shouldBe`
@@ -334,22 +332,19 @@ testStringAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-          p <- from $ table @Person
+        select $ from $ \p ->
           return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ (L.sort $ words ret) `shouldBe` L.sort (map personName people)
 
     itDb "works with zero rows" $  do
       [Value ret] <-
-        select $ do
-            p <- from $ table @Person
-            return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
+        select $ from $ \p ->
+          return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")[])
       liftIO $ ret `shouldBe` Nothing
 
   describe "DISTINCT, no ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") []
       liftIO $ query `shouldBe`
@@ -361,17 +356,15 @@ testStringAggWith = do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
-                     []
+        select $ from $ \p ->
+          return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
+                   []
       liftIO $ (L.sort $ words ret) `shouldBe`
         (L.sort . L.nub $ map personName people)
 
   describe "ALL, ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
                     [ asc $ p ^. PersonName
                     , desc $ p ^. PersonFavNum
@@ -386,17 +379,15 @@ testStringAggWith = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
+        select $ from $ \p ->
+          return $ EP.stringAggWith EP.AggModeAll (p ^. PersonName) (val " ")
                     [desc $ p ^. PersonName]
       liftIO $ (words ret)
         `shouldBe` (L.reverse . L.sort $ map personName people)
 
   describe "DISTINCT, ORDER BY" $ do
     itDb "creates sane SQL" $  do
-      (query, args) <- showQuery ES.SELECT $ do
-            p <- from $ table @Person
+      (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") [desc $ p ^. PersonName]
       liftIO $ query `shouldBe`
@@ -409,10 +400,9 @@ testStringAggWith = do
       let people = [p1, p2, p3 {personName = "John"}, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
-                        [desc $ p ^. PersonName]
+        select $ from $ \p ->
+          return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName) (val " ")
+                   [desc $ p ^. PersonName]
       liftIO $ (words ret) `shouldBe`
         (L.reverse . L.sort . L.nub $ map personName people)
 
@@ -427,16 +417,12 @@ testAggregateFunctions = do
       let people = [p1, p2, p3, p4, p5]
       mapM_ insert people
       [Value (Just ret)] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.arrayAgg (p ^. PersonName)
+        select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ L.sort ret `shouldBe` L.sort (map personName people)
 
     itDb "works on zero rows" $  do
       [Value ret] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.arrayAgg (p ^. PersonName)
+        select $ from $ \p -> return (EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` Nothing
   describe "arrayAggWith" testArrayAggWith
   describe "stringAgg" $ do
@@ -445,15 +431,13 @@ testAggregateFunctions = do
         let people = [p1, p2, p3, p4, p5]
         mapM_ insert people
         [Value (Just ret)] <-
-            select $ do
-                p <- from $ table @Person
-                return $ EP.stringAgg (p ^. PersonName) (val " ")
+          select $
+          from $ \p -> do
+          return (EP.stringAgg (p ^. PersonName) (val " "))
         liftIO $ L.sort (words ret) `shouldBe` L.sort (map personName people)
     itDb "works on zero rows" $  do
       [Value ret] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.stringAgg (p ^. PersonName) (val " ")
+        select $ from $ \p -> return (EP.stringAgg (p ^. PersonName) (val " "))
       liftIO $ ret `shouldBe` Nothing
   describe "stringAggWith" testStringAggWith
 
@@ -465,19 +449,18 @@ testAggregateFunctions = do
                    , Person "4" (Just 8)  Nothing 2
                    , Person "5" (Just 9)  Nothing 2
                    ]
-      ret <- select $ do
-          person <- from $ table @Person
-          groupBy (person ^. PersonFavNum)
-          return . EP.arrayRemoveNull . EP.maybeArray . EP.arrayAgg $ person ^. PersonAge
+      ret <- select $ from $ \(person :: SqlExpr (Entity Person)) -> do
+        groupBy (person ^. PersonFavNum)
+        return . EP.arrayRemoveNull . EP.maybeArray . EP.arrayAgg
+          $ person ^. PersonAge
       liftIO $ (L.sort $ map (L.sort . unValue) ret)
         `shouldBe` [[7], [8,9]]
 
   describe "maybeArray" $ do
     itDb "Coalesces NULL into an empty array" $  do
       [Value ret] <-
-        select $ do
-            p <- from $ table @Person
-            return $ EP.maybeArray $ EP.arrayAgg (p ^. PersonName)
+        select $ from $ \p ->
+          return (EP.maybeArray $ EP.arrayAgg (p ^. PersonName))
       liftIO $ ret `shouldBe` []
 
 testPostgresModule :: SpecDb
@@ -509,14 +492,14 @@ testPostgresModule = do
             rawExecute "SET TIME ZONE 'UTC'" []
             ret <-
                 fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
-                select $ do
-                    dt <- from $ table @DateTruncTest
-                    pure
-                      ( dt ^. DateTruncTestId
-                      , ( dt ^. DateTruncTestCreated
-                        , truncateDate (val "day") (dt ^. DateTruncTestCreated)
-                        )
-                      )
+                select $
+                from $ \dt -> do
+                pure
+                  ( dt ^. DateTruncTestId
+                  , ( dt ^. DateTruncTestCreated
+                    , truncateDate (val "day") (dt ^. DateTruncTestCreated)
+                    )
+                  )
 
             asserting $ for_ vals $ \(idx, utcTime) -> do
               case Map.lookup idx ret of
@@ -1072,59 +1055,6 @@ testUpsert =
       u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
-testInsertSelectWithConflict :: SpecDb
-testInsertSelectWithConflict =
-  describe "insertSelectWithConflict test" $ do
-    itDb "Should do Nothing when no updates set" $  do
-      _ <- insert p1
-      _ <- insert p2
-      _ <- insert p3
-      n1 <- EP.insertSelectWithConflictCount UniqueValue
-            (do
-                 p <- from $ table @Person
-                 return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
-            )
-            (\current excluded -> [])
-      uniques1 <- select $ from $ table @OneUnique
-      n2 <- EP.insertSelectWithConflictCount UniqueValue
-            (do
-                 p <- from $ table @Person
-                 return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
-            )
-            (\current excluded -> [])
-      uniques2 <- select $ from $ table @OneUnique
-      liftIO $ n1 `shouldBe` 3
-      liftIO $ n2 `shouldBe` 0
-      let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
-      liftIO $ map entityVal uniques1 `shouldBe` test
-      liftIO $ map entityVal uniques2 `shouldBe` test
-    itDb "Should update a value if given an update on conflict" $  do
-        _ <- insert p1
-        _ <- insert p2
-        _ <- insert p3
-        -- Note, have to sum 4 so that the update does not conflicts again with another row.
-        n1 <- EP.insertSelectWithConflictCount UniqueValue
-                (do
-                     p <- from $ table @Person
-                     return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
-                )
-                (\current excluded ->
-                    [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques1 <- select $ from $ table @OneUnique
-        n2 <- EP.insertSelectWithConflictCount UniqueValue
-                (do
-                    p <- from $ table @Person
-                    return $ OneUnique <# val "test" <&> (p ^. PersonFavNum)
-                )
-                (\current excluded ->
-                    [OneUniqueValue =. val 4 +. (current ^. OneUniqueValue) +. (excluded ^. OneUniqueValue)])
-        uniques2 <- select $ from $ table @OneUnique
-        liftIO $ n1 `shouldBe` 3
-        liftIO $ n2 `shouldBe` 3
-        let test = map (OneUnique "test" . personFavNum) [p1,p2,p3]
-            test2 = map (OneUnique "test" . (+4) . (*2) . personFavNum) [p1,p2,p3]
-        liftIO $ map entityVal uniques1 `shouldBe` test
-        liftIO $ map entityVal uniques2 `shouldBe` test2
 
 testFilterWhere :: SpecDb
 testFilterWhere =
@@ -1142,8 +1072,7 @@ testFilterWhere =
       _ <- insert p5
 
       usersByAge <- do
-          select $ do
-            users <- from $ table @Person
+          select $ from $ \users -> do
             groupBy $ users ^. PersonAge
             return
               ( users ^. PersonAge
@@ -1179,8 +1108,7 @@ testFilterWhere =
       _ <- insert p5
 
       usersByAge <- fmap (\(Value a, Value b, Value c) -> (a, b, c)) <$> do
-          select $ do
-            users <- from $ table @Person
+          select $ from $ \users -> do
             groupBy $ users ^. PersonAge
             return
               ( users ^. PersonAge
@@ -1201,593 +1129,6 @@ testFilterWhere =
           ] :: [(Maybe Int, Maybe Rational, Maybe Rational)]
         )
 
-testCommonTableExpressions :: SpecDb
-testCommonTableExpressions = do
-    describe "You can run them" $ do
-        itDb "will run" $ do
-            void $ select $ do
-                limitedLordsCte <-
-                    with $ do
-                        lords <- from $ table @Lord
-                        limit 10
-                        pure lords
-                lords <- from limitedLordsCte
-                orderBy [asc $ lords ^. LordId]
-                pure lords
-
-            asserting noExceptions
-
-    itDb "can do multiple recursive queries" $ do
-        let
-            oneToTen =
-                withRecursive
-                    (pure $ val (1 :: Int))
-                    unionAll_
-                    (\self -> do
-                        v <- from self
-                        where_ $ v <. val 10
-                        pure $ v +. val 1
-                    )
-
-        vals <- select $ do
-            cte <- oneToTen
-            cte2 <- oneToTen
-            res1 <- from cte
-            res2 <- from cte2
-            pure (res1, res2)
-        asserting $ vals `shouldBe` (((,) <$> fmap Value [1..10] <*> fmap Value [1..10]))
-
-    itDb "passing previous query works" $ do
-        let
-            oneToTen =
-                withRecursive
-                     (pure $ val (1 :: Int))
-                     unionAll_
-                     (\self -> do
-                         v <- from self
-                         where_ $ v <. val 10
-                         pure $ v +. val 1
-                     )
-
-            oneMore q =
-                with $ do
-                    v <- from q
-                    pure $ v +. val 1
-        vals <- select $ do
-            cte <- oneToTen
-            cte2 <- oneMore cte
-            res <- from cte2
-            pure res
-        asserting $ vals `shouldBe` fmap Value [2..11]
-
-testPostgresqlLocking :: SpecDb
-testPostgresqlLocking = do
-    describe "Monoid instance" $ do
-        let toText conn q =
-                let (tlb, _) = ES.toRawSql ES.SELECT (conn, ES.initialIdentState) q
-                    in TLB.toLazyText tlb
-        itDb "concatenates postgres locking clauses" $ do
-            let multipleLockingQuery = do
-                    p <- from $ table @Person
-                    EP.forUpdateOf p EP.skipLocked
-                    EP.forUpdateOf p EP.skipLocked
-                    EP.forShareOf p EP.skipLocked
-            conn <- ask
-            let res1 = toText conn multipleLockingQuery
-                resExpected =
-                    TL.unlines
-                    [
-                      "SELECT 1"
-                    ,"FROM \"Person\""
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR SHARE OF \"Person\" SKIP LOCKED"
-                    ]
-
-            asserting $ res1 `shouldBe` resExpected
-
-    describe "For update skip locked locking" $ sequential $ do
-        let allPeopleAndPosts = do
-                (p :& b) <- from $ table @Person
-                        `innerJoin` table @BlogPost
-                        `on` (\(p :& b) ->
-                                p ^. PersonId ==. b ^. BlogPostAuthorId)
-                return (p :& b)
-            mkInitialStateForLockingTest connection =
-                flip runSqlPool connection $ do
-                    p1k <- insert p1
-                    p2k <- insert p2
-                    p3k <- insert p3
-                    blogPosts <- mapM insert'
-                        [ BlogPost "A" p1k
-                        , BlogPost "B" p2k
-                        , BlogPost "C" p3k ]
-                    pure ([p1k, p2k, p3k], entityKey <$> blogPosts)
-            cleanupLockingTest connection (personKeys, blogPostKeys) =
-                flip runSqlPool connection $ do
-                    forM_ blogPostKeys P.delete
-                    forM_ personKeys P.delete
-        aroundWith (\testAction connection -> do
-            bracket (mkInitialStateForLockingTest connection) (cleanupLockingTest connection) $ \(personKeys, blogPostKeys) ->
-                testAction (connection, personKeys, blogPostKeys)
-            ) $ do
-                it "skips locked rows for a locking select" $ \(connection, _, _) -> do
-                    waitMainThread <- newEmptyMVar
-
-                    let sideThread :: IO Expectation
-                        sideThread = do
-                            flip runSqlPool connection $ do
-
-                                _ <- takeMVar waitMainThread
-                                nonLockedRowsNonSpecified <-
-                                    select $ do
-                                        p <- from $ table @Person
-                                        EP.forUpdateOf p EP.skipLocked
-                                        return p
-
-                                nonLockedRowsSpecifiedTable <-
-                                    select $ do
-                                        (p :& b) <- allPeopleAndPosts
-                                        EP.forUpdateOf p EP.skipLocked
-                                        return p
-
-                                nonLockedRowsSpecifyAllTables <-
-                                    select $ do
-                                        (p :& b) <- allPeopleAndPosts
-                                        EP.forUpdateOf (p :& b) EP.skipLocked
-                                        return p
-
-                                pure $ do
-                                    nonLockedRowsNonSpecified `shouldBe` []
-                                    nonLockedRowsSpecifiedTable `shouldBe` []
-                                    nonLockedRowsSpecifyAllTables `shouldBe` []
-
-                    withAsync sideThread $ \sideThreadAsync -> do
-                        void $ flip runSqlPool connection $ do
-                            void $ select $ do
-                                person <- from $ table @Person
-                                locking ForUpdate
-                                pure $ person ^. PersonId
-
-                            _ <- putMVar waitMainThread ()
-                            sideThreadAsserts <- wait sideThreadAsync
-                            nonLockedRowsAfterUpdate <-
-                                select $ do
-                                    (p :& b) <- allPeopleAndPosts
-                                    EP.forUpdateOf p EP.skipLocked
-                                    return p
-
-                            asserting sideThreadAsserts
-                            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-
-                it "skips locked rows for a subselect update" $ \(connection, _, _)-> do
-                    waitMainThread <- newEmptyMVar
-
-                    let sideThread :: IO Expectation
-                        sideThread =
-                            flip runSqlPool connection $ do
-                                _ <- liftIO $ takeMVar waitMainThread
-
-                                nonLockedRowsSpecifiedTable <-
-                                    select $ do
-                                        (p :& b) <- allPeopleAndPosts
-                                        EP.forUpdateOf p EP.skipLocked
-                                        return p
-
-                                liftIO $ print nonLockedRowsSpecifiedTable
-                                pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
-
-                    withAsync sideThread $ \sideThreadAsync -> do
-                        void $ flip runSqlPool connection $ do
-                            update $ \p -> do
-                                set p [ PersonName =. val "ChangedName1" ]
-                                where_ $ exists $ do
-                                    person <- from $ table @Person
-                                    locking ForUpdate
-                                    where_ $ person ^. PersonId ==.  p ^. PersonId
-                                        &&. person ^. PersonName ==. val "Rachel"
-
-
-                            _ <- putMVar waitMainThread ()
-                            sideThreadAsserts <- wait sideThreadAsync
-                            nonLockedRowsAfterUpdate <-
-                                select $ do
-                                    (p :& b) <- allPeopleAndPosts
-                                    EP.forUpdateOf p EP.skipLocked
-                                    return p
-
-                            liftIO $ print nonLockedRowsAfterUpdate
-                            asserting sideThreadAsserts
-                            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-
-                it "skips locked rows for a subselect join update" $ \(connection, _, _) -> do
-                    waitMainThread <- newEmptyMVar
-
-                    let sideThread :: IO Expectation
-                        sideThread =
-                            flip runSqlPool connection $ do
-                                liftIO $ takeMVar waitMainThread
-                                lockedRows <- select $ do
-                                    (p :& b) <- allPeopleAndPosts
-                                    EP.forUpdateOf p EP.skipLocked
-                                    where_ (b ^. BlogPostTitle ==. val "A")
-                                    return p
-
-                                nonLockedRows <-
-                                  select $ do
-                                    (p :& b) <- allPeopleAndPosts
-                                    EP.forUpdateOf p EP.skipLocked
-                                    return p
-
-                                pure $ do
-                                    lockedRows `shouldBe` []
-                                    length nonLockedRows `shouldBe` 2
-
-                    withAsync sideThread $ \sideThreadAsync -> do
-                        void $ flip runSqlPool connection $ do
-                            update $ \p -> do
-                                set p [ PersonName =. val "ChangedName" ]
-                                where_ $ exists $ do
-                                    (people :& blogPosts) <- allPeopleAndPosts
-                                    EP.forUpdateOf people EP.skipLocked
-                                    where_ $ blogPosts ^. BlogPostTitle ==. val "A"
-                                        &&. p ^. PersonId ==. people ^. PersonId
-
-                            liftIO $ putMVar waitMainThread ()
-                            sideThreadAsserts <- wait sideThreadAsync
-                            nonLockedRowsAfterUpdate <- select $ do
-                                (p :& b) <- allPeopleAndPosts
-                                EP.forUpdateOf p EP.skipLocked
-                                return p
-
-                            asserting sideThreadAsserts
-                            asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
-
--- Since lateral queries arent supported in Sqlite or older versions of mysql
--- the test is in the Postgres module
-testLateralQuery :: SpecDb
-testLateralQuery = do
-    describe "Lateral queries" $ do
-        itDb "supports CROSS JOIN LATERAL" $ do
-          _ <-  do
-            select $ do
-                l :& c <-
-                  from $ table @Lord
-                  `CrossJoin` \lord -> do
-                        deed <- from $ table @Deed
-                        where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                        pure $ countRows @Int
-                pure (l, c)
-          liftIO $ True `shouldBe` True
-
-        itDb "supports INNER JOIN LATERAL" $ do
-            let subquery lord = do
-                                deed <- from $ table @Deed
-                                where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                                pure $ countRows @Int
-            res <- select $ do
-              l :& c <- from $ table @Lord
-                              `InnerJoin` subquery
-                              `on` (const $ val True)
-              pure (l, c)
-
-            let _ = res :: [(Entity Lord, Value Int)]
-            asserting noExceptions
-
-        itDb "supports LEFT JOIN LATERAL" $ do
-            res <- select $ do
-                l :& c <- from $ table @Lord
-                                `LeftOuterJoin` (\lord -> do
-                                          deed <- from $ table @Deed
-                                          where_ $ lord ^. LordId ==. deed ^. DeedOwnerId
-                                          pure $ countRows @Int)
-                                `on` (const $ val True)
-                pure (l, c)
-
-            let _ = res :: [(Entity Lord, Value (Maybe Int))]
-            asserting noExceptions
-
-testValuesExpression :: SpecDb
-testValuesExpression = do
-    describe "(VALUES (..)) query" $ do
-        itDb "works with joins and other sql expressions" $ do
-            p1k <- insert p1
-            p2k <- insert p2
-            p3k <- insert p3
-            let exprs :: NE.NonEmpty (SqlExpr (Value Int), SqlExpr (Value Text))
-                exprs =   (val 10, val "ten")
-                    NE.:| [ (val 20, val "twenty")
-                        , (val 30, val "thirty") ]
-                query = do
-                    (bound, boundName) :& person <- from $
-                        EP.values exprs
-                        `InnerJoin` table @Person
-                        `on` (\((bound, boundName) :& person) -> person^.PersonAge >=. just bound)
-                    groupBy bound
-                    orderBy [ asc bound ]
-                    pure (bound, count @Int $ person^.PersonName)
-            result <- select query
-            liftIO $ result `shouldBe` [ (Value 10, Value 2)
-                                       , (Value 20, Value 1)
-                                       , (Value 30, Value 1) ]
-
-        itDb "supports single-column query" $ do
-            let query = do
-                    vInt <- from $ EP.values $ val 1 NE.:| [ val 2, val 3 ]
-                    pure (vInt :: SqlExpr (Value Int))
-            result <- select query
-            asserting noExceptions
-            liftIO $ result `shouldBe` [ Value 1, Value 2, Value 3 ]
-
-        itDb "supports multi-column query (+ nested simple expression and null)" $ do
-            let query = do
-                    (vInt, vStr, vDouble) <- from
-                        $ EP.values $ (val 1, val "str1", coalesce [just $ val 1.0, nothing])
-                                NE.:| [ (val 2, val "str2", just $ val 2.5)
-                                      , (val 3, val "str3", nothing) ]
-                    pure ( vInt :: SqlExpr (Value Int)
-                            , vStr :: SqlExpr (Value Text)
-                            , vDouble :: SqlExpr (Value (Maybe Double)) )
-            result <- select query
-            asserting noExceptions
-            liftIO $ result `shouldBe` [ (Value 1, Value "str1", Value $ Just 1.0)
-                                       , (Value 2, Value "str2", Value $ Just 2.5)
-                                       , (Value 3, Value "str3", Value Nothing) ]
-
-testWindowFunctions :: SpecDb
-testWindowFunctions = do
-    describe "Window Functions" $ do
-
-        itDb "supports over ()" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , sum_ @_ @Double (n ^. NumbersDouble) `Window.over_` ()
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldMatchList`
-                                          [ (Value 1, Value (Just 18.0))
-                                          , (Value 2, Value (Just 18.0))
-                                          , (Value 3, Value (Just 18.0))
-                                          , (Value 6, Value (Just 18.0))]
-
-        describe "rowNumber_" $ do
-            itDb "no partition" $ do
-                insertMany_
-                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
-                    , Numbers 2 4
-                    , Numbers 3 5
-                    , Numbers 6 7
-                    ]
-                let query = do
-                        n <- from $ table @Numbers
-                        orderBy [asc $ n ^. NumbersInt]
-                        pure ( n ^. NumbersInt
-                             , Window.rowNumber_ `Window.over_` ()
-                             )
-                result <- select query
-                asserting noExceptions
-                asserting $ result `shouldMatchList`
-                                              [ (Value 1, Value 1)
-                                              , (Value 2, Value 2)
-                                              , (Value 3, Value 3)
-                                              , (Value 6, Value 4)]
-
-            itDb "partition" $ do
-                insertMany_
-                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
-                    , Numbers 2 4
-                    , Numbers 3 5
-                    , Numbers 6 7
-                    ]
-                let query = do
-                        n <- from $ table @Numbers
-                        orderBy [asc $ n ^. NumbersInt]
-                        pure ( n ^. NumbersInt
-                             , Window.rowNumber_ `Window.over_`
-                                Window.partitionBy_ (n ^. NumbersInt %. val 2 ==. val 0)
-                             )
-                result <- select query
-                asserting noExceptions
-                asserting $ result `shouldMatchList`
-                                              [ (Value 1, Value 1)
-                                              , (Value 2, Value 1)
-                                              , (Value 3, Value 2)
-                                              , (Value 6, Value 2)]
-
-        describe "lag_" $ do
-            itDb "over ()" $ do
-                insertMany_
-                    [ Numbers { numbersInt = 1, numbersDouble = 2 }
-                    , Numbers 2 4
-                    , Numbers 3 5
-                    , Numbers 6 7
-                    ]
-                let query = do
-                        n <- from $ table @Numbers
-                        orderBy [asc $ n ^. NumbersInt]
-                        pure ( n ^. NumbersInt
-                             , Window.lag_ (n ^. NumbersInt) Nothing `Window.over_` ()
-                             )
-                result <- select query
-                asserting noExceptions
-                asserting $ result `shouldMatchList`
-                                              [ (Value 1, Value Nothing)
-                                              , (Value 2, Value (Just 1))
-                                              , (Value 3, Value (Just 2))
-                                              , (Value 6, Value (Just 3))
-                                              ]
-
-
-        itDb "can countRows" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , countRows @Int `Window.over_` ()
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldMatchList`
-                                          [ (Value 1, Value 4)
-                                          , (Value 2, Value 4)
-                                          , (Value 3, Value 4)
-                                          , (Value 6, Value 4)]
-
-        itDb "can countRows" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , countRows @Int
-                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldMatchList`
-                                          [ (Value 1, Value 2)
-                                          , (Value 2, Value 2)
-                                          , (Value 3, Value 2)
-                                          , (Value 6, Value 2)]
-
-        itDb "countRows over is OK as null" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 1 3
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , countRows @Int
-                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldMatchList`
-                                          [ (Value 1, Value 3)
-                                          , (Value 1, Value 3)
-                                          , (Value 2, Value 2)
-                                          , (Value 3, Value 3)
-                                          , (Value 6, Value 2)]
-        itDb "supports partitioning" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , sum_ @_ @Double (n ^. NumbersDouble)
-                            `Window.over_` (Window.partitionBy_ (n ^. NumbersInt %. val @Int 2))
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldMatchList`
-                                          [ (Value 1, Value (Just 7.0))
-                                          , (Value 2, Value (Just 11.0))
-                                          , (Value 3, Value (Just 7.0))
-                                          , (Value 6, Value (Just 11.0))
-                                          ]
-
-        itDb "supports running total" $ do
-            insertMany_
-                [ Numbers 1 2
-                , Numbers 2 4
-                , Numbers 3 5
-                , Numbers 6 7
-                ]
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , n ^. NumbersDouble
-                         , sum_ @_ @Double (n ^. NumbersDouble)
-                            `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
-                            )-- <> Window.frame_ Window.unboundedPreceding)
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldBe`
-                [ (Value 1, Value 2, Value (Just 2.0))
-                , (Value 2, Value 4, Value (Just 6.0))
-                , (Value 3, Value 5, Value (Just 11.0))
-                , (Value 6, Value 7, Value (Just 18.0))
-                ]
-
-        itDb "supports running total excluding current row and addition to sum" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , Window.sqlExprToWindowContext (just (n ^. NumbersDouble)) +.
-                             sum_ (n ^. NumbersDouble)
-                                `Window.over_` (Window.orderBy_ [asc (n ^. NumbersInt)]
-                                             <> Window.frame_ (Window.excludeCurrentRow Window.unboundedPreceding)
-                                             )
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldBe` [ (Value 1, Value Nothing)
-                                          , (Value 2, Value (Just 6.0))
-                                          , (Value 3, Value (Just 11.0))
-                                          , (Value 6, Value (Just 18.0))]
-
-        itDb "supports postgres filter and over clauses" $ do
-            _ <- insert $ Numbers 1 2
-            _ <- insert $ Numbers 2 4
-            _ <- insert $ Numbers 3 5
-            _ <- insert $ Numbers 6 7
-            let query = do
-                    n <- from $ table @Numbers
-                    pure ( n ^. NumbersInt
-                         , sum_ @_ @Double (n ^. NumbersDouble)
-                            `EP.filterWhere` (n ^. NumbersInt >. val 2)
-                            `Window.over_` (Window.frame_ Window.unboundedPreceding)
-                         )
-            result <- select query
-            asserting noExceptions
-            asserting $ result `shouldBe` [ (Value 1, Value Nothing)
-                                          , (Value 2, Value Nothing)
-                                          , (Value 3, Value (Just 5.0))
-                                          , (Value 6, Value (Just 12.0))]
-
-
-testSubselectAliasingBehavior :: SpecDb
-testSubselectAliasingBehavior = do
-    describe "Aliasing behavior" $ do
-        itDb "correctly realiases entities accross multiple subselects" $ do
-            _ <- select $ do
-                    from $ from $ from $ table @Lord
-            asserting noExceptions
-
-        itDb "doesnt erroneously repeat variable names when using subselect + union" $ do
-            let lordQuery = do
-                    l <- from $ table @Lord
-                    pure (l ^. LordCounty, l ^. LordDogs)
-                personQuery = do
-                    p <- from $ table @Person
-                    pure (p ^. PersonName, just $ p ^. PersonFavNum)
-            _ <- select $
-                from $ do
-                    (str, _) <- from $ lordQuery `union_` personQuery
-                    pure (str, val @Int 1)
-            asserting noExceptions
-
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1798,8 +1139,8 @@ createSaneSQL act q vals = do
         args `shouldBe` vals
 
 fromValue :: (PersistField a) => SqlExpr (Value a) -> SqlQuery (SqlExpr (Value a))
-fromValue act = do
-    x <- from $ table @Json
+fromValue act = from $ \x -> do
+    let _ = x :: SqlExpr (Entity Json)
     return act
 
 persistTextArray :: [T.Text] -> PersistValue
@@ -1844,8 +1185,7 @@ selectJSON
   :: MonadIO m
   => (JSONBExpr A.Value -> SqlQuery ())
   -> SqlPersistT m [Entity Json]
-selectJSON f = select $ do
-    v <- from $ table @Json
+selectJSON f = select $ from $ \v -> do
     f $ just (v ^. JsonValue)
     return v
 
@@ -1873,18 +1213,11 @@ spec = beforeAll mkConnectionPool $ do
         testPostgresqlTextFunctions
         testInsertUniqueViolation
         testUpsert
-        testInsertSelectWithConflict
         testFilterWhere
-        testCommonTableExpressions
         setDatabaseState insertJsonValues cleanJSON
             $ describe "PostgreSQL JSON tests" $ do
                 testJSONInsertions
                 testJSONOperators
-        testLateralQuery
-        testValuesExpression
-        testWindowFunctions
-        testSubselectAliasingBehavior
-        testPostgresqlLocking
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do

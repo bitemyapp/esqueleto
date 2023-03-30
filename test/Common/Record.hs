@@ -21,13 +21,13 @@ module Common.Record (testDeriveEsqueletoRecord) where
 
 import Common.Test.Import hiding (from, on)
 import Data.List (sortOn)
-import Database.Esqueleto.Experimental
+import Database.Esqueleto
 import Database.Esqueleto.Record
-  ( DeriveEsqueletoRecordSettings(..)
-  , defaultDeriveEsqueletoRecordSettings
-  , deriveEsqueletoRecord
-  , deriveEsqueletoRecordWith
-  )
+       ( DeriveEsqueletoRecordSettings(..)
+       , defaultDeriveEsqueletoRecordSettings
+       , deriveEsqueletoRecord
+       , deriveEsqueletoRecordWith
+       )
 
 data MyRecord =
     MyRecord

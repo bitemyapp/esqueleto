@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 
 -- | The @esqueleto@ EDSL (embedded domain specific language).
@@ -40,97 +41,226 @@
 -- This module has an attached WARNING message indicating that the Experimental
 -- syntax will become the default. If you want to continue using the old syntax,
 -- please refer to "Database.Esqueleto.Legacy" as a drop-in replacement.
-module Database.Esqueleto {-# WARNING "This module will switch over to the Experimental syntax in an upcoming major version release. Please migrate to the Database.Esqueleto.Legacy module to continue using the old syntax, or translate to the new and improved syntax in Database.Esqueleto.Experimental." #-}
-  ( -- * Setup
-    -- $setup
+module Database.Esqueleto
+    ( -- * Setup
+      -- $setup
 
-    -- * Introduction
-    -- $introduction
+      -- * Introduction
+      -- $introduction
 
-    -- * Getting started
-    -- $gettingstarted
+      -- * A New Syntax
+      -- $new-syntax
 
-    -- * @esqueleto@'s Language
-    where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
-             , distinct, distinctOn, don, distinctOnOrderBy, having, locking
-             , sub_select, (^.), (?.)
-             , val, isNothing, just, nothing, joinV, withNonNull
-             , countRows, count, countDistinct
-             , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
-             , between, (+.), (-.), (/.), (*.)
-             , random_, round_, ceiling_, floor_
-             , min_, max_, sum_, avg_, castNum, castNumM
-             , coalesce, coalesceDefault
-             , lower_, upper_, trim_, ltrim_, rtrim_, length_, left_, right_
-             , like, ilike, (%), concat_, (++.), castString
-             , subList_select, valList, justList
-             , in_, notIn, exists, notExists
-             , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId
-  , subSelect
-  , subSelectMaybe
-  , subSelectCount
-  , subSelectForeign
-  , subSelectList
-  , subSelectUnsafe
-  , ToBaseId(..)
-  , when_
-  , then_
-  , else_
-  , from
-  , Value(..)
-  , ValueList(..)
-  , OrderBy
-  , DistinctOn
-  , LockingKind(..)
-  , SqlString
+      -- * Documentation
+
+    -- ** Basic Queries
+      from
+    , table
+    , Table(..)
+    , SubQuery(..)
+    , selectQuery
+
     -- ** Joins
-  , InnerJoin(..)
-  , CrossJoin(..)
-  , LeftOuterJoin(..)
-  , RightOuterJoin(..)
-  , FullOuterJoin(..)
-  , JoinKind(..)
-  , OnClauseWithoutMatchingJoinException(..)
-    -- * SQL backend
-  , SqlQuery
-  , SqlExpr
-  , SqlEntity
-  , select
-  , selectOne
-  , selectSource
-  , delete
-  , deleteCount
-  , update
-  , updateCount
-  , insertSelect
-  , insertSelectCount
-  , (<#)
-  , (<&>)
-  -- ** Rendering Queries
-  , renderQueryToText
-  , renderQuerySelect
-  , renderQueryUpdate
-  , renderQueryDelete
-  , renderQueryInsertInto
-    -- * Internal.Language
-  , From
-    -- * RDBMS-specific modules
-    -- $rdbmsSpecificModules
+    , (:&)(..)
+    , on
+    , innerJoin
+    , innerJoinLateral
+    , leftJoin
+    , leftJoinLateral
+    , rightJoin
+    , fullOuterJoin
+    , crossJoin
+    , crossJoinLateral
 
-    -- * Helpers
-  , valkey
-  , valJ
-  , associateJoin
+      -- ** Set Operations
+      -- $sql-set-operations
+    , union_
+    , Union(..)
+    , unionAll_
+    , UnionAll(..)
+    , except_
+    , Except(..)
+    , intersect_
+    , Intersect(..)
+    , pattern SelectQuery
 
-    -- * Re-exports
-    -- $reexports
-  , deleteKey
-  , module Database.Esqueleto.Internal.PersistentImport
-  ) where
+      -- ** Common Table Expressions
+    , with
+    , withRecursive
 
+      -- ** Internals
+    , From(..)
+    , ToMaybe(..)
+    , ToAlias(..)
+    , ToAliasT
+    , ToAliasReference(..)
+    , ToAliasReferenceT
+    , ToSqlSetOperation(..)
+
+    -- * The Normal Stuff
+    , where_
+    , groupBy
+    , orderBy
+    , rand
+    , asc
+    , desc
+    , limit
+    , offset
+
+    , distinct
+    , distinctOn
+    , don
+    , distinctOnOrderBy
+    , having
+    , locking
+
+    , sub_select
+    , (^.)
+    , (?.)
+
+    , val
+    , isNothing
+    , just
+    , nothing
+    , joinV
+    , withNonNull
+
+    , countRows
+    , count
+    , countDistinct
+
+    , not_
+    , (==.)
+    , (>=.)
+    , (>.)
+    , (<=.)
+    , (<.)
+    , (!=.)
+    , (&&.)
+    , (||.)
+
+    , between
+    , (+.)
+    , (-.)
+    , (/.)
+    , (*.)
+
+    , random_
+    , round_
+    , ceiling_
+    , floor_
+
+    , min_
+    , max_
+    , sum_
+    , avg_
+    , castNum
+    , castNumM
+
+    , coalesce
+    , coalesceDefault
+
+    , lower_
+    , upper_
+    , trim_
+    , ltrim_
+    , rtrim_
+    , length_
+    , left_
+    , right_
+
+    , like
+    , ilike
+    , (%)
+    , concat_
+    , (++.)
+    , castString
+
+    , subList_select
+    , valList
+    , justList
+
+    , in_
+    , notIn
+    , exists
+    , notExists
+
+    , set
+    , (=.)
+    , (+=.)
+    , (-=.)
+    , (*=.)
+    , (/=.)
+
+    , case_
+    , toBaseId
+    , subSelect
+    , subSelectMaybe
+    , subSelectCount
+    , subSelectForeign
+    , subSelectList
+    , subSelectUnsafe
+    , ToBaseId(..)
+    , when_
+    , then_
+    , else_
+    , Value(..)
+    , ValueList(..)
+    , OrderBy
+    , DistinctOn
+    , LockingKind(..)
+    , LockableEntity(..)
+    , SqlString
+
+      -- ** Joins
+    , InnerJoin(..)
+    , CrossJoin(..)
+    , LeftOuterJoin(..)
+    , RightOuterJoin(..)
+    , FullOuterJoin(..)
+    , JoinKind(..)
+    , OnClauseWithoutMatchingJoinException(..)
+      -- *** Join Helpers
+    , getTable
+    , getTableMaybe
+    , GetFirstTable(..)
+
+      -- ** SQL backend
+    , SqlQuery
+    , SqlExpr
+    , SqlEntity
+    , select
+    , selectOne
+    , selectSource
+    , delete
+    , deleteCount
+    , update
+    , updateCount
+    , insertSelect
+    , insertSelectCount
+    , (<#)
+    , (<&>)
+
+    -- ** Rendering Queries
+    , renderQueryToText
+    , renderQuerySelect
+    , renderQueryUpdate
+    , renderQueryDelete
+    , renderQueryInsertInto
+
+    -- ** Helpers
+    , valkey
+    , valJ
+    , associateJoin
+
+      -- ** Re-exports
+      -- $reexports
+    , deleteKey
+    , module Database.Esqueleto.Internal.PersistentImport
+    ) where
+
+import Database.Esqueleto.Experimental
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Esqueleto.Legacy
 
 
 -- $setup

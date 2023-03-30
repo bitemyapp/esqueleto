@@ -28,7 +28,7 @@
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
-module Common.Test
+module Common.LegacyTest
     ( tests
     , testLocking
     , testAscRandom
@@ -73,7 +73,6 @@ import Control.Monad (forM_, replicateM, replicateM_, void)
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
 import Data.Either
-import qualified Database.Esqueleto.Experimental as Experimental
 import Database.Esqueleto.Legacy
 
 import Data.Conduit (ConduitT, runConduit, (.|))
@@ -300,27 +299,6 @@ testSubSelect = do
                 Right xs ->
                     xs `shouldBe` []
 
-testSelectOne :: SpecDb
-testSelectOne =
-    describe "selectOne" $ do
-        let personQuery =
-                selectOne $ do
-                    person <- Experimental.from $ Experimental.table @Person
-                    where_ $ person ^. PersonFavNum >=. val 1
-                    orderBy [asc (person ^. PersonId)]
-                    return $ person ^. PersonId
-        itDb "returns Just" $ do
-            person <- insert' p1
-            _ <- insert' p2
-            res <- personQuery
-            asserting $
-                res `shouldBe` Just (Value $ entityKey person)
-
-        itDb "returns Nothing" $ do
-            res <- personQuery
-            asserting $
-                res `shouldBe` (Nothing :: Maybe (Value PersonId))
-
 testSelectSource :: SpecDb
 testSelectSource = do
     describe "selectSource" $ do
@@ -498,16 +476,6 @@ testSelectFrom = do
                 offset 0
                 return p
             asserting $ ret5 `shouldBe` [ p1e, p4e, p3e, p2e ]
-
-        itDb "works with non-id primary key" $ do
-            let fc = Frontcover number ""
-                number = 101 :: Int
-                Right thePk = keyFromValues [toPersistValue number]
-            fcPk <- insert fc
-            [Entity _ ret] <- select $ Experimental.from $ table @Frontcover
-            asserting $ do
-                ret `shouldBe` fc
-                fcPk `shouldBe` thePk
 
         itDb "works when returning a custom non-composite primary key from a query" $ do
             let name = "foo"
@@ -709,140 +677,6 @@ testSelectJoin = do
               return p
           asserting $ (entityVal <$> ps) `shouldBe` [p1]
 
-testSelectSubQuery :: SpecDb
-testSelectSubQuery = describe "select subquery" $ do
-    itDb "works" $ do
-        _ <- insert' p1
-        let q = do
-                p <- Experimental.from $ Table @Person
-                return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ Experimental.from q
-        asserting $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
-
-    itDb "supports sub-selecting Maybe entities" $ do
-        l1e <- insert' l1
-        l3e <- insert' l3
-        l1Deeds <- mapM (\k -> insert' $ Deed k (entityKey l1e)) (map show [1..3 :: Int])
-        let l1WithDeeds = do d <- l1Deeds
-                             pure (l1e, Just d)
-        let q = Experimental.from $ do
-                  (lords :& deeds) <-
-                      Experimental.from $ Table @Lord
-                      `LeftOuterJoin` Table @Deed
-                      `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
-                  pure (lords, deeds)
-
-        ret <- select q
-        asserting $ ret `shouldMatchList` ((l3e, Nothing) : l1WithDeeds)
-
-    itDb "lets you order by alias" $ do
-        _ <- insert' p1
-        _ <- insert' p3
-        let q = do
-                (name, age) <-
-                  Experimental.from $ SubQuery $ do
-                      p <- Experimental.from $ Table @Person
-                      return ( p ^. PersonName, p ^. PersonAge)
-                orderBy [ asc age ]
-                pure name
-        ret <- select q
-        asserting $ ret `shouldBe` [ Value $ personName p3, Value $ personName p1 ]
-
-    itDb "supports groupBy" $ do
-        l1k <- insert l1
-        l3k <- insert l3
-        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
-
-        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
-        let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
-                                        `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord :& deed) ->
-                                                       lord ^. LordId ==. deed ^. DeedOwnerId)
-                return (lord ^. LordId, deed ^. DeedId)
-            q' = do
-                 (lordId, deedId) <- Experimental.from $ SubQuery q
-                 groupBy (lordId)
-                 return (lordId, count deedId)
-        (ret :: [(Value (Key Lord), Value Int)]) <- select q'
-
-        asserting $ ret `shouldMatchList` [ (Value l3k, Value 7)
-                                       , (Value l1k, Value 3) ]
-
-    itDb "Can count results of aggregate query" $ do
-        l1k <- insert l1
-        l3k <- insert l3
-        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
-
-        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
-        let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
-                                        `InnerJoin` Table @Deed
-                                  `Experimental.on` (\(lord :& deed) ->
-                                                      lord ^. LordId ==. deed ^. DeedOwnerId)
-                groupBy (lord ^. LordId)
-                return (lord ^. LordId, count (deed ^. DeedId))
-
-        (ret :: [(Value Int)]) <- select $ do
-                 (lordId, deedCount) <- Experimental.from $ SubQuery q
-                 where_ $ deedCount >. val (3 :: Int)
-                 return (count lordId)
-
-        asserting $ ret `shouldMatchList` [ (Value 1) ]
-
-    itDb "joins on subqueries" $ do
-        l1k <- insert l1
-        l3k <- insert l3
-        mapM_ (\k -> insert $ Deed k l1k) (map show [1..3 :: Int])
-
-        mapM_ (\k -> insert $ Deed k l3k) (map show [4..10 :: Int])
-        let q = do
-                (lord :& deed) <- Experimental.from $ Table @Lord
-                        `InnerJoin` (Experimental.from $ Table @Deed)
-                        `Experimental.on` (\(lord :& deed) ->
-                                             lord ^. LordId ==. deed ^. DeedOwnerId)
-                groupBy (lord ^. LordId)
-                return (lord ^. LordId, count (deed ^. DeedId))
-        (ret :: [(Value (Key Lord), Value Int)]) <- select q
-        asserting $ ret `shouldMatchList` [ (Value l3k, Value 7)
-                                       , (Value l1k, Value 3) ]
-
-    itDb "flattens maybe values" $ do
-        l1k <- insert l1
-        l3k <- insert l3
-        let q = do
-                (lord :& (_, dogCounts)) <- Experimental.from $ Table @Lord
-                        `LeftOuterJoin` do
-                            lord <- Experimental.from $ Table @Lord
-                            pure (lord ^. LordId, lord ^. LordDogs)
-                        `Experimental.on` (\(lord :& (lordId, _)) ->
-                                             just (lord ^. LordId) ==. lordId)
-                groupBy (lord ^. LordId, dogCounts)
-                return (lord ^. LordId, dogCounts)
-        (ret :: [(Value (Key Lord), Value (Maybe Int))]) <- select q
-        asserting $ ret `shouldMatchList` [ (Value l3k, Value (lordDogs l3))
-                                       , (Value l1k, Value (lordDogs l1)) ]
-    itDb "unions" $ do
-          _ <- insert p1
-          _ <- insert p2
-          let q = Experimental.from $
-                  (do
-                    p <- Experimental.from $ Table @Person
-                    where_ $ not_ $ isNothing $ p ^. PersonAge
-                    return (p ^. PersonName))
-                  `union_`
-                  (do
-                    p <- Experimental.from $ Table @Person
-                    where_ $ isNothing $ p ^. PersonAge
-                    return (p ^. PersonName))
-                  `union_`
-                  (do
-                    p <- Experimental.from $ Table @Person
-                    where_ $ isNothing $ p ^. PersonAge
-                    return (p ^. PersonName))
-          names <- select q
-          asserting $ names `shouldMatchList` [ (Value $ personName p1)
-                                           , (Value $ personName p2) ]
 testSelectWhere :: SpecDb
 testSelectWhere = describe "select where_" $ do
     itDb "works for a simple example with (==.)" $ do
@@ -1657,48 +1491,6 @@ testLocking = do
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
-  describe "Monoid instance" $ do
-    let
-        multiplePostgresLockingClauses p = do
-            EP.forUpdateOf p EP.skipLocked
-            EP.forUpdateOf p EP.skipLocked
-            EP.forShareOf p EP.skipLocked
-
-        multipleLegacyLockingClauses = do
-            locking ForShare
-            locking ForUpdate
-
-        multipleLockingQueryPostgresLast = do
-            p <- Experimental.from $ table @Person
-            multipleLegacyLockingClauses
-            multiplePostgresLockingClauses p
-
-        multipleLockingQueryLegacyLast = do
-            p <- Experimental.from $ table @Person
-            multiplePostgresLockingClauses p
-            multipleLegacyLockingClauses
-
-        expectedPostgresQuery = do
-            p <- Experimental.from $ table @Person
-            EP.forUpdateOf p EP.skipLocked
-            EP.forUpdateOf p EP.skipLocked
-            EP.forShareOf p EP.skipLocked
-
-        expectedLegacyQuery = do
-            p <- Experimental.from $ table @Person
-            locking ForUpdate
-
-    itDb "prioritizes last grouping of locks when mixing legacy and postgres specific locks" $ do
-
-        conn <- ask
-        let resPostgresLast = toText conn multipleLockingQueryPostgresLast
-            resLegacyLast = toText conn multipleLockingQueryLegacyLast
-            resExpectedPostgres = toText conn expectedPostgresQuery
-            resExpectedLegacy = toText conn expectedLegacyQuery
-
-        asserting $ resPostgresLast `shouldBe` resExpectedPostgres
-        asserting $ resLegacyLast `shouldBe` resExpectedLegacy
-
 testCountingRows :: SpecDb
 testCountingRows = do
   describe "counting rows" $ do
@@ -2242,118 +2034,6 @@ testOnClauseOrder = describe "On Clause Ordering" $ do
                     pure (f ^. FooName)
                 asserting noExceptions
 
-testExperimentalFrom :: SpecDb
-testExperimentalFrom = do
-  describe "Experimental From" $ do
-    itDb "supports basic table queries" $ do
-        p1e <- insert' p1
-        _   <- insert' p2
-        p3e <- insert' p3
-        peopleWithAges <- select $ do
-          people <- Experimental.from $ Table @Person
-          where_ $ not_ $ isNothing $ people ^. PersonAge
-          return people
-        asserting $ peopleWithAges `shouldMatchList` [p1e, p3e]
-
-    itDb "supports inner joins" $ do
-        l1e <- insert' l1
-        _   <- insert  l2
-        d1e <- insert' $ Deed "1" (entityKey l1e)
-        d2e <- insert' $ Deed "2" (entityKey l1e)
-        lordDeeds <- select $ do
-          (lords :& deeds) <-
-            Experimental.from $ Table @Lord
-                    `InnerJoin` Table @Deed
-              `Experimental.on` (\(l :& d) -> l ^. LordId ==. d ^. DeedOwnerId)
-          pure (lords, deeds)
-        asserting $ lordDeeds `shouldMatchList` [ (l1e, d1e)
-                                             , (l1e, d2e)
-                                             ]
-
-    itDb "supports outer joins" $ do
-        l1e <- insert' l1
-        l2e <- insert' l2
-        d1e <- insert' $ Deed "1" (entityKey l1e)
-        d2e <- insert' $ Deed "2" (entityKey l1e)
-        lordDeeds <- select $ do
-          (lords :& deeds) <-
-            Experimental.from $ Table @Lord
-                `LeftOuterJoin` Table @Deed
-                  `Experimental.on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
-
-          pure (lords, deeds)
-        asserting $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
-                                             , (l1e, Just d2e)
-                                             , (l2e, Nothing)
-                                             ]
-    itDb "supports delete" $ do
-        insert_ l1
-        insert_ l2
-        insert_ l3
-        delete $ void $ Experimental.from $ Table @Lord
-        lords <- select $ Experimental.from $ Table @Lord
-        asserting $ lords `shouldMatchList` []
-
-    itDb "supports implicit cross joins" $ do
-        l1e <- insert' l1
-        l2e <- insert' l2
-        ret <- select $ do
-          lords1 <- Experimental.from $ Table @Lord
-          lords2 <- Experimental.from $ Table @Lord
-          pure (lords1, lords2)
-        ret2 <- select $ do
-          (lords1 :& lords2) <- Experimental.from $ Table @Lord `CrossJoin` Table @Lord
-          pure (lords1,lords2)
-        asserting $ ret `shouldMatchList` ret2
-        asserting $ ret `shouldMatchList` [ (l1e, l1e)
-                                       , (l1e, l2e)
-                                       , (l2e, l1e)
-                                       , (l2e, l2e)
-                                       ]
-
-    itDb "compiles" $ do
-        let q = do
-              (persons :& profiles :& posts) <-
-                Experimental.from $  Table @Person
-                         `InnerJoin` Table @Profile
-                   `Experimental.on` (\(people :& profiles) ->
-                                        people ^. PersonId ==. profiles ^. ProfilePerson)
-                     `LeftOuterJoin` Table @BlogPost
-                   `Experimental.on` (\(people :& _ :& posts) ->
-                                        just (people ^. PersonId) ==. posts ?. BlogPostAuthorId)
-              pure (persons, posts, profiles)
-        asserting noExceptions
-
-    itDb "can call functions on aliased values" $ do
-        insert_ p1
-        insert_ p3
-        -- Pretend this isnt all posts
-        upperNames <- select $ do
-          author <- Experimental.from $ SelectQuery $ Experimental.from $ Table @Person
-          pure $ upper_ $ author ^. PersonName
-
-        asserting $ upperNames `shouldMatchList` [ Value "JOHN"
-                                              , Value "MIKE"
-                                              ]
-    itDb "allows re-using (:&) joined tables" $ do
-      let q = do
-              result@(persons :& profiles :& posts) <-
-                Experimental.from $  Table @Person
-                         `InnerJoin` Table @Profile
-                   `Experimental.on` (\(people :& profiles) ->
-                                        people ^. PersonId ==. profiles ^. ProfilePerson)
-                     `InnerJoin` Table @BlogPost
-                   `Experimental.on` (\(people :& _ :& posts) ->
-                                        people ^. PersonId ==. posts ^. BlogPostAuthorId)
-              pure result
-      rows <- select $ do
-        (persons :& profiles :& posts) <- Experimental.from $ q
-        pure (persons ^. PersonId, profiles ^. ProfileId, posts ^. BlogPostId)
-      let result = rows :: [(Value PersonId, Value ProfileId, Value BlogPostId)]
-      -- We don't care about the result of the query, only that it
-      -- rendered & executed.
-      asserting noExceptions
-
 listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
 
@@ -2361,13 +2041,10 @@ tests :: SpecDb
 tests =
     describe "Esqueleto" $ do
         testSelect
-        testGetTable
         testSubSelect
-        testSelectOne
         testSelectSource
         testSelectFrom
         testSelectJoin
-        testSelectSubQuery
         testSelectWhere
         testSelectOrderBy
         testSelectDistinct
@@ -2382,10 +2059,7 @@ tests =
         testCountingRows
         testRenderSql
         testOnClauseOrder
-        testExperimentalFrom
         testLocking
-        testOverloadedRecordDot
-        testDeriveEsqueletoRecord
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
@@ -2483,51 +2157,3 @@ shouldBeOnClauseWithoutMatchingJoinException ea =
             pure ()
         _ ->
             expectationFailure $ "Expected OnClauseWithMatchingJoinException, got: " <> show ea
-
-testOverloadedRecordDot :: SpecDb
-testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
-#if __GLASGOW_HASKELL__ >= 902
-    describe "with SqlExpr (Entity rec)" $ do
-        itDb "lets you project from a record" $ do
-            select $ do
-                bp <- Experimental.from $ table @BlogPost
-                pure bp.title
-    describe "with SqlExpr (Maybe (Entity rec))" $ do
-        itDb "lets you project from a Maybe record" $ do
-            select $ do
-                p :& mbp <- Experimental.from $
-                    table @Person
-                    `leftJoin` table @BlogPost
-                        `Experimental.on` do
-                            \(p :& mbp) ->
-                                just p.id ==. mbp.authorId
-                pure (p.id, mbp.title)
-
-#else
-    it "is only supported in GHC 9.2 or above" $ \_ -> do
-        pending
-#endif
-
-testGetTable :: SpecDb
-testGetTable =
-    describe "GetFirstTable" $ do
-        itDb "works to make long join chains easier" $ do
-            select $ do
-                (person :& blogPost :& profile :& reply) <-
-                    Experimental.from $
-                        table @Person
-                        `leftJoin` table @BlogPost
-                            `Experimental.on` do
-                                \(p :& bp) ->
-                                    just (p ^. PersonId) ==. bp ?. BlogPostAuthorId
-                        `leftJoin` table @Profile
-                            `Experimental.on` do
-                                \((getTable @Person -> p) :& profile) ->
-                                    just (p ^. PersonId) ==. profile ?. ProfilePerson
-                        `leftJoin` table @Reply
-                            `Experimental.on` do
-                                \((getTable @Person -> p) :& reply) ->
-                                    just (p ^. PersonId) ==. reply ?. ReplyGuy
-                pure (person, blogPost, profile, reply)
-            asserting noExceptions
-

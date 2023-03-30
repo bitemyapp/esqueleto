@@ -174,6 +174,7 @@ module Database.Esqueleto.Experimental
     , OrderBy
     , DistinctOn
     , LockingKind(..)
+    , LockableEntity(..)
     , SqlString
 
       -- ** Joins
@@ -184,6 +185,10 @@ module Database.Esqueleto.Experimental
     , FullOuterJoin(..)
     , JoinKind(..)
     , OnClauseWithoutMatchingJoinException(..)
+      -- *** Join Helpers
+    , getTable
+    , getTableMaybe
+    , GetFirstTable(..)
 
       -- ** SQL backend
     , SqlQuery

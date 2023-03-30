@@ -14,18 +14,18 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
 import Control.Monad.Trans.Reader (ReaderT, mapReaderT)
 import qualified Control.Monad.Trans.Resource as R
-import Database.Esqueleto
-import Database.Esqueleto.Experimental hiding (from, on)
-import qualified Database.Esqueleto.Experimental as Experimental
+import Database.Esqueleto hiding (from, on)
+import qualified Database.Esqueleto as Experimental
+import Database.Esqueleto.Legacy
 import Database.Persist.MySQL
        ( connectDatabase
        , connectHost
        , connectPassword
        , connectPort
        , connectUser
+       , createMySQLPool
        , defaultConnectInfo
        , withMySQLConn
-       , createMySQLPool
        )
 
 import Test.Hspec

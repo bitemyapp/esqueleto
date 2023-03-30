@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -25,16 +26,16 @@ module Common.Test.Import
     , module X
     ) where
 
-import System.Environment
-import Control.Applicative
 import Common.Test.Models as X
-import Database.Esqueleto.Experimental as X hiding (random_)
-import Test.Hspec as X
-import UnliftIO as X
+import Control.Applicative
 import Control.Monad
+import Control.Monad.Trans.Reader as X (ReaderT, ask, mapReaderT)
+import Data.Text as X (Text)
+import Database.Esqueleto as X hiding (random_)
+import System.Environment
+import Test.Hspec as X
 import Test.QuickCheck
-import Data.Text  as X (Text)
-import Control.Monad.Trans.Reader as X (ReaderT, mapReaderT, ask)
+import UnliftIO as X
 
 type SpecDb = SpecWith ConnectionPool
 
