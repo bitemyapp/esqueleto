@@ -84,7 +84,6 @@ import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
-import Database.Esqueleto.PostgreSQL as EP
 import Database.Persist.Class.PersistEntity
 import qualified UnliftIO.Resource as R
 
