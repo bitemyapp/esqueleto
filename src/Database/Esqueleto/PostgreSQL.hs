@@ -23,6 +23,7 @@ module Database.Esqueleto.PostgreSQL
     , chr
     , now_
     , random_
+    , updateReturningAll
     , upsert
     , upsertBy
     , insertSelectWithConflict
@@ -41,6 +42,7 @@ module Database.Esqueleto.PostgreSQL
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
+import Conduit (withAcquire)
 import Control.Arrow (first)
 import Control.Exception (throw)
 import Control.Monad (void)
@@ -477,3 +479,11 @@ forUpdateOf lockableEntities onLockedBehavior =
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+updateReturningAll :: (MonadIO m, PersistEntity ent, SqlBackendCanWrite backend, backend ~ PersistEntityBackend ent)
+                   => (SqlExpr (Entity ent) -> SqlQuery (SqlExpr (Entity ent)))
+                   -> R.ReaderT backend m [Entity ent]
+updateReturningAll block = do
+  conn <- R.ask
+  conduit <- rawSelectSource UPDATE_RETSTAR (tellReturning ReturningStar >> from block)
+  liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
