@@ -1,8 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeApplications #-}
-{-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -14,7 +11,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -669,7 +665,7 @@ isNothing v =
                         first (parensM p) . isNullExpr $ f Never info
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
-    isNullExpr = first ((<> " IS NULL"))
+    isNullExpr = first (<> " IS NULL")
 
 -- | An alias for 'isNothing' that avoids clashing with the function from
 -- "Data.Maybe" 'Data.Maybe.isNothing'.
@@ -2445,7 +2441,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
     valueToSql :: SqlExpr (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
-    valueToSql (ERaw _ f) p = f p
+    valueToSql (ERaw _ f) = f
 
 -- | (Internal) Create a custom binary operator.  You /should/
 -- /not/ use this function directly since its type is very
@@ -2929,7 +2925,7 @@ deleteCount
     :: (MonadIO m, SqlBackendCanWrite backend)
     => SqlQuery ()
     -> R.ReaderT backend m Int64
-deleteCount a = rawEsqueleto DELETE a
+deleteCount = rawEsqueleto DELETE
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
 -- 'SqlPersistT' monad.  Note that currently there are no type
@@ -3970,14 +3966,14 @@ insertSelect
     :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
     -> R.ReaderT backend m ()
-insertSelect a = void $ insertSelectCount a
+insertSelect = void . insertSelectCount
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
 insertSelectCount
     :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
     -> R.ReaderT backend m Int64
-insertSelectCount a = rawEsqueleto INSERT_INTO a
+insertSelectCount = rawEsqueleto INSERT_INTO
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
@@ -3987,7 +3983,7 @@ renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
 renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues ->
          let (builder, _) = mkBuilderValues Never (sqlBackend, initialIdentState)
-         in (builderToText builder)
+         in builderToText builder
 
 -- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
 -- keys, and will blow up if you give it one.

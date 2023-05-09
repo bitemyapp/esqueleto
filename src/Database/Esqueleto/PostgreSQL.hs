@@ -77,7 +77,7 @@ maybeArray ::
      (PersistField a, PersistField [a])
   => SqlExpr (Value (Maybe [a]))
   -> SqlExpr (Value [a])
-maybeArray x = coalesceDefault [x] (emptyArray)
+maybeArray x = coalesceDefault [x] emptyArray
 
 -- | Aggregate mode
 data AggMode
