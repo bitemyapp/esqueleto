@@ -427,6 +427,10 @@ locking kind = putLocking $ LegacyLockingClause kind
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
+-- | (Internal) Remember a @RETURNING@ clause in a query
+tellReturning :: ReturningClause -> SqlQuery ()
+tellReturning clause = Q $ W.tell mempty { sdReturningClause = clause }
+
 {-#
   DEPRECATED
     sub_select
@@ -1835,14 +1839,15 @@ data SideData = SideData
     , sdLimitClause    :: !LimitClause
     , sdLockingClause  :: !LockingClause
     , sdCteClause      :: ![CommonTableExpressionClause]
+    , sdReturningClause :: !ReturningClause
     }
 
 instance Semigroup SideData where
-    SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
-        SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
+    SideData d f s w g h o l k c r <> SideData d' f' s' w' g' h' o' l' k' c' r' =
+        SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c') (r <> r')
 
 instance Monoid SideData where
-    mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+    mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
     mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
@@ -1878,6 +1883,12 @@ data CommonTableExpressionKind
 
 data CommonTableExpressionClause =
     CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+
+data ReturningClause
+    = ReturningNothing  -- ^ The default, absent clause.
+    | ReturningStar     -- ^ @RETURNING *@
+    -- | ReturningExprs (NonEmpty (SqlExpr Returning))
+    -- ^ @output_expression [ [ AS ] output_name ] [, ...]@
 
 data SubQueryType
     = NormalSubQuery
@@ -2116,6 +2127,16 @@ instance Semigroup LockingClause where
 instance Monoid LockingClause where
     mempty = NoLockingClause
     mappend = (<>)
+
+instance Semigroup ReturningClause where
+  (<>) ReturningNothing x = x
+  (<>) x ReturningNothing = x
+  (<>) ReturningStar ReturningStar = ReturningStar
+--   (<>) _ _ = error "instance Semigroup FIXME"
+
+instance Monoid ReturningClause where
+  mempty = ReturningNothing
+  mappend = (<>)
 
 ----------------------------------------------------------------------
 
@@ -2981,7 +3002,8 @@ toRawSql mode (conn, firstIdentState) query =
                  orderByClauses
                  limitClause
                  lockingClause
-                 cteClause = sd
+                 cteClause
+                 returningClause = sd
         -- Pass the finalIdentState (containing all identifiers
         -- that were used) to the subsequent calls.  This ensures
         -- that no name clashes will occur on subqueries that may
@@ -2999,6 +3021,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
         , makeLocking    info lockingClause
+        , makeReturning  info returningClause ret
         ]
 
 
@@ -3073,6 +3096,7 @@ data Mode
     | DELETE
     | UPDATE
     | INSERT_INTO
+    | UPDATE_RETSTAR
 
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = intersperseB ", "
@@ -3124,6 +3148,7 @@ makeSelect info mode_ distinctClause ret = process mode_
             DELETE      -> plain "DELETE "
             UPDATE      -> plain "UPDATE "
             INSERT_INTO -> process SELECT
+            UPDATE_RETSTAR -> plain "UPDATE "
     selectKind =
         case distinctClause of
             DistinctAll      -> ("SELECT ", [])
@@ -3151,6 +3176,7 @@ makeFrom info mode fs = ret
     keyword =
         case mode of
             UPDATE -> id
+            UPDATE_RETSTAR -> id
             _      -> first ("\nFROM " <>)
 
     mk _     (FromStart i def) = base i def
@@ -3267,6 +3293,13 @@ makeLocking info (PostgresLockingClauses clauses) =
 
             plain v = (v,[])
 makeLocking _ NoLockingClause = mempty
+
+makeReturning :: SqlSelect a r
+              => IdentInfo -> ReturningClause -> a -> (TLB.Builder, [PersistValue])
+makeReturning _    ReturningNothing _ = mempty
+makeReturning info ReturningStar  ret = ("RETURNING ", []) <> sqlSelectCols info ret
+-- makeReturning info (ReturningExprs _) = undefined -- FIXME
+
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")

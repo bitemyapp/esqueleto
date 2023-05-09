@@ -1056,6 +1056,17 @@ testUpsert =
       u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
       liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
+testUpdateDeleteReturning :: SpecDb
+testUpdateDeleteReturning =
+  describe "UPDATE .. RETURNING *" $ do
+    itDb "Whole updated entity gets returned" $ do
+      [p1k, p2k, p3k, p4k, p5k] <- mapM insert [p1, p2, p3, p4, p5]
+      ret <- EP.updateReturningAll $ \p -> do
+        set p [ PersonFavNum =. val 42 ]
+        where_ (p ^. PersonFavNum ==. val 4)
+        return p
+      asserting $ ret `shouldBe` [Entity p4k p4{ personFavNum = 42 }]
+
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
   describe "insertSelectWithConflict test" $ do
@@ -1629,6 +1640,7 @@ spec = beforeAll mkConnectionPool $ do
         testPostgresqlTextFunctions
         testInsertUniqueViolation
         testUpsert
+        testUpdateDeleteReturning
         testInsertSelectWithConflict
         testFilterWhere
         testCommonTableExpressions
