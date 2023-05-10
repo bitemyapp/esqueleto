@@ -2084,10 +2084,10 @@ instance Monoid GroupByClause where
   mempty = GroupBy []
   mappend = (<>)
 
--- | A @HAVING@ cause.
+-- | A @HAVING@ clause.
 type HavingClause = WhereClause
 
--- | A @ORDER BY@ clause.
+-- | An @ORDER BY@ clause.
 type OrderByClause = SqlExpr OrderBy
 
 -- | A @LIMIT@ clause.
