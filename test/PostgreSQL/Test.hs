@@ -1059,13 +1059,20 @@ testUpsert =
 testUpdateDeleteReturning :: SpecDb
 testUpdateDeleteReturning =
   describe "UPDATE .. RETURNING *" $ do
-    itDb "Whole updated entity gets returned" $ do
-      [p1k, p2k, p3k, p4k, p5k] <- mapM insert [p1, p2, p3, p4, p5]
-      ret <- EP.updateReturningAll $ \p -> do
+    itDb "Whole entities, expressions and tuples get returned" $ do
+      [_p1k, _p2k, _p3k, p4k, _p5k] <- mapM insert [p1, p2, p3, p4, p5]
+      ret1 <- EP.updateReturningAll $ \p -> do
         set p [ PersonFavNum =. val 42 ]
         where_ (p ^. PersonFavNum ==. val 4)
         return p
-      asserting $ ret `shouldBe` [Entity p4k p4{ personFavNum = 42 }]
+      asserting $ ret1 `shouldBe` [Entity p4k p4{ personFavNum = 42 }]
+
+      ret2 <- EP.updateReturningAll $ \p -> do
+        set p [ PersonAge =. val (Just 0) ]
+        where_ (isNothing $ p ^. PersonAge)
+        return (val True, p ^. PersonName, (p ^. PersonFavNum) *. val 100)
+      asserting $ ret2 `shouldBe` [ (Value True, Value "Rachel", Value 200)
+                                  , (Value True, Value "Mitch", Value 500) ]
 
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =

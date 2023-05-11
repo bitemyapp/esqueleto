@@ -2415,6 +2415,39 @@ existsHelper = sub SELECT . (>> return true)
     true  :: SqlExpr (Value Bool)
     true = val True
 
+-- | (Internal) The types which can appear in @RETURNING@ part of @UPDATE@ or @DELETE@
+--
+-- Many constructs appearing in @SELECT@ can go under @RETURNING@ -- but not all (e.g.
+-- certainly not subqueries, @VALUES@ and such). Thus, this is a subclass of 'SqlSelect'.
+class SqlSelect a r => InferReturning a r
+instance PersistEntity ent => InferReturning (SqlExpr (Entity ent)) (Entity ent)
+instance PersistEntity ent => InferReturning (SqlExpr (Maybe (Entity ent))) (Maybe (Entity ent))
+instance PersistField a => InferReturning (SqlExpr (Value a)) (Value a)
+instance ( InferReturning a ra, InferReturning b rb) => InferReturning (a, b) (ra, rb)
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         ) => InferReturning (a, b, c) (ra, rb, rc)
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         ) => InferReturning (a, b, c, d) (ra, rb, rc, rd)
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         , InferReturning e re
+         ) => InferReturning (a, b, c, d, e) (ra, rb, rc, rd, re)
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         , InferReturning e re
+         , InferReturning f rf
+         ) => InferReturning (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf)
+-- tuple nesting provides unlimited arity if 6-tuple isn't enough
+
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
