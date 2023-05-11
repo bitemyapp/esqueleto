@@ -1,3 +1,9 @@
+3.5.10.3 (unreleased)
+========
+- @ulidtko
+    - PR TBD
+      - Add `updateReturning`, `deleteReturning` as Postgres extensions.
+
 3.5.10.2
 ========
 - @parsonsmatt
@@ -33,7 +39,6 @@
 - @duplode
     - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
       - Add missing `just` to left join examples in the Haddocks
-
 
 3.5.9.0
 =======
