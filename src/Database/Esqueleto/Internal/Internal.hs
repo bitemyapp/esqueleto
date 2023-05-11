@@ -2419,7 +2419,7 @@ existsHelper = sub SELECT . (>> return true)
 --
 -- Many constructs appearing in @SELECT@ can go under @RETURNING@ -- but not all (e.g.
 -- certainly not subqueries, @VALUES@ and such). Thus, this is a subclass of 'SqlSelect'.
-class SqlSelect a r => InferReturning a r
+class SqlSelect a r => InferReturning a r | r -> a, a -> r
 instance PersistEntity ent => InferReturning (SqlExpr (Entity ent)) (Entity ent)
 instance PersistEntity ent => InferReturning (SqlExpr (Maybe (Entity ent))) (Maybe (Entity ent))
 instance PersistField a => InferReturning (SqlExpr (Value a)) (Value a)
