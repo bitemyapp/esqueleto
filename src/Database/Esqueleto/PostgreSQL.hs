@@ -23,7 +23,7 @@ module Database.Esqueleto.PostgreSQL
     , chr
     , now_
     , random_
-    , updateReturningAll
+    , updateReturning
     , upsert
     , upsertBy
     , insertSelectWithConflict
@@ -480,10 +480,26 @@ forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
-updateReturningAll :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
-                   => (from -> SqlQuery ex)
-                   -> R.ReaderT backend m [ret]
-updateReturningAll block = do
+-- | `UPDATE .. RETURNING ..` SQL extension supported by Postgres.
+--
+-- The instances of 'InferReturning' say what can be returned; currently includes
+-- whole entities, 'PersistField's, SQL expressions, tuples (possibly nested).
+--
+-- Usage example:
+--
+-- @
+--   tuples <- updateReturning $ \p -> do
+--     set p [ PersonAge =. val (Just 0) ]
+--     where_ (isNothing $ p ^. PersonAge)
+--     return (val True, p ^. PersonName, (p ^. PersonFavNum) *. val 100)
+--     -- return p -- also works, returning (Entity Person)
+-- @
+--
+-- @since 3.5.9.1
+updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
+                => (from -> SqlQuery ex)
+                -> R.ReaderT backend m [ret]
+updateReturning block = do
   conn <- R.ask
   conduit <- rawSelectSource UPDATE_RETSTAR (tellReturning ReturningStar >> from block)
   liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
