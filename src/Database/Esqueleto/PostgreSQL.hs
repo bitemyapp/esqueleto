@@ -23,6 +23,7 @@ module Database.Esqueleto.PostgreSQL
     , chr
     , now_
     , random_
+    , deleteReturning
     , updateReturning
     , upsert
     , upsertBy
@@ -502,4 +503,26 @@ updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWr
 updateReturning block = do
   conn <- R.ask
   conduit <- rawSelectSource UPDATE (tellReturning ReturningStar >> from block)
+  liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
+
+-- | `DELETE .. RETURNING` SQL extension supported by Postgres.
+--
+-- The instances of 'InferReturning' say what can be returned; currently includes
+-- whole entities, 'PersistField's, SQL expressions, tuples (possibly nested).
+--
+-- Usage example:
+--
+-- @
+--   removedRowsWithNames <- deleteReturning $ \p -> do
+--     where_ (isNothing $ p ^. PersonWeight)
+--     return (p, p ^. PersonName)
+-- @
+--
+-- @since 3.5.9.1
+deleteReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
+                => (from -> SqlQuery ex)
+                -> R.ReaderT backend m [ret]
+deleteReturning block = do
+  conn <- R.ask
+  conduit <- rawSelectSource DELETE (tellReturning ReturningStar >> from block)
   liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource

@@ -1059,7 +1059,7 @@ testUpsert =
 testUpdateDeleteReturning :: SpecDb
 testUpdateDeleteReturning =
   describe "UPDATE .. RETURNING *" $ do
-    itDb "Whole entities, expressions and tuples get returned" $ do
+    itDb "Whole entities, expressions and tuples get returned from UPDATE" $ do
       [_p1k, _p2k, _p3k, p4k, _p5k] <- mapM insert [p1, p2, p3, p4, p5]
       ret1 <- EP.updateReturning $ \p -> do
         set p [ PersonFavNum =. val 42 ]
@@ -1073,6 +1073,20 @@ testUpdateDeleteReturning =
         return (val True, p ^. PersonName, (p ^. PersonFavNum) *. val 100)
       asserting $ ret2 `shouldBe` [ (Value True, Value "Rachel", Value 200)
                                   , (Value True, Value "Mitch", Value 500) ]
+
+    itDb "Whole entities, expressions and tuples get returned from DELETE" $ do
+      [_p1k, p2k, _p3k, p4k, _p5k] <- mapM insert [p1, p2, p3, p4, p5]
+      ret1 <- EP.deleteReturning $ \p -> do
+        where_ (isNothing $ p ^. PersonWeight)
+        return (val (1 :: Int, 2 :: Int), p ^. PersonName, isNothing (p ^. PersonAge))
+      asserting $ ret1 `shouldBe` [ (Value (1, 2), Value "John", Value False)
+                                  , (Value (1, 2), Value "Mike", Value False)
+                                  , (Value (1, 2), Value "Mitch", Value True) ]
+      ret2 <- EP.deleteReturning $ \p -> do
+        -- empty WHERE -- delete everything remaining... but:
+        return (p, p ^. PersonName)
+      asserting $ ret2 `shouldBe` [ (Entity p2k p2, Value "Rachel")
+                                  , (Entity p4k p4, Value "Livia") ]
 
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
