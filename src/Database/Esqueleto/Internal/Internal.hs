@@ -3123,7 +3123,6 @@ data Mode
     | DELETE
     | UPDATE
     | INSERT_INTO
-    | UPDATE_RETSTAR
 
 uncommas :: [TLB.Builder] -> TLB.Builder
 uncommas = intersperseB ", "
@@ -3175,7 +3174,6 @@ makeSelect info mode_ distinctClause ret = process mode_
             DELETE      -> plain "DELETE "
             UPDATE      -> plain "UPDATE "
             INSERT_INTO -> process SELECT
-            UPDATE_RETSTAR -> plain "UPDATE "
     selectKind =
         case distinctClause of
             DistinctAll      -> ("SELECT ", [])
@@ -3203,7 +3201,6 @@ makeFrom info mode fs = ret
     keyword =
         case mode of
             UPDATE -> id
-            UPDATE_RETSTAR -> id
             _      -> first ("\nFROM " <>)
 
     mk _     (FromStart i def) = base i def

@@ -501,5 +501,5 @@ updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWr
                 -> R.ReaderT backend m [ret]
 updateReturning block = do
   conn <- R.ask
-  conduit <- rawSelectSource UPDATE_RETSTAR (tellReturning ReturningStar >> from block)
+  conduit <- rawSelectSource UPDATE (tellReturning ReturningStar >> from block)
   liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
