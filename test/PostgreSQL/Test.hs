@@ -1058,7 +1058,7 @@ testUpsert =
 
 testUpdateDeleteReturning :: SpecDb
 testUpdateDeleteReturning =
-  describe "UPDATE .. RETURNING *" $ do
+  describe "UPDATE .. RETURNING .." $ do
     itDb "Whole entities, expressions and tuples get returned from UPDATE" $ do
       [_p1k, _p2k, _p3k, p4k, _p5k] <- mapM insert [p1, p2, p3, p4, p5]
       ret1 <- EP.updateReturning $ \p -> do

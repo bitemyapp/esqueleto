@@ -1880,9 +1880,7 @@ data CommonTableExpressionClause =
 
 data ReturningClause
     = ReturningNothing  -- ^ The default, absent clause.
-    | ReturningStar     -- ^ @RETURNING *@
-    -- | ReturningExprs (NonEmpty (SqlExpr Returning))
-    -- ^ @output_expression [ [ AS ] output_name ] [, ...]@
+    | ReturningStar     -- ^ @RETURNING@ is present.
 
 data SubQueryType
     = NormalSubQuery
@@ -2126,7 +2124,6 @@ instance Semigroup ReturningClause where
   (<>) ReturningNothing x = x
   (<>) x ReturningNothing = x
   (<>) ReturningStar ReturningStar = ReturningStar
---   (<>) _ _ = error "instance Semigroup FIXME"
 
 instance Monoid ReturningClause where
   mempty = ReturningNothing
@@ -2419,6 +2416,9 @@ existsHelper = sub SELECT . (>> return true)
 --
 -- Many constructs appearing in @SELECT@ can go under @RETURNING@ -- but not all (e.g.
 -- certainly not subqueries, @VALUES@ and such). Thus, this is a subclass of 'SqlSelect'.
+--
+-- The fundeps duplicate those of 'SqlSelect' solely to provide somewhat more directly
+-- understandable type errors.
 class SqlSelect a r => InferReturning a r | r -> a, a -> r
 instance PersistEntity ent => InferReturning (SqlExpr (Entity ent)) (Entity ent)
 instance PersistEntity ent => InferReturning (SqlExpr (Maybe (Entity ent))) (Maybe (Entity ent))
@@ -3322,7 +3322,6 @@ makeReturning :: SqlSelect a r
               => IdentInfo -> ReturningClause -> a -> (TLB.Builder, [PersistValue])
 makeReturning _    ReturningNothing _ = mempty
 makeReturning info ReturningStar  ret = ("RETURNING ", []) <> sqlSelectCols info ret
--- makeReturning info (ReturningExprs _) = undefined -- FIXME
 
 
 parens :: TLB.Builder -> TLB.Builder

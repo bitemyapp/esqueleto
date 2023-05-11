@@ -53,7 +53,6 @@
     - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
       - Add missing `just` to left join examples in the Haddocks
 
-
 3.5.9.0
 =======
 - @9999years
