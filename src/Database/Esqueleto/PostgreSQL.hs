@@ -480,9 +480,9 @@ forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
-updateReturningAll :: (MonadIO m, PersistEntity ent, SqlBackendCanWrite backend, backend ~ PersistEntityBackend ent)
-                   => (SqlExpr (Entity ent) -> SqlQuery (SqlExpr (Entity ent)))
-                   -> R.ReaderT backend m [Entity ent]
+updateReturningAll :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
+                   => (from -> SqlQuery ex)
+                   -> R.ReaderT backend m [ret]
 updateReturningAll block = do
   conn <- R.ask
   conduit <- rawSelectSource UPDATE_RETSTAR (tellReturning ReturningStar >> from block)
