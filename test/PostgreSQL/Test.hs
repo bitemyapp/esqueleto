@@ -1061,13 +1061,13 @@ testUpdateDeleteReturning =
   describe "UPDATE .. RETURNING *" $ do
     itDb "Whole entities, expressions and tuples get returned" $ do
       [_p1k, _p2k, _p3k, p4k, _p5k] <- mapM insert [p1, p2, p3, p4, p5]
-      ret1 <- EP.updateReturningAll $ \p -> do
+      ret1 <- EP.updateReturning $ \p -> do
         set p [ PersonFavNum =. val 42 ]
         where_ (p ^. PersonFavNum ==. val 4)
         return p
       asserting $ ret1 `shouldBe` [Entity p4k p4{ personFavNum = 42 }]
 
-      ret2 <- EP.updateReturningAll $ \p -> do
+      ret2 <- EP.updateReturning $ \p -> do
         set p [ PersonAge =. val (Just 0) ]
         where_ (isNothing $ p ^. PersonAge)
         return (val True, p ^. PersonName, (p ^. PersonFavNum) *. val 100)
