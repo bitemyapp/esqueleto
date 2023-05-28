@@ -41,12 +41,15 @@ frameKind tlb frame =
     let Frame _ b e = toFrame frame
     in Frame (Just (FrameKind (tlb <> " ", []))) b e
 
+-- use a RANGE frame kind
 range :: ToFrame frame => frame -> Frame
 range = frameKind "RANGE"
 
+-- use a ROWS frame kind (This is the default behavior)
 rows :: ToFrame frame => frame -> Frame
 rows = frameKind "ROWS"
 
+-- use a GROUPS frame kind
 groups :: ToFrame frame => frame -> Frame
 groups = frameKind "GROUPS"
 

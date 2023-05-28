@@ -17,6 +17,8 @@ module Database.Esqueleto.PostgreSQL.WindowFunction
     )
     where
 
+import Data.Int
+import Data.Maybe (fromMaybe)
 import Database.Esqueleto.Internal.Internal
        ( AggregateContext
        , NeedParens(..)
@@ -26,10 +28,10 @@ import Database.Esqueleto.Internal.Internal
        , noMeta
        , parens
        , parensM
+       , unsafeSqlFunction
        , unsafeSqlValue
        , val
        , veryUnsafeCoerceSqlExpr
-       , unsafeSqlFunction
        )
 import Database.Esqueleto.PostgreSQL.Window
        ( Frame
@@ -53,8 +55,6 @@ import Database.Esqueleto.PostgreSQL.Window
        , unboundedFollowing
        , unboundedPreceding
        )
-import Data.Int
-import Data.Maybe (fromMaybe)
 
 -- | A datatype tag indicating that the given 'SqlExpr_' is in a window context.
 data WindowContext
