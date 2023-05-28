@@ -2,21 +2,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module SQLite.Test where
+module SQLite.LegacyTest where
 
 import Common.Test.Import hiding (from, on)
 
 import Control.Monad (void)
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
-import Database.Esqueleto
+import Database.Esqueleto.Legacy hiding (random_)
 import Database.Esqueleto.SQLite (random_)
 import Database.Persist.Sqlite (createSqlitePool)
 import Database.Sqlite (SqliteException)
 
-import Common.Test
+import Common.LegacyTest
 
 testSqliteRandom :: SpecDb
 testSqliteRandom = do
@@ -31,8 +30,8 @@ testSqliteSum = do
         _ <- insert' p2
         _ <- insert' p3
         _ <- insert' p4
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p->
                return $ joinV $ sum_ (p ^. PersonAge)
         asserting $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Int) ]
 
@@ -47,8 +46,8 @@ testSqliteTwoAscFields = do
         p2e <- insert' p2
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p -> do
                orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
                return p
         -- in SQLite and MySQL, its the reverse
@@ -61,8 +60,8 @@ testSqliteOneAscOneDesc = do
         p2e <- insert' p2
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p -> do
                orderBy [desc (p ^. PersonAge)]
                orderBy [asc (p ^. PersonName)]
                return p
@@ -71,9 +70,9 @@ testSqliteOneAscOneDesc = do
 testSqliteCoalesce :: SpecDb
 testSqliteCoalesce = do
     itDb "throws an exception on SQLite with <2 arguments" $ do
-        eres <- try $ select $ do
-                p <- from $ table @Person
-                return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
+        eres <- try $ select $
+               from $ \p -> do
+               return (coalesce [p ^. PersonAge]) :: SqlQuery (SqlExpr (Value (Maybe Int)))
         asserting $ case eres of
             Left (_ :: SqliteException) ->
                 pure ()
@@ -94,8 +93,8 @@ testSqliteUpdate = do
         n   <- updateCount $ \p -> do
                set p [ PersonAge +=. just (val 1) ]
                where_ (p ^. PersonName !=. val "Mike")
-        ret <- select $ do
-               p <- from $ table @Person
+        ret <- select $
+               from $ \p -> do
                orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
                return p
         -- SQLite: nulls appear first, update returns matched rows.
@@ -113,8 +112,8 @@ testSqliteTextFunctions = do
         itDb "like, (%) and (++.) work on a simple example" $ do
             let query :: String -> SqlPersistT IO [Entity Person]
                 query t =
-                    select $ do
-                    p <- from $ table @Person
+                    select $
+                    from $ \p -> do
                     where_ (like
                              (p ^. PersonName)
                              ((%) ++. val t ++. (%)))

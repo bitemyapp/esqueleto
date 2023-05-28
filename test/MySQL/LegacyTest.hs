@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module MySQL.Test where
+module MySQL.LegacyTest where
 
 import Common.Test.Import hiding (from, on)
 
@@ -14,7 +14,7 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
 import Control.Monad.Trans.Reader (ReaderT, mapReaderT)
 import qualified Control.Monad.Trans.Resource as R
-import Database.Esqueleto
+import Database.Esqueleto.Legacy
 import Database.Persist.MySQL
        ( connectDatabase
        , connectHost
@@ -23,12 +23,11 @@ import Database.Persist.MySQL
        , connectUser
        , createMySQLPool
        , defaultConnectInfo
-       , withMySQLConn
        )
 
 import Test.Hspec
 
-import Common.Test
+import Common.LegacyTest
 
 testMysqlSum :: SpecDb
 testMysqlSum = do
@@ -37,8 +36,8 @@ testMysqlSum = do
       _ <- insert' p2
       _ <- insert' p3
       _ <- insert' p4
-      ret <- select $ do
-             p <- from $ table @Person
+      ret <- select $
+             from $ \p->
              return $ joinV $ sum_ (p ^. PersonAge)
       liftIO $ ret `shouldBe` [ Value $ Just (36 + 17 + 17 :: Double ) ]
 
@@ -49,8 +48,8 @@ testMysqlTwoAscFields = do
       p2e <- insert' p2
       p3e <- insert' p3
       p4e <- insert' p4
-      ret <- select $ do
-             p <- from $ table @Person
+      ret <- select $
+             from $ \p -> do
              orderBy [asc (p ^. PersonAge), asc (p ^. PersonName)]
              return p
       liftIO $ ret `shouldBe` [ p2e, p4e, p3e, p1e ]
@@ -62,19 +61,22 @@ testMysqlOneAscOneDesc = do
       p2e <- insert' p2
       p3e <- insert' p3
       p4e <- insert' p4
-      ret <- select $ do
-             p <- from $ table @Person
+      ret <- select $
+             from $ \p -> do
              orderBy [desc (p ^. PersonAge)]
              orderBy [asc (p ^. PersonName)]
              return p
       liftIO $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
+
+
+
 testMysqlCoalesce :: SpecDb
 testMysqlCoalesce = do
   itDb "works on PostgreSQL and MySQL with <2 arguments" $ do
       _ :: [Value (Maybe Int)] <-
-        select $ do
-        p <- from $ table @Person
+        select $
+        from $ \p -> do
         return (coalesce [p ^. PersonAge])
       return ()
 
@@ -95,8 +97,8 @@ testMysqlUpdate = do
       n   <- updateCount $ \p -> do
              set p [ PersonAge +=. just (val 1) ]
              where_ (p ^. PersonName !=. val "Mike")
-      ret <- select $ do
-             p <- from $ table @Person
+      ret <- select $
+             from $ \p -> do
              orderBy [ asc (p ^. PersonName), asc (p ^. PersonAge) ]
              return p
       -- MySQL: nulls appear first, and update returns actual number
@@ -114,8 +116,8 @@ nameContains :: (SqlString s)
              -> [Entity Person]
              -> SqlPersistT IO ()
 nameContains f t expected = do
-  ret <- select $ do
-         p <- from $ table @Person
+  ret <- select $
+         from $ \p -> do
          where_ (f
                   (p ^. PersonName)
                   (concat_ [(%), val t, (%)]))
@@ -134,30 +136,6 @@ testMysqlTextFunctions = do
          nameContains like "iv" [p4e]
 
 
-testMysqlUnionWithLimits :: SpecDb
-testMysqlUnionWithLimits = do
-  describe "MySQL Union" $ do
-    itDb "supports limit/orderBy by parenthesizing" $ do
-        mapM_ (insert . Foo) [1..6]
-
-        let q1 = do
-              foo <- from $ table @Foo
-              where_ $ foo ^. FooName <=. val 3
-              orderBy [asc $ foo ^. FooName]
-              limit 2
-              pure $ foo ^. FooName
-
-        let q2 = do
-              foo <- from $ table @Foo
-              where_ $ foo ^. FooName >. val 3
-              orderBy [asc $ foo ^. FooName]
-              limit 2
-              pure $ foo ^. FooName
-
-
-        ret <- select $ from (q1 `union_` q2)
-        liftIO $ ret `shouldMatchList` [Value 1, Value 2, Value 4, Value 5]
-
 spec :: Spec
 spec = beforeAll mkConnectionPool $ do
     tests
@@ -171,7 +149,6 @@ spec = beforeAll mkConnectionPool $ do
         testMysqlCoalesce
         testMysqlUpdate
         testMysqlTextFunctions
-        testMysqlUnionWithLimits
 
 verbose :: Bool
 verbose = False

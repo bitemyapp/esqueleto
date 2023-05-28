@@ -31,7 +31,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Reader as X (ReaderT, ask, mapReaderT)
 import Data.Text as X (Text)
-import Database.Esqueleto as X hiding (random_)
+import Database.Esqueleto as X
 import System.Environment
 import Test.Hspec as X
 import Test.QuickCheck

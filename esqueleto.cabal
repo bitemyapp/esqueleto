@@ -90,14 +90,18 @@ test-suite specs
     main-is: Spec.hs
     other-modules:
         Common.Test
+        Common.LegacyTest
         Common.Test.Models
         Common.Test.Import
         Common.Test.Select
         Common.Record
         PostgreSQL.MigrateJSON
         SQLite.Test
+        SQLite.LegacyTest
         PostgreSQL.Test
+        PostgreSQL.LegacyTest
         MySQL.Test
+        MySQL.LegacyTest
     default-extensions:
         RankNTypes
     hs-source-dirs:

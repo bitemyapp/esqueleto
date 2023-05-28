@@ -110,7 +110,6 @@ module Database.Esqueleto.Experimental
     , (/.)
     , (*.)
 
-    , random_
     , round_
     , ceiling_
     , floor_

@@ -145,7 +145,6 @@ module Database.Esqueleto
     , (/.)
     , (*.)
 
-    , random_
     , round_
     , ceiling_
     , floor_
