@@ -53,7 +53,7 @@ import GHC.TypeLits
 
 instance (ToMaybe a, ToMaybe b) => ToMaybe (a :& b) where
     type ToMaybeT (a :& b) = (ToMaybeT a :& ToMaybeT b)
-    toMaybe (a :& b) = (toMaybe a :& toMaybe b)
+    toMaybe (a :& b) = toMaybe a :& toMaybe b
 
 class ValidOnClause a
 instance {-# OVERLAPPABLE #-} ToFrom a a' => ValidOnClause a
@@ -63,14 +63,14 @@ instance ValidOnClause (a -> SqlQuery b)
 -- identical to the tuple instance, but is provided for convenience.
 --
 -- @since 3.5.2.0
-instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
+instance (SqlSelectCols a, SqlSelectCols b) => SqlSelectCols (a :& b) where
     sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
-    sqlSelectColCount = sqlSelectColCount . toTuple
-      where
-        toTuple :: Proxy (a :& b) -> Proxy (a, b)
-        toTuple = const Proxy
-    sqlSelectProcessRow = fmap (uncurry (:&)) . sqlSelectProcessRow
+    sqlSelectColCount = sqlSelectColCount . toTupleP
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
+    sqlSelectProcessRow p = fmap (uncurry (:&)) . sqlSelectProcessRow (toTupleP p)
 
+toTupleP :: Proxy (a :& b) -> Proxy (a, b)
+toTupleP = const Proxy
 -- | Identical to the tuple instance and provided for convenience.
 --
 -- @since 3.5.3.0
@@ -80,8 +80,10 @@ instance (ToAlias a, ToAlias b) => ToAlias (a :& b) where
 -- | Identical to the tuple instance and provided for convenience.
 --
 -- @since 3.5.3.0
-instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a :& b) where
-    toAliasReference ident (a :& b) = (:&) <$> (toAliasReference ident a) <*> (toAliasReference ident b)
+instance (ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a :& b) (a' :& b') where
+    toAliasReference ident (a :& b) =
+        (:&) <$> toAliasReference ident a
+             <*> toAliasReference ident b
 
 -- | An @ON@ clause that describes how two tables are related. This should be
 -- used as an infix operator after a 'JOIN'. For example,
@@ -93,7 +95,7 @@ instance (ToAliasReference a, ToAliasReference b) => ToAliasReference (a :& b) w
 -- \`on\` (\\(p :& bP) ->
 --         p ^. PersonId ==. bP ^. BlogPostAuthorId)
 -- @
-on :: ValidOnClause a => a -> (b -> SqlExpr (Value Bool)) -> (a, b -> SqlExpr (Value Bool))
+on :: ValidOnClause a => a -> (b -> SqlExpr_ ValueContext (Value Bool)) -> (a, b -> SqlExpr_ ValueContext (Value Bool))
 on = (,)
 infix 9 `on`
 
@@ -101,7 +103,7 @@ type family ErrorOnLateral a :: Constraint where
   ErrorOnLateral (a -> SqlQuery b) = TypeError ('Text "LATERAL can only be used for INNER, LEFT, and CROSS join kinds.")
   ErrorOnLateral _ = ()
 
-fromJoin :: TLB.Builder -> RawFn -> RawFn -> Maybe (SqlExpr (Value Bool)) -> RawFn
+fromJoin :: TLB.Builder -> RawFn -> RawFn -> Maybe (SqlExpr_ ValueContext (Value Bool)) -> RawFn
 fromJoin joinKind lhs rhs monClause =
     \paren info ->
         first (parensM paren) $
@@ -114,14 +116,14 @@ fromJoin joinKind lhs rhs monClause =
         makeOnClause info (ERaw _ f)        = first (" ON " <>) (f Never info)
 
 type family HasOnClause actual expected :: Constraint where
-    HasOnClause (a, b -> SqlExpr (Value Bool)) c = () -- Let the compiler handle the type mismatch
+    HasOnClause (a, b -> SqlExpr_ ValueContext (Value Bool)) c = () -- Let the compiler handle the type mismatch
     HasOnClause a expected =
         TypeError ( 'Text "Missing ON clause for join with"
                     ':$$: 'ShowType a
                     ':$$: 'Text ""
                     ':$$: 'Text "Expected: "
                     ':$$: 'ShowType a
-                    ':$$: 'Text "`on` " ':<>: 'ShowType (expected -> SqlExpr (Value Bool))
+                    ':$$: 'Text "`on` " ':<>: 'ShowType (expected -> SqlExpr_ ValueContext (Value Bool))
                     ':$$: 'Text ""
                   )
 
@@ -142,13 +144,13 @@ type family HasOnClause actual expected :: Constraint where
 innerJoin :: ( ToFrom a a'
              , ToFrom b b'
              , HasOnClause rhs (a' :& b')
-             , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+             , rhs ~ (b, (a' :& b') -> SqlExpr_ ValueContext (Value Bool))
              ) => a -> rhs -> From (a' :& b')
 innerJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (toFrom rhs)
      let ret = leftVal :& rightVal
-     pure $ (ret, fromJoin " INNER JOIN " leftFrom rightFrom (Just $ on' ret))
+     pure (ret, fromJoin " INNER JOIN " leftFrom rightFrom (Just $ on' ret))
 
 
 -- | INNER JOIN LATERAL
@@ -163,17 +165,17 @@ innerJoin lhs (rhs, on') = From $ do
 -- @since 3.5.0.0
 innerJoinLateral :: ( ToFrom a a'
                     , HasOnClause rhs (a' :& b)
-                    , SqlSelect b r
+                    , SqlSelectCols b
                     , ToAlias b
-                    , ToAliasReference b
-                    , rhs ~ (a' -> SqlQuery b, (a' :& b) -> SqlExpr (Value Bool))
+                    , ToAliasReference b b'
+                    , rhs ~ (a' -> SqlQuery b, (a' :& b') -> SqlExpr_ ValueContext (Value Bool))
                     )
-                 => a -> rhs -> From (a' :& b)
+                 => a -> rhs -> From (a' :& b')
 innerJoinLateral lhs (rhsFn, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
      let ret = leftVal :& rightVal
-     pure $ (ret, fromJoin " INNER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
+     pure (ret, fromJoin " INNER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
 
 -- | CROSS JOIN
 --
@@ -193,7 +195,7 @@ crossJoin lhs rhs = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (toFrom rhs)
      let ret = leftVal :& rightVal
-     pure $ (ret, fromJoin " CROSS JOIN " leftFrom rightFrom Nothing)
+     pure (ret, fromJoin " CROSS JOIN " leftFrom rightFrom Nothing)
 
 -- | CROSS JOIN LATERAL
 --
@@ -206,16 +208,16 @@ crossJoin lhs rhs = From $ do
 --
 -- @since 3.5.0.0
 crossJoinLateral :: ( ToFrom a a'
-                    , SqlSelect b r
+                    , SqlSelectCols b
                     , ToAlias b
-                    , ToAliasReference b
+                    , ToAliasReference b b'
                     )
-                 => a -> (a' -> SqlQuery b) -> From (a' :& b)
+                 => a -> (a' -> SqlQuery b) -> From (a' :& b')
 crossJoinLateral lhs rhsFn = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
      let ret = leftVal :& rightVal
-     pure $ (ret, fromJoin " CROSS JOIN LATERAL " leftFrom rightFrom Nothing)
+     pure (ret, fromJoin " CROSS JOIN LATERAL " leftFrom rightFrom Nothing)
 
 -- | LEFT OUTER JOIN
 --
@@ -238,13 +240,13 @@ leftJoin :: ( ToFrom a a'
             , ToFrom b b'
             , ToMaybe b'
             , HasOnClause rhs (a' :& ToMaybeT b')
-            , rhs ~ (b, (a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+            , rhs ~ (b, (a' :& ToMaybeT b') -> SqlExpr_ ValueContext (Value Bool))
             ) => a -> rhs -> From (a' :& ToMaybeT b')
 leftJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (toFrom rhs)
      let ret = leftVal :& toMaybe rightVal
-     pure $ (ret, fromJoin " LEFT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
+     pure (ret, fromJoin " LEFT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
 
 -- | LEFT OUTER JOIN LATERAL
 --
@@ -259,19 +261,19 @@ leftJoin lhs (rhs, on') = From $ do
 --
 -- @since 3.5.0.0
 leftJoinLateral :: ( ToFrom a a'
-                   , SqlSelect b r
+                   , SqlSelectCols b
                    , HasOnClause rhs (a' :& ToMaybeT b)
                    , ToAlias b
-                   , ToAliasReference b
-                   , ToMaybe b
-                   , rhs ~ (a' -> SqlQuery b, (a' :& ToMaybeT b) -> SqlExpr (Value Bool))
+                   , ToAliasReference b b'
+                   , ToMaybe b'
+                   , rhs ~ (a' -> SqlQuery b, (a' :& ToMaybeT b') -> SqlExpr_ ValueContext (Value Bool))
                    )
-                 => a -> rhs -> From (a' :& ToMaybeT b)
+                 => a -> rhs -> From (a' :& ToMaybeT b')
 leftJoinLateral lhs (rhsFn, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (selectQuery (rhsFn leftVal))
      let ret = leftVal :& toMaybe rightVal
-     pure $ (ret, fromJoin " LEFT OUTER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
+     pure (ret, fromJoin " LEFT OUTER JOIN LATERAL " leftFrom rightFrom (Just $ on' ret))
 
 -- | RIGHT OUTER JOIN
 --
@@ -294,13 +296,13 @@ rightJoin :: ( ToFrom a a'
              , ToFrom b b'
              , ToMaybe a'
              , HasOnClause rhs (ToMaybeT a' :& b')
-             , rhs ~ (b, (ToMaybeT a' :& b') -> SqlExpr (Value Bool))
+             , rhs ~ (b, (ToMaybeT a' :& b') -> SqlExpr_ ValueContext (Value Bool))
              ) => a -> rhs -> From (ToMaybeT a' :& b')
 rightJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
      (rightVal, rightFrom) <- unFrom (toFrom rhs)
      let ret = toMaybe leftVal :& rightVal
-     pure $ (ret, fromJoin " RIGHT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
+     pure (ret, fromJoin " RIGHT OUTER JOIN " leftFrom rightFrom (Just $ on' ret))
 
 -- | FULL OUTER JOIN
 --
@@ -323,7 +325,7 @@ fullOuterJoin :: ( ToFrom a a'
                  , ToMaybe a'
                  , ToMaybe b'
                  , HasOnClause rhs (ToMaybeT a' :& ToMaybeT b')
-                 , rhs ~ (b, (ToMaybeT a' :& ToMaybeT b') -> SqlExpr (Value Bool))
+                 , rhs ~ (b, (ToMaybeT a' :& ToMaybeT b') -> SqlExpr_ ValueContext (Value Bool))
                  ) => a -> rhs -> From (ToMaybeT a' :& ToMaybeT b')
 fullOuterJoin lhs (rhs, on') = From $ do
      (leftVal, leftFrom) <- unFrom (toFrom lhs)
@@ -495,16 +497,16 @@ class DoInnerJoin lateral lhs rhs res | lateral rhs lhs -> res where
 instance ( ToFrom a a'
          , ToFrom b b'
          , HasOnClause rhs (a' :& b')
-         , rhs ~ (b, (a' :& b') -> SqlExpr (Value Bool))
+         , rhs ~ (b, (a' :& b') -> SqlExpr_ ValueContext (Value Bool))
          ) => DoInnerJoin NotLateral a rhs (a' :& b') where
     doInnerJoin _ = innerJoin
 
 instance ( ToFrom a a'
-         , SqlSelect b r
+         , SqlSelectCols b
          , ToAlias b
-         , ToAliasReference b
-         , d ~ (a' :& b)
-         ) => DoInnerJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+         , ToAliasReference b b'
+         , d ~ (a' :& b')
+         ) => DoInnerJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr_ ValueContext (Value Bool)) d where
     doInnerJoin _ = innerJoinLateral
 
 instance ( DoInnerJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
@@ -519,17 +521,17 @@ instance ( ToFrom a a'
          , ToMaybe b'
          , ToMaybeT b' ~ mb
          , HasOnClause rhs (a' :& mb)
-         , rhs ~ (b, (a' :& mb) -> SqlExpr (Value Bool))
+         , rhs ~ (b, (a' :& mb) -> SqlExpr_ ValueContext (Value Bool))
          ) => DoLeftJoin NotLateral a rhs (a' :& mb) where
     doLeftJoin _ = leftJoin
 
 instance ( ToFrom a a'
-         , ToMaybe b
-         , d ~ (a' :& ToMaybeT b)
-         , SqlSelect b r
+         , ToMaybe b'
+         , d ~ (a' :& ToMaybeT b')
+         , SqlSelectCols b
          , ToAlias b
-         , ToAliasReference b
-         ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr (Value Bool)) d where
+         , ToAliasReference b b'
+         ) => DoLeftJoin Lateral a (a' -> SqlQuery b, d -> SqlExpr_ ValueContext (Value Bool)) d where
     doLeftJoin _ = leftJoinLateral
 
 instance ( DoLeftJoin lateral lhs rhs r, lateral ~ IsLateral rhs )
@@ -541,8 +543,8 @@ class DoCrossJoin lateral lhs rhs res | lateral lhs rhs -> res where
 
 instance (ToFrom a a', ToFrom b b') => DoCrossJoin NotLateral a b (a' :& b') where
     doCrossJoin _ = crossJoin
-instance (ToFrom a a', SqlSelect b r, ToAlias b, ToAliasReference b)
-  => DoCrossJoin Lateral a (a' -> SqlQuery b) (a' :& b) where
+instance (ToFrom a a', SqlSelectCols b, ToAlias b, ToAliasReference b b')
+  => DoCrossJoin Lateral a (a' -> SqlQuery b) (a' :& b') where
     doCrossJoin _ = crossJoinLateral
 
 instance (DoCrossJoin lateral lhs rhs r, IsLateral rhs ~ lateral)
@@ -555,7 +557,7 @@ instance ( ToFrom a a'
          , ToMaybeT a' ~ ma
          , HasOnClause rhs (ma :& b')
          , ErrorOnLateral b
-         , rhs ~ (b, (ma :& b') -> SqlExpr (Value Bool))
+         , rhs ~ (b, (ma :& b') -> SqlExpr_ ValueContext (Value Bool))
          ) => ToFrom (RightOuterJoin a rhs) (ma :& b') where
     toFrom (RightOuterJoin a b) = rightJoin a b
 
@@ -567,6 +569,6 @@ instance ( ToFrom a a'
          , ToMaybeT b' ~ mb
          , HasOnClause rhs (ma :& mb)
          , ErrorOnLateral b
-         , rhs ~ (b, (ma :& mb) -> SqlExpr (Value Bool))
+         , rhs ~ (b, (ma :& mb) -> SqlExpr_ ValueContext (Value Bool))
          ) => ToFrom (FullOuterJoin a rhs) (ma :& mb) where
     toFrom (FullOuterJoin a b) = fullOuterJoin a b

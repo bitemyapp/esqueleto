@@ -34,8 +34,9 @@ module Database.Esqueleto.PostgreSQL
     , forShareOf
     , filterWhere
     , values
+    , (%.)
     -- * Internal
-    , unsafeSqlAggregateFunction
+    , unsafeSqlExprAggregateFunction
     ) where
 
 #if __GLASGOW_HASKELL__ < 804
@@ -73,9 +74,9 @@ emptyArray = unsafeSqlValue "'{}'"
 -- | Coalesce an array with an empty default value
 maybeArray ::
      (PersistField a, PersistField [a])
-  => SqlExpr (Value (Maybe [a]))
-  -> SqlExpr (Value [a])
-maybeArray x = coalesceDefault [x] (emptyArray)
+  => SqlExpr_ ctx (Value (Maybe [a]))
+  -> SqlExpr_ ctx (Value [a])
+maybeArray x = coalesceDefault [x] (veryUnsafeCoerceSqlExpr emptyArray)
 
 -- | Aggregate mode
 data AggMode
@@ -87,14 +88,14 @@ data AggMode
 --
 -- /Do/ /not/ use this function directly, instead define a new function and give
 -- it a type (see `unsafeSqlBinOp`)
-unsafeSqlAggregateFunction
+unsafeSqlExprAggregateFunction
     :: UnsafeSqlFunctionArgument a
     => TLB.Builder
     -> AggMode
     -> a
     -> [OrderByClause]
-    -> SqlExpr (Value b)
-unsafeSqlAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
+    -> SqlExpr_ ctx (Value b)
+unsafeSqlExprAggregateFunction name mode args orderByClauses = ERaw noMeta $ \_ info ->
     let (orderTLB, orderVals) = makeOrderByNoNewline info orderByClauses
         -- Don't add a space if we don't have order by clauses
         orderTLBSpace =
@@ -119,12 +120,12 @@ arrayAggWith
     :: AggMode
     -> SqlExpr (Value a)
     -> [OrderByClause]
-    -> SqlExpr (Value (Maybe [a]))
-arrayAggWith = unsafeSqlAggregateFunction "array_agg"
+    -> SqlExpr_ ctx (Value (Maybe [a]))
+arrayAggWith = unsafeSqlExprAggregateFunction "array_agg"
 
 --- | (@array_agg@) Concatenate input values, including @NULL@s,
 --- into an array.
-arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe [a]))
+arrayAgg :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe [a]))
 arrayAgg x = arrayAggWith AggModeAll x []
 
 -- | (@array_agg@) Concatenate distinct input values, including @NULL@s, into
@@ -134,18 +135,18 @@ arrayAgg x = arrayAggWith AggModeAll x []
 arrayAggDistinct
     :: (PersistField a, PersistField [a])
     => SqlExpr (Value a)
-    -> SqlExpr (Value (Maybe [a]))
+    -> SqlExpr_ ctx' (Value (Maybe [a]))
 arrayAggDistinct x = arrayAggWith AggModeDistinct x []
 
 -- | (@array_remove@) Remove all elements equal to the given value from the
 -- array.
 --
 -- @since 2.5.3
-arrayRemove :: SqlExpr (Value [a]) -> SqlExpr (Value a) -> SqlExpr (Value [a])
+arrayRemove :: SqlExpr_ ctx (Value [a]) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value [a])
 arrayRemove arr elem' = unsafeSqlFunction "array_remove" (arr, elem')
 
 -- | Remove @NULL@ values from an array
-arrayRemoveNull :: SqlExpr (Value [Maybe a]) -> SqlExpr (Value [a])
+arrayRemoveNull :: SqlExpr_ ctx (Value [Maybe a]) -> SqlExpr_ ctx (Value [a])
 -- This can't be a call to arrayRemove because it changes the value type
 arrayRemoveNull x = unsafeSqlFunction "array_remove" (x, unsafeSqlValue "NULL")
 
@@ -158,9 +159,9 @@ stringAggWith ::
   -> SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr_ ctx (Value (Maybe s)) -- ^ Concatenation.
 stringAggWith mode expr delim os =
-  unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
+  unsafeSqlExprAggregateFunction "string_agg" mode (expr, delim) os
 
 -- | (@string_agg@) Concatenate input values separated by a
 -- delimiter.
@@ -170,17 +171,17 @@ stringAgg ::
      SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr_ ctx (Value (Maybe s)) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
 -- depend on the character set of your database.)
 --
 -- @since 2.2.11
-chr :: SqlString s => SqlExpr (Value Int) -> SqlExpr (Value s)
+chr :: SqlString s => SqlExpr_ ctx (Value Int) -> SqlExpr_ ctx (Value s)
 chr = unsafeSqlFunction "chr"
 
-now_ :: SqlExpr (Value UTCTime)
+now_ :: SqlExpr_ ctx (Value UTCTime)
 now_ = unsafeSqlFunction "NOW" ()
 
 upsert
@@ -193,7 +194,7 @@ upsert
     )
     => record
     -- ^ new record to insert
-    -> [SqlExpr (Entity record) -> SqlExpr Update]
+    -> [SqlExpr_ ValueContext (Entity record) -> SqlExpr_ ValueContext Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -211,7 +212,7 @@ upsertBy
     -- ^ uniqueness constraint to find by
     -> record
     -- ^ new record to insert
-    -> [SqlExpr (Entity record) -> SqlExpr Update]
+    -> [SqlExpr_ ValueContext (Entity record) -> SqlExpr_ ValueContext Update]
     -- ^ updates to perform if the record already exists
     -> R.ReaderT SqlBackend m (Entity record)
     -- ^ the record in the database after the operation
@@ -285,9 +286,9 @@ insertSelectWithConflict
     -- ^ Unique constructor or a unique, this is used just to get the name of
     -- the postgres constraint, the value(s) is(are) never used, so if you have
     -- a unique "MyUnique 0", "MyUnique undefined" would work as well.
-    -> SqlQuery (SqlExpr (Insertion val))
+    -> SqlQuery (SqlExpr_ ValueContext (Insertion val))
     -- ^ Insert query.
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
+    -> (SqlExpr_ ValueContext (Entity val) -> SqlExpr_ ValueContext (Entity val) -> [SqlExpr_ ValueContext (Entity val) -> SqlExpr_ ValueContext Update])
     -- ^ A list of updates to be applied in case of the constraint being
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
@@ -303,8 +304,8 @@ insertSelectWithConflictCount
      . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val,
      SqlBackendCanWrite backend)
     => a
-    -> SqlQuery (SqlExpr (Insertion val))
-    -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
+    -> SqlQuery (SqlExpr_ ValueContext (Insertion val))
+    -> (SqlExpr_ ValueContext (Entity val) -> SqlExpr_ ValueContext (Entity val) -> [SqlExpr_ ValueContext (Entity val) -> SqlExpr_ ValueContext Update])
     -> R.ReaderT backend m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask
@@ -362,11 +363,11 @@ insertSelectWithConflictCount unique query conflictQuery = do
 --
 -- @since 3.3.3.3
 filterWhere
-    :: SqlExpr (Value a)
+    :: SqlExpr_ ctx (Value a)
     -- ^ Aggregate function
     -> SqlExpr (Value Bool)
     -- ^ Filter clause
-    -> SqlExpr (Value a)
+    -> SqlExpr_ ctx (Value a)
 filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
     let (aggBuilder, aggValues) = case aggExpr of
             ERaw _ aggF     -> aggF Never info
@@ -405,7 +406,7 @@ filterWhere aggExpr clauseExpr = ERaw noMeta $ \_ info ->
 -- @
 --
 -- @since 3.5.2.3
-values :: (ToSomeValues a, Ex.ToAliasReference a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
+values :: (ToSomeValues a, Ex.ToAliasReference a a, Ex.ToAlias a) => NE.NonEmpty a -> Ex.From a
 values exprs = Ex.From $ do
     ident <- newIdentFor $ DBName "vq"
     alias <- Ex.toAlias $ NE.head exprs
@@ -440,6 +441,19 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+-- | Modulo operator for postgres.
+--
+-- @
+-- select $ do
+--     pure (val 10 %. val 2)
+-- @
+(%.)
+    :: (PersistFieldSql a, Num a)
+    => SqlExpr_ ctx (Value a)
+    -> SqlExpr_ ctx (Value a)
+    -> SqlExpr_ ctx (Value a)
+(%.)  = unsafeSqlBinOp " % "
 
 -- | `NO WAIT` syntax for postgres locking
 -- error will be thrown if locked rows are attempted to be selected

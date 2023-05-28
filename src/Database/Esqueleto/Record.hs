@@ -2,6 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -19,9 +21,9 @@ import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
+import Database.Esqueleto.Internal.Internal (SqlSelectCols(..), SqlSelect(..))
 import Database.Esqueleto.Experimental.ToAlias (ToAlias(..))
 import Database.Esqueleto.Experimental.ToAliasReference (ToAliasReference(..))
-import Database.Esqueleto.Internal.Internal (SqlSelect(..))
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 import Data.Bifunctor (first)
@@ -170,12 +172,11 @@ deriveEsqueletoRecordWith settings originalName = do
   sqlSelectInstanceDec <- makeSqlSelectInstance info
   toAliasInstanceDec <- makeToAliasInstance info
   toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
-  pure
-    [ recordDec
-    , sqlSelectInstanceDec
-    , toAliasInstanceDec
-    , toAliasReferenceInstanceDec
-    ]
+  pure 
+    $ recordDec
+    : toAliasInstanceDec
+    : toAliasReferenceInstanceDec
+    : sqlSelectInstanceDec
 
 -- | Information about a record we need to generate the declarations.
 -- We compute this once and then pass it around to save on complexity /
@@ -288,19 +289,23 @@ makeSqlRecord RecordInfo {..} = do
 
 -- | Generates an `SqlSelect` instance for the given record and its
 -- @Sql@-prefixed variant.
-makeSqlSelectInstance :: RecordInfo -> Q Dec
+makeSqlSelectInstance :: RecordInfo -> Q [Dec]
 makeSqlSelectInstance info@RecordInfo {..} = do
   sqlSelectColsDec' <- sqlSelectColsDec info
   sqlSelectColCountDec' <- sqlSelectColCountDec info
   sqlSelectProcessRowDec' <- sqlSelectProcessRowDec info
   let overlap = Nothing
       instanceConstraints = []
+      sqlSelectColsType =
+          AppT (ConT ''SqlSelectCols) (ConT sqlName)
       instanceType =
         (ConT ''SqlSelect)
           `AppT` (ConT sqlName)
           `AppT` (ConT name)
 
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
+  pure [ InstanceD overlap instanceConstraints sqlSelectColsType [ sqlSelectColsDec', sqlSelectColCountDec']
+       , InstanceD overlap instanceConstraints instanceType [ sqlSelectProcessRowDec']
+       ]
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlSelectColsDec :: RecordInfo -> Q Dec
@@ -418,7 +423,7 @@ sqlSelectProcessRowDec RecordInfo {..} = do
     FunD
       'sqlSelectProcessRow
       [ Clause
-          [VarP colsName]
+          [WildP, VarP colsName]
           (NormalB bodyExp)
           -- `where` clause
           [ ValD
@@ -530,7 +535,7 @@ takeColumns = StateT (\pvs ->
         splitAt targetColCount pvs
    in if length target == targetColCount
         then do
-          value <- sqlSelectProcessRow target
+          value <- sqlSelectProcessRow (Proxy @a) target
           Right (value, other)
         else Left "Insufficient columns when trying to parse a column")
 
@@ -614,8 +619,9 @@ makeToAliasReferenceInstance info@RecordInfo {..} = do
   let overlap = Nothing
       instanceConstraints = []
       instanceType =
-        (ConT ''ToAliasReference)
-          `AppT` (ConT sqlName)
+        ConT ''ToAliasReference
+          `AppT` ConT sqlName
+          `AppT` ConT sqlName
   pure $ InstanceD overlap instanceConstraints instanceType [toAliasReferenceDec']
 
 toAliasReferenceDec :: RecordInfo -> Q Dec

@@ -42,9 +42,9 @@ import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 --
 -- /Since: 3.4.0.0/
 with :: ( ToAlias a
-        , ToAliasReference a
+        , ToAliasReference a a'
         , SqlSelect a r
-        ) => SqlQuery a -> SqlQuery (From a)
+        ) => SqlQuery a -> SqlQuery (From a')
 with query = do
     (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
     aliasedValue <- toAlias ret
@@ -88,7 +88,7 @@ with query = do
 --
 -- /Since: 3.4.0.0/
 withRecursive :: ( ToAlias a
-                 , ToAliasReference a
+                 , ToAliasReference a a
                  , SqlSelect a r
                  )
               => SqlQuery a

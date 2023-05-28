@@ -14,5 +14,5 @@ import Database.Esqueleto.Internal.PersistentImport
 -- because MySQL uses `rand()`.
 --
 -- /Since: 2.6.0/
-random_ :: (PersistField a, Num a) => SqlExpr (Value a)
+random_ :: (PersistField a, Num a) => SqlExpr_ ValueContext (Value a)
 random_ = unsafeSqlValue "RANDOM()"

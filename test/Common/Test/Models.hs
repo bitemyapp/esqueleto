@@ -23,7 +23,7 @@
 module Common.Test.Models where
 
 import Data.Time
-import Database.Esqueleto.Experimental
+import Database.Esqueleto
 import Database.Persist.Sql
 import Database.Persist.TH
 

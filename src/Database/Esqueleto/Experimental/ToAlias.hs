@@ -15,21 +15,21 @@ type ToAliasT a = a
 class ToAlias a where
     toAlias :: a -> SqlQuery a
 
-instance ToAlias (SqlExpr (Value a)) where
+instance ToAlias (SqlExpr_ ctx (Value a)) where
     toAlias e@(ERaw m f)
       | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
             ident <- newIdentFor (DBName "v")
             pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} f
 
-instance ToAlias (SqlExpr (Entity a)) where
+instance ToAlias (SqlExpr_ ctx (Entity a)) where
     toAlias e@(ERaw m f)
       | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
            ident <- newIdentFor (DBName "v")
            pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
 
-instance ToAlias (SqlExpr (Maybe (Entity a))) where
+instance ToAlias (SqlExpr_ ctx (Maybe (Entity a))) where
     -- FIXME: Code duplication because the compiler doesnt like half final encoding
     toAlias e@(ERaw m f)
       | Just _ <- sqlExprMetaAlias m = pure e

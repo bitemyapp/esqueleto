@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
@@ -60,7 +61,6 @@ import qualified Data.HashSet as HS
 import Data.Kind (Type)
 import qualified Data.List as List
 import qualified Data.Map.Strict as Map
-import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -121,9 +121,9 @@ fromStartMaybe
 fromStartMaybe = maybelize <$> fromStart
   where
     maybelize
-        :: PreprocessedFrom (SqlExpr (Entity a))
-        -> PreprocessedFrom (SqlExpr (Maybe (Entity a)))
-    maybelize (PreprocessedFrom e f') = PreprocessedFrom (coerce e) f'
+        :: PreprocessedFrom (SqlExpr_ ctx (Entity a))
+        -> PreprocessedFrom (SqlExpr_ ctx (Maybe (Entity a)))
+    maybelize (PreprocessedFrom e f') = PreprocessedFrom (veryUnsafeCoerceSqlExpr e) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -269,14 +269,14 @@ orderBy :: [SqlExpr OrderBy] -> SqlQuery ()
 orderBy exprs = Q $ W.tell mempty { sdOrderByClause = exprs }
 
 -- | Ascending order of this field or SqlExpression.
-asc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+asc :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr OrderBy
 asc = orderByExpr " ASC"
 
 -- | Descending order of this field or SqlExpression.
-desc :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+desc :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr OrderBy
 desc = orderByExpr " DESC"
 
-orderByExpr :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr OrderBy
+orderByExpr :: TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr OrderBy
 orderByExpr orderByType (ERaw m f)
   | Just fields <- sqlExprMetaCompositeFields m =
         ERaw noMeta $ \_ info ->
@@ -357,7 +357,7 @@ distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
-don = coerce
+don = veryUnsafeCoerceSqlExpr
 
 -- | A convenience function that calls both 'distinctOn' and
 -- 'orderBy'.  In other words,
@@ -400,8 +400,8 @@ rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
 -- | @HAVING@.
 --
 -- @since 1.2.2
-having :: SqlExpr (Value Bool) -> SqlQuery ()
-having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
+having :: SqlExpr_ ctx (Value Bool) -> SqlQuery ()
+having expr = Q $ W.tell mempty { sdHavingClause = Where $ veryUnsafeCoerceSqlExpr expr }
 
 -- | Add a locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.
@@ -440,7 +440,7 @@ SQL error.\n\n Instead, consider using one of the following alternatives: \n \
 -- is guaranteed to return just one row.
 --
 -- Deprecated in 3.2.0.
-sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+sub_select :: PersistField a => SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
 sub_select         = sub SELECT
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
@@ -461,7 +461,7 @@ sub_select         = sub SELECT
 -- @since 3.2.0
 subSelect
   :: PersistField a
-  => SqlQuery (SqlExpr (Value a))
+  => SqlQuery (SqlExpr_ ctx (Value a))
   -> SqlExpr (Value (Maybe a))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
@@ -475,7 +475,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 -- @since 3.2.0
 subSelectMaybe
     :: PersistField a
-    => SqlQuery (SqlExpr (Value (Maybe a)))
+    => SqlQuery (SqlExpr_ ctx (Value (Maybe a)))
     -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
@@ -499,7 +499,7 @@ subSelectCount query =
 -- @since 3.2.0
 subSelectList
     :: PersistField a
-    => SqlQuery (SqlExpr (Value a))
+    => SqlQuery (SqlExpr_ ctx (Value a))
     -> SqlExpr (ValueList a)
 subSelectList = subList_select
 
@@ -560,15 +560,21 @@ subSelectForeign expr foreignKey k =
 -- 'subSelectMaybe'. For the most common safe use of this, see 'subSelectCount'.
 --
 -- @since 3.2.0
-subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
+subSelectUnsafe :: PersistField a => SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
 subSelectUnsafe = sub SELECT
 
 -- | Project a field of an entity.
-(^.) :: forall typ val . (PersistEntity val, PersistField typ)
-    => SqlExpr (Entity val)
-    -> EntityField val typ
-    -> SqlExpr (Value typ)
-ERaw m f ^. field
+(^.) :: forall typ val. (PersistEntity val, PersistField typ)
+     => SqlExpr (Entity val)
+     -> EntityField val typ
+     -> SqlExpr (Value typ)
+(^.) = getSqlField
+
+getSqlField :: forall typ val ctx. (PersistEntity val, PersistField typ)
+            => SqlExpr_ ctx (Entity val)
+            -> EntityField val typ
+            -> SqlExpr_ ctx (Value typ)
+getSqlField (ERaw m f) field
     | isIdField field = idFieldValue
     | Just alias <- sqlExprMetaAlias m =
         ERaw noMeta $ \_ info ->
@@ -591,12 +597,12 @@ ERaw m f ^. field
                 in ERaw noMeta{ sqlExprMetaCompositeFields = Just renderedFields} $
                     \p info -> (parensM p $ uncommas $ renderedFields info, [])
 
-    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity val)))
+    ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr_ ctx (Entity val)))
 
     dot info fieldDef' =
         sourceIdent info <> "." <> fieldIdent
       where
-        sourceIdent = fmap fst $ f Never
+        sourceIdent = fst <$> f Never
         fieldIdent
             | Just baseI <- sqlExprMetaAlias m =
                 useIdent info $ aliasedEntityColumnIdent baseI fieldDef'
@@ -615,13 +621,13 @@ withNonNull field f = do
 
 -- | Project a field of an entity that may be null.
 (?.) :: ( PersistEntity val , PersistField typ)
-    => SqlExpr (Maybe (Entity val))
-    -> EntityField val typ
-    -> SqlExpr (Value (Maybe typ))
+     => SqlExpr (Maybe (Entity val))
+     -> EntityField val typ
+     -> SqlExpr (Value (Maybe typ))
 ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
-val  :: PersistField typ => typ -> SqlExpr (Value typ)
+val  :: forall typ ctx. PersistField typ => typ -> SqlExpr_ ctx (Value typ)
 val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 
 -- | @IS NULL@ comparison.
@@ -645,7 +651,7 @@ val v = ERaw noMeta $ \_ _ -> ("?", [toPersistValue v])
 -- > - error: {lhs: v Database.Esqueleto.==. Database.Esqueleto.val Nothing, rhs: Database.Esqueleto.isNothing v, name: Use Esqueleto's isNothing}
 -- > - error: {lhs: v Database.Esqueleto.!=. Database.Esqueleto.nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
 -- > - error: {lhs: v Database.Esqueleto.!=. Database.Esqueleto.val Nothing, rhs: not_ (Database.Esqueleto.isNothing v), name: Use Esqueleto's not isNothing}
-isNothing :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
+isNothing :: PersistField typ => SqlExpr_ ctx (Value (Maybe typ)) -> SqlExpr_ ctx (Value Bool)
 isNothing v =
     case v of
         ERaw m f ->
@@ -658,12 +664,12 @@ isNothing v =
                         first (parensM p) . isNullExpr $ f Never info
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
-    isNullExpr = first ((<> " IS NULL"))
+    isNullExpr = first (<> " IS NULL")
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
-just :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
+just :: SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value (Maybe typ))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -672,11 +678,10 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
+joinV :: SqlExpr_ ctx (Value (Maybe (Maybe typ))) -> SqlExpr_ ctx (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
-
-countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a)
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx' (Value a)
 countHelper open close v =
     case v of
         ERaw meta f ->
@@ -685,24 +690,24 @@ countHelper open close v =
             else
                 countRawSql (f Never)
   where
-    countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr (Value a)
+    countRawSql :: (IdentInfo -> (TLB.Builder, [PersistValue])) -> SqlExpr_ ctx (Value a)
     countRawSql x = ERaw noMeta $ \_ -> first (\b -> "COUNT" <> open <> parens b <> close) . x
 
 -- | @COUNT(*)@ value.
-countRows :: Num a => SqlExpr (Value a)
+countRows :: Num a => SqlExpr_ ctx (Value a)
 countRows = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+count :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
 count = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- @since 2.4.1
-countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
+countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
-not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+not_ :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
 not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
   where
     x p info =
@@ -714,66 +719,106 @@ not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
                     let (b, vals) = f Never info
                     in (parensM p b, vals)
 
-(==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(==.)  :: (PersistField a)
+       => SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
-(>=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(>=.)  :: PersistField a
+       => SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value a)
+       -> SqlExpr_ ctx (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
-(>.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(>.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
-(<=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(<=.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
-(<.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
-(<.)  = unsafeSqlBinOp " < "
-(!=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
+(<.) :: PersistField a
+     => SqlExpr_ ctx (Value a)
+     -> SqlExpr_ ctx (Value a)
+     -> SqlExpr_ ctx (Value Bool)
+(<.) = unsafeSqlBinOp " < "
+
+(!=.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+(&&.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
+(||.) :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 
-(+.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
+(+.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
 (+.)  = unsafeSqlBinOp " + "
 
-(-.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
+(-.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
 (-.)  = unsafeSqlBinOp " - "
 
-(/.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
+(/.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
 (/.)  = unsafeSqlBinOp " / "
 
-(*.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
+(*.)  :: PersistField a
+      => SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
+      -> SqlExpr_ ctx (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
 -- | @BETWEEN@.
 --
 -- @since: 3.1.0
-between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
+between :: PersistField a
+        => SqlExpr_ ctx (Value a)
+        -> (SqlExpr_ ctx (Value a), SqlExpr_ ctx (Value a))
+        -> SqlExpr_ ctx (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
 
 random_  :: (PersistField a, Num a) => SqlExpr (Value a)
 random_  = unsafeSqlValue "RANDOM()"
 
-round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 round_   = unsafeSqlFunction "ROUND"
 
-ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+ceiling_ :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 ceiling_ = unsafeSqlFunction "CEILING"
 
-floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+floor_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 floor_   = unsafeSqlFunction "FLOOR"
 
-sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
 max_     = unsafeSqlFunction "MAX"
-avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
 
 -- | Allow a number of one type to be used as one of another
@@ -793,13 +838,13 @@ avg_     = unsafeSqlFunction "AVG"
 -- not being able to parse it.
 --
 -- @since 2.2.9
-castNum :: (Num a, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
+castNum :: (Num a, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 castNum  = veryUnsafeCoerceSqlExprValue
 
 -- | Same as 'castNum', but for nullable values.
 --
 -- @since 2.2.9
-castNumM :: (Num a, Num b) => SqlExpr (Value (Maybe a)) -> SqlExpr (Value (Maybe b))
+castNumM :: (Num a, Num b) => SqlExpr_ ctx (Value (Maybe a)) -> SqlExpr_ ctx (Value (Maybe b))
 castNumM = veryUnsafeCoerceSqlExprValue
 
 -- | @COALESCE@ function. Evaluates the arguments in order and
@@ -809,67 +854,73 @@ castNumM = veryUnsafeCoerceSqlExprValue
 -- documentation.
 --
 -- @since 1.4.3
-coalesce :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value (Maybe a))
-coalesce              = unsafeSqlFunctionParens "COALESCE"
+coalesce :: PersistField a => [SqlExpr_ ctx (Value (Maybe a))] -> SqlExpr_ ctx (Value (Maybe a))
+coalesce = unsafeSqlFunctionParens "COALESCE"
 
 -- | Like @coalesce@, but takes a non-nullable SqlExpression
 -- placed at the end of the SqlExpression list, which guarantees
 -- a non-NULL result.
 --
 -- @since 1.4.3
-coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+coalesceDefault :: PersistField a => [SqlExpr_ ctx (Value (Maybe a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
 -- | @LOWER@ function.
-lower_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+lower_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 lower_  = unsafeSqlFunction "LOWER"
 
 -- | @UPPER@ function.
 -- @since 3.3.0
-upper_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+upper_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 upper_  = unsafeSqlFunction "UPPER"
 
 -- | @TRIM@ function.
 -- @since 3.3.0
-trim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+trim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 trim_  = unsafeSqlFunction "TRIM"
 
 -- | @RTRIM@ function.
 -- @since 3.3.0
-rtrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+rtrim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 rtrim_  = unsafeSqlFunction "RTRIM"
 
 -- | @LTRIM@ function.
 -- @since 3.3.0
-ltrim_ :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s)
+ltrim_ :: SqlString s => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value s)
 ltrim_  = unsafeSqlFunction "LTRIM"
 
 -- | @LENGTH@ function.
 -- @since 3.3.0
-length_ :: (SqlString s, Num a) => SqlExpr (Value s) -> SqlExpr (Value a)
+length_ :: (SqlString s, Num a) => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value a)
 length_ = unsafeSqlFunction "LENGTH"
 
 -- | @LEFT@ function.
 -- @since 3.3.0
-left_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+left_ :: (SqlString s, Num a) => (SqlExpr_ ctx (Value s), SqlExpr_ ctx (Value a)) -> SqlExpr_ ctx (Value s)
 left_ = unsafeSqlFunction "LEFT"
 
 -- | @RIGHT@ function.
 -- @since 3.3.0
-right_ :: (SqlString s, Num a) => (SqlExpr (Value s), SqlExpr (Value a)) -> SqlExpr (Value s)
+right_ :: (SqlString s, Num a) => (SqlExpr_ ctx (Value s), SqlExpr_ ctx (Value a)) -> SqlExpr_ ctx (Value s)
 right_ = unsafeSqlFunction "RIGHT"
 
 -- | @LIKE@ operator.
-like :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
-like    = unsafeSqlBinOp    " LIKE "
+like :: SqlString s
+     => SqlExpr_ ctx (Value s)
+     -> SqlExpr_ ctx (Value s)
+     -> SqlExpr_ ctx (Value Bool)
+like = unsafeSqlBinOp " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
 --
 -- Supported by PostgreSQL only.
 --
 -- @since 2.2.3
-ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
-ilike   = unsafeSqlBinOp    " ILIKE "
+ilike :: SqlString s
+      => SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value Bool)
+ilike = unsafeSqlBinOp " ILIKE "
 
 -- | The string @'%'@.  May be useful while using 'like' and
 -- concatenation ('concat_' or '++.', depending on your
@@ -879,19 +930,22 @@ ilike   = unsafeSqlBinOp    " ILIKE "
 -- @
 -- name `'like`` (%) ++. 'val' \"John\" ++. (%)
 -- @
-(%) :: SqlString s => SqlExpr (Value s)
-(%)     = unsafeSqlValue    "'%'"
+(%) :: SqlString s => SqlExpr_ ctx (Value s)
+(%) = unsafeSqlValue "'%'"
 
 -- | The @CONCAT@ function with a variable number of
 -- parameters.  Supported by MySQL and PostgreSQL.
-concat_ :: SqlString s => [SqlExpr (Value s)] -> SqlExpr (Value s)
+concat_ :: SqlString s => [SqlExpr_ ctx (Value s)] -> SqlExpr_ ctx (Value s)
 concat_ = unsafeSqlFunction "CONCAT"
 
 -- | The @||@ string concatenation operator (named after
 -- Haskell's '++' in order to avoid naming clash with '||.').
 -- Supported by SQLite and PostgreSQL.
-(++.) :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value s)
-(++.)   = unsafeSqlBinOp    " || "
+(++.) :: SqlString s
+      => SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value s)
+      -> SqlExpr_ ctx (Value s)
+(++.) = unsafeSqlBinOp " || "
 
 -- | Cast a string type into 'Text'.  This function
 -- is very useful if you want to use @newtype@s, or if you want
@@ -903,17 +957,17 @@ concat_ = unsafeSqlFunction "CONCAT"
 -- since 'Maybe' is an instance of 'SqlString', it's possible
 -- to turn a nullable value into a non-nullable one.  Avoid
 -- using this function if possible.
-castString :: (SqlString s, SqlString r) => SqlExpr (Value s) -> SqlExpr (Value r)
+castString :: (SqlString s, SqlString r) => SqlExpr_ ctx (Value s) -> SqlExpr_ ctx (Value r)
 castString = veryUnsafeCoerceSqlExprValue
 
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- list of values.
-subList_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (ValueList a)
+subList_select :: PersistField a => SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (ValueList a)
 subList_select query = ERaw noMeta $ \_ info -> first parens $ toRawSql SELECT info query
 
 
 -- | Lift a list of constant value from Haskell-land to the query.
-valList :: PersistField typ => [typ] -> SqlExpr (ValueList typ)
+valList :: PersistField typ => [typ] -> SqlExpr_ ctx (ValueList typ)
 valList []   = ERaw noMeta $ \_ _ -> ("()", [])
 valList vals = ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), map toPersistValue vals )
 
@@ -922,7 +976,7 @@ valList vals = ERaw noMeta $ \p -> const (parensM p (uncommas ("?" <$ vals)), ma
 -- inside 'subList_select' or 'Just' from inside 'valList'.
 --
 -- @since 2.2.12
-justList :: SqlExpr (ValueList typ) -> SqlExpr (ValueList (Maybe typ))
+justList :: SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (ValueList (Maybe typ))
 justList (ERaw m f) = ERaw m f
 
 -- | @IN@ operator. For example if you want to select all @Person@s by a list
@@ -944,7 +998,7 @@ justList (ERaw m f) = ERaw m f
 -- @
 --
 -- Where @personIds@ is of type @[Key Person]@.
-in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
+in_ :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (Value Bool)
 (ERaw _ v) `in_` (ERaw _ list) =
     ERaw noMeta $ \_ info ->
         let (b1, vals1) = v Parens info
@@ -956,7 +1010,7 @@ in_ :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> Sql
             (b1 <> " IN " <> b2, vals1 <> vals2)
 
 -- | @NOT IN@ operator.
-notIn :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (ValueList typ) -> SqlExpr (Value Bool)
+notIn :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (ValueList typ) -> SqlExpr_ ctx (Value Bool)
 (ERaw _ v) `notIn` (ERaw _ list) =
     ERaw noMeta $ \_ info ->
         let (b1, vals1) = v Parens info
@@ -1066,7 +1120,7 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --      reproduce this via 'nothing'.
 --
 -- @since 2.1.2
-case_ :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+case_ :: forall a ctx. PersistField a => [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 case_ = unsafeSqlCase
 
 -- | Convert an entity's key into another entity's.
@@ -1518,13 +1572,13 @@ makeLockableEntity info lockableEntity =
     uncommas' $ Set.toList . Set.fromList $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
 
 instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
-    flattenLockableEntity e = LockableSqlExpr e :| []
+    flattenLockableEntity e = pure $ LockableSqlExpr e 
 
 instance (LockableEntity a, LockableEntity b) => LockableEntity (a :& b) where
     flattenLockableEntity (a :& b) = flattenLockableEntity a <> flattenLockableEntity b
 
 data LockableSqlExpr where
-    LockableSqlExpr :: PersistEntity val => (SqlExpr (Entity val)) -> LockableSqlExpr
+    LockableSqlExpr :: SqlExpr e -> LockableSqlExpr
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -1644,45 +1698,46 @@ from = (from_ >>=)
 class From a where
     from_ :: SqlQuery a
 
-instance
-    ( FromPreprocess (SqlExpr (Entity val))
-    )
+instance ( FromPreprocess (SqlExpr (Entity val)) )
   =>
     From (SqlExpr (Entity val))
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance
-    ( FromPreprocess (SqlExpr (Maybe (Entity val)))
-    )
+instance ( FromPreprocess (SqlExpr (Maybe (Entity val)) ))
   =>
     From (SqlExpr (Maybe (Entity val)))
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance
-    ( FromPreprocess (InnerJoin a b)
-    )
+instance (FromPreprocess (InnerJoin a b))
   =>
     From (InnerJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance
-    ( FromPreprocess (CrossJoin a b)
-    )
+instance (FromPreprocess (LeftOuterJoin a b))
   =>
-    From (CrossJoin a b)
+    From (LeftOuterJoin a b)
   where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (LeftOuterJoin a b)) => From (LeftOuterJoin a b) where
+instance (FromPreprocess (CrossJoin a b))
+  =>
+    From ( (CrossJoin a b))
+  where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (RightOuterJoin a b)) => From (RightOuterJoin a b) where
+instance (FromPreprocess (RightOuterJoin a b))
+  =>
+    From (RightOuterJoin a b)
+  where
     from_ = fromPreprocess >>= fromFinish
 
-instance (FromPreprocess (FullOuterJoin a b)) => From (FullOuterJoin a b) where
+instance (FromPreprocess (FullOuterJoin a b))
+  =>
+    From (FullOuterJoin a b)
+  where
     from_ = fromPreprocess >>= fromFinish
 
 instance (From a, From b) => From (a, b) where
@@ -1741,15 +1796,23 @@ instance
   where
     fromPreprocess = fromStartMaybe
 
-instance
-    (FromPreprocess a, FromPreprocess b, IsJoinKind join)
-  =>
-    FromPreprocess (join a b)
-  where
-    fromPreprocess = do
-        a <- fromPreprocess
-        b <- fromPreprocess
-        fromJoin a b
+fromPreprocessJoin :: (IsJoinKind join, FromPreprocess a, FromPreprocess b)
+                   => SqlQuery (PreprocessedFrom (join a b))
+fromPreprocessJoin = do
+    a <- fromPreprocess
+    b <- fromPreprocess
+    fromJoin a b
+
+instance (FromPreprocess a, FromPreprocess b) => FromPreprocess (InnerJoin a b) where
+    fromPreprocess = fromPreprocessJoin
+instance (FromPreprocess a, FromPreprocess b) => FromPreprocess (CrossJoin a b) where
+    fromPreprocess = fromPreprocessJoin
+instance (FromPreprocess a, FromPreprocess b) => FromPreprocess (LeftOuterJoin a b) where
+    fromPreprocess = fromPreprocessJoin
+instance (FromPreprocess a, FromPreprocess b) => FromPreprocess (RightOuterJoin a b) where
+    fromPreprocess = fromPreprocessJoin
+instance (FromPreprocess a, FromPreprocess b) => FromPreprocess (FullOuterJoin a b) where
+    fromPreprocess = fromPreprocessJoin
 
 -- | Exception data type for @esqueleto@ internal errors
 data EsqueletoError
@@ -2202,12 +2265,12 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 entityAsValue
     :: SqlExpr (Entity val)
     -> SqlExpr (Value (Entity val))
-entityAsValue = coerce
+entityAsValue = veryUnsafeCoerceSqlExpr
 
 entityAsValueMaybe
     :: SqlExpr (Maybe (Entity val))
     -> SqlExpr (Value (Maybe (Entity val)))
-entityAsValueMaybe = coerce
+entityAsValueMaybe = veryUnsafeCoerceSqlExpr
 
 -- | An expression on the SQL backend.
 --
@@ -2217,7 +2280,27 @@ entityAsValueMaybe = coerce
 -- connection (mainly for escaping names) and returns both an
 -- string ('TLB.Builder') and a list of values to be
 -- interpolated by the SQL backend.
-data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
+--
+-- All expressions have a context associated with them. This is primarily used by window functions
+-- to prevent windowing an already windowed value at compile time.
+--
+-- Values that come from a from clause are considered to be in the "ValueContext".
+-- Values that come from an aggregation should be in the "AggregateContext" but for backwards compatibility they are treated as having an undefined context and can be used in both Value and Aggregate contexts.
+-- Values that come from a window function are in the "WindowContext"
+data SqlExpr_ ctx a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
+
+-- Without this, you can `coerce` at will. This is a pretty gnarly and bad
+-- thing.
+type role SqlExpr_ nominal nominal
+
+data ValueContext
+data AggregateContext
+
+-- | Helper type for backwards compatibility and ease of reading
+type SqlExpr a = SqlExpr_ ValueContext a
+
+-- | Helper type denoting a value that should only be treated as an aggregate
+type SqlAgg a = SqlExpr_ AggregateContext a
 
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
@@ -2245,7 +2328,7 @@ data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [Per
 -- it with 'unsafeSqlFunction' or 'unsafeSqlBinOp'.
 --
 -- @since 3.5.8.2
-instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
+instance TypeError SqlExprFunctorMessage => Functor (SqlExpr_ ctx) where
     fmap = error "impossible"
 
 -- | The type error message given when you try to do 'fmap' on a 'SqlExpr'. This
@@ -2374,8 +2457,9 @@ setAux field value = \ent -> ERaw noMeta $ \_ info ->
         (valueToSet, valueVals) = valueF Parens info
     in (fieldName info field <> " = " <> valueToSet, valueVals)
 
-sub :: PersistField a => Mode -> SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
-sub mode query = ERaw noMeta $ \_ info -> first parens $ toRawSql mode info query
+sub :: forall a ctx. PersistField a => Mode -> SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
+sub mode query = ERaw noMeta $ \_ info ->
+    first parens $ toRawSql mode info (fmap veryUnsafeCoerceSqlExpr query :: SqlQuery (SqlExpr (Value a)))
 
 fromDBName :: IdentInfo -> DBName -> TLB.Builder
 fromDBName (conn, _) = TLB.fromText . flip getEscapedRawName conn . unDBName
@@ -2389,7 +2473,7 @@ existsHelper = sub SELECT . (>> return true)
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
-unsafeSqlCase :: PersistField a => [(SqlExpr (Value Bool), SqlExpr (Value a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+unsafeSqlCase :: forall a ctx. PersistField a => [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 unsafeSqlCase when v = ERaw noMeta buildCase
   where
     buildCase :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
@@ -2398,18 +2482,18 @@ unsafeSqlCase when v = ERaw noMeta buildCase
             (whenText, whenVals) = mapWhen when Parens info
         in ( "CASE" <> whenText <> " ELSE " <> elseText <> " END", whenVals <> elseVals)
 
-    mapWhen :: [(SqlExpr (Value Bool), SqlExpr (Value a))] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+    mapWhen :: [(SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a))] -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     mapWhen []    _ _    = throw (UnexpectedCaseErr UnsafeSqlCaseError)
     mapWhen when' p info = foldl (foldHelp p info) (mempty, mempty) when'
 
 
-    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr (Value Bool), SqlExpr (Value a)) -> (TLB.Builder, [PersistValue])
+    foldHelp :: NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]) -> (SqlExpr_ ctx (Value Bool), SqlExpr_ ctx (Value a)) -> (TLB.Builder, [PersistValue])
     foldHelp p info (b0, vals0) (v1, v2) =
         let (b1, vals1) = valueToSql v1 p info
             (b2, vals2) = valueToSql v2 p info
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
-    valueToSql :: SqlExpr (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
+    valueToSql :: forall v. SqlExpr_ ctx (Value v) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
     valueToSql (ERaw _ f) p = f p
 
 -- | (Internal) Create a custom binary operator.  You /should/
@@ -2424,7 +2508,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
 --
 -- In the example above, we constraint the arguments to be of the
 -- same type and constraint the result to be a boolean value.
-unsafeSqlBinOp :: TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOp :: TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b) -> SqlExpr_ ctx (Value c)
 unsafeSqlBinOp op (ERaw m1 f1) (ERaw m2 f2)
   | not (hasCompositeKeyMeta m1 || hasCompositeKeyMeta m2) = ERaw noMeta f
   where
@@ -2437,7 +2521,7 @@ unsafeSqlBinOp op (ERaw m1 f1) (ERaw m2 f2)
             )
 unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
   where
-    construct :: SqlExpr (Value a) -> SqlExpr (Value a)
+    construct :: SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
     construct (ERaw m f) =
         case sqlExprMetaCompositeFields m of
             Just fields ->
@@ -2475,15 +2559,15 @@ unsafeSqlBinOp op a b = unsafeSqlBinOp op (construct a) (construct b)
 --   - If it is not a single placeholder, then it's assumed to be
 --   a foreign (composite or not) key, so we enforce that it has
 --   no placeholders and split it on the commas.
-unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr (Value a) -> SqlExpr (Value b) -> SqlExpr (Value c)
+unsafeSqlBinOpComposite :: TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b) -> SqlExpr_ ctx (Value c)
 unsafeSqlBinOpComposite op sep a b
     | isCompositeKey a || isCompositeKey b = ERaw noMeta $ const $ compose (listify a) (listify b)
     | otherwise = unsafeSqlBinOp op a b
   where
-    isCompositeKey :: SqlExpr (Value x) -> Bool
+    isCompositeKey :: SqlExpr_ ctx (Value x) -> Bool
     isCompositeKey (ERaw m _) = hasCompositeKeyMeta m
 
-    listify :: SqlExpr (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
+    listify :: SqlExpr_ ctx (Value x) -> IdentInfo -> ([TLB.Builder], [PersistValue])
     listify (ERaw m f)
         | Just k <- sqlExprMetaCompositeFields m = flip (,) [] . k
         | otherwise = deconstruct . f Parens
@@ -2506,7 +2590,7 @@ unsafeSqlBinOpComposite op sep a b
 
 -- | (Internal) A raw SQL value.  The same warning from
 -- 'unsafeSqlBinOp' applies to this function as well.
-unsafeSqlValue :: TLB.Builder -> SqlExpr (Value a)
+unsafeSqlValue :: TLB.Builder -> SqlExpr_ ctx (Value a)
 unsafeSqlValue v = ERaw noMeta $ \_ _ -> (v, mempty)
 {-# INLINE unsafeSqlValue #-}
 
@@ -2521,7 +2605,7 @@ valueToFunctionArg info (ERaw _ f) = f Never info
 -- from 'unsafeSqlBinOp' applies to this function as well.
 unsafeSqlFunction
     :: UnsafeSqlFunctionArgument a
-    => TLB.Builder -> a -> SqlExpr (Value b)
+    => TLB.Builder -> a -> SqlExpr_ ctx (Value b)
 unsafeSqlFunction name arg =
     ERaw noMeta $ \_ info ->
         let (argsTLB, argsVals) =
@@ -2547,7 +2631,7 @@ unsafeSqlExtractSubField subField arg =
 -- See 'unsafeSqlBinOp' for warnings.
 unsafeSqlFunctionParens
     :: UnsafeSqlFunctionArgument a
-    => TLB.Builder -> a -> SqlExpr (Value b)
+    => TLB.Builder -> a -> SqlExpr_ ctx (Value b)
 unsafeSqlFunctionParens name arg =
     ERaw noMeta $ \_ info ->
         let valueToFunctionArgParens (ERaw _ f) = f Never info
@@ -2557,7 +2641,7 @@ unsafeSqlFunctionParens name arg =
 
 -- | (Internal) An explicit SQL type cast using CAST(value as type).
 -- See 'unsafeSqlBinOp' for warnings.
-unsafeSqlCastAs :: T.Text -> SqlExpr (Value a) -> SqlExpr (Value b)
+unsafeSqlCastAs :: forall a b ctx. T.Text -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 unsafeSqlCastAs t (ERaw _ f) = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> parens (value <> " AS " <> TLB.fromText t))) . f Never)
 
 -- | (Internal) This class allows 'unsafeSqlFunction' to work with different
@@ -2568,7 +2652,7 @@ unsafeSqlCastAs t (ERaw _ f) = ERaw noMeta $ \_ -> ((first (\value -> "CAST" <> 
 -- also nest tuples, as e.g. @toArgList ((a,b),(c,d))@ is the same as
 -- @toArgList (a,b,c,d)@.
 class UnsafeSqlFunctionArgument a where
-    toArgList :: a -> [SqlExpr (Value ())]
+    toArgList :: a -> [SqlExpr_ ctx (Value ())]
 
 -- | Useful for 0-argument functions, like @now@ in Postgresql.
 --
@@ -2576,8 +2660,8 @@ class UnsafeSqlFunctionArgument a where
 instance UnsafeSqlFunctionArgument () where
     toArgList _ = []
 
-instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr a) where
-    toArgList = (:[]) . veryUnsafeCoerceSqlExprValue
+instance (a ~ Value b) => UnsafeSqlFunctionArgument (SqlExpr_ ctx a) where
+    toArgList = (:[]) . veryUnsafeCoerceSqlExpr
 
 instance UnsafeSqlFunctionArgument a => UnsafeSqlFunctionArgument [a] where
   toArgList = concatMap toArgList
@@ -2688,22 +2772,25 @@ instance ( UnsafeSqlFunctionArgument a
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
-veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue = coerce
-
+veryUnsafeCoerceSqlExprValue :: forall a b ctx. SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
+veryUnsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
-veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList = coerce
+veryUnsafeCoerceSqlExprValueList :: forall a ctx. SqlExpr_ ctx (ValueList a) -> SqlExpr_ ctx (Value a)
+veryUnsafeCoerceSqlExprValueList = veryUnsafeCoerceSqlExpr
 
+-- | (Internal) Coerce a 'SqlExpr_' into any other kind of 'SqlExlr_'. You
+-- should /not/ use this function unless you know what you're doing!
+veryUnsafeCoerceSqlExpr :: forall a b ctx ctx2. SqlExpr_ ctx a -> SqlExpr_ ctx2 b
+veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
 
 ----------------------------------------------------------------------
 
 -- | (Internal) Execute an @esqueleto@ @SELECT@ 'SqlQuery' inside
 -- @persistent@'s 'SqlPersistT' monad.
 rawSelectSource
-    ::
+    :: forall a r m1 m2 backend.
     ( SqlSelect a r
     , MonadIO m1
     , MonadIO m2
@@ -2725,7 +2812,7 @@ rawSelectSource mode query = do
 
     massage = do
         mrow <- C.await
-        case sqlSelectProcessRow <$> mrow of
+        case sqlSelectProcessRow (Proxy :: Proxy a) <$> mrow of
             Just (Right r)  -> C.yield r >> massage
             Just (Left err) -> liftIO $ throwIO $ PersistMarshalError err
             Nothing         -> return ()
@@ -2942,7 +3029,7 @@ builderToText = TL.toStrict . TLB.toLazyTextWith defaultChunkSize
 -- possible but tedious), see the 'renderQueryToText' function (along with
 -- 'renderQuerySelect', 'renderQueryUpdate', etc).
 toRawSql
-  :: (SqlSelect a r, BackendCompatible SqlBackend backend)
+  :: (SqlSelectCols a, BackendCompatible SqlBackend backend)
   => Mode -> (backend, IdentState) -> SqlQuery a -> (TLB.Builder, [PersistValue])
 toRawSql mode (conn, firstIdentState) query =
     let ((ret, sd), finalIdentState) =
@@ -3087,11 +3174,11 @@ makeCte info cteClauses =
         _ ->
           first (\tlb -> withCteText <> tlb <> "\n") cteBody
 
-makeInsertInto :: SqlSelect a r => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
+makeInsertInto :: SqlSelectCols a => IdentInfo -> Mode -> a -> (TLB.Builder, [PersistValue])
 makeInsertInto info INSERT_INTO ret = sqlInsertInto info ret
 makeInsertInto _    _           _   = mempty
 
-makeSelect :: SqlSelect a r => IdentInfo -> Mode -> DistinctClause -> a -> (TLB.Builder, [PersistValue])
+makeSelect :: SqlSelectCols a => IdentInfo -> Mode -> DistinctClause -> a -> (TLB.Builder, [PersistValue])
 makeSelect info mode_ distinctClause ret = process mode_
   where
     process mode =
@@ -3108,7 +3195,7 @@ makeSelect info mode_ distinctClause ret = process mode_
                 first (("SELECT DISTINCT ON (" <>) . (<> ") "))
                 $ uncommas' (processExpr <$> exprs)
       where
-        processExpr e = materializeExpr info (coerce e :: SqlExpr (Value a))
+        processExpr e = materializeExpr info e
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
@@ -3157,7 +3244,7 @@ makeFrom info mode fs = ret
 
     makeOnClause (ERaw _ f)        = first (" ON " <>) (f Never info)
 
-    mkExc :: SqlExpr (Value Bool) -> OnClauseWithoutMatchingJoinException
+    mkExc :: SqlExpr_ ctx (Value Bool) -> OnClauseWithoutMatchingJoinException
     mkExc (ERaw _ f) =
         OnClauseWithoutMatchingJoinException $
             TL.unpack $ TLB.toLazyText $ fst (f Never info)
@@ -3255,13 +3342,7 @@ aliasedColumnName :: Ident -> IdentInfo -> T.Text -> TLB.Builder
 aliasedColumnName (I baseIdent) info columnName =
     useIdent info (I (baseIdent <> "_" <> columnName))
 
--- | (Internal) Class for mapping results coming from 'SqlQuery'
--- into actual results.
---
--- This looks very similar to @RawSql@, and it is!  However,
--- there are some crucial differences and ultimately they're
--- different classes.
-class SqlSelect a r | a -> r, r -> a where
+class SqlSelectCols a where
     -- | Creates the variable part of the @SELECT@ query and
     -- returns the list of 'PersistValue's that will be given to
     -- 'rawQuery'.
@@ -3270,16 +3351,26 @@ class SqlSelect a r | a -> r, r -> a where
     -- | Number of columns that will be consumed.
     sqlSelectColCount :: Proxy a -> Int
 
-    -- | Transform a row of the result into the data type.
-    sqlSelectProcessRow :: [PersistValue] -> Either T.Text r
-
     -- | Create @INSERT INTO@ clause instead.
     sqlInsertInto :: IdentInfo -> a -> (TLB.Builder, [PersistValue])
     sqlInsertInto = throw (UnexpectedCaseErr UnsupportedSqlInsertIntoType)
 
+-- | (Internal) Class for mapping results coming from 'SqlQuery'
+-- into actual results.
+--
+-- This looks very similar to @RawSql@, and it is!  However,
+-- there are some crucial differences and ultimately they're
+-- different classes.
+class SqlSelectCols a => SqlSelect a r | a -> r where
+    -- | Transform a row of the result into the data type.
+    sqlSelectProcessRow :: Proxy a -> [PersistValue] -> Either T.Text r
+
+
 
 -- | @INSERT INTO@ hack.
-instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) where
+instance PersistEntity e => SqlSelectCols (SqlExpr (Insertion e)) where
+    sqlSelectCols info (ERaw _ f) = f Never info
+    sqlSelectColCount   = const 0
     sqlInsertInto info e =
         let fields =
                 uncommas $
@@ -3294,16 +3385,17 @@ instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) wher
                 fromDBName info . DBName . coerce . getEntityDBName . entityDef . proxy
         in
             ("INSERT INTO " <> table e <> parens fields <> "\n", [])
-    sqlSelectCols info (ERaw _ f) = f Never info
-    sqlSelectColCount   = const 0
-    sqlSelectProcessRow =
+
+instance PersistEntity e => SqlSelect (SqlExpr (Insertion e)) (Insertion e) where
+    sqlSelectProcessRow _ =
       const (Right (throw (UnexpectedCaseErr InsertionFinalError)))
 
 -- | Not useful for 'select', but used for 'update' and 'delete'.
-instance SqlSelect () () where
+instance SqlSelectCols () where
     sqlSelectCols _ _ = ("1", [])
     sqlSelectColCount _ = 1
-    sqlSelectProcessRow _ = Right ()
+instance SqlSelect () () where
+    sqlSelectProcessRow _ _ = Right ()
 
 unescapedColumnNames :: EntityDef -> [DBName]
 unescapedColumnNames ent =
@@ -3319,7 +3411,7 @@ unescapedColumnNames ent =
                 id
 
 -- | You may return an 'Entity' from a 'select' query.
-instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
+instance PersistEntity a => SqlSelectCols (SqlExpr_ ctx (Entity a)) where
     sqlSelectCols info expr@(ERaw m f)
       | Just baseIdent <- sqlExprMetaAlias m, False <- sqlExprMetaIsReference m =
           let process = uncommas $
@@ -3353,35 +3445,38 @@ instance PersistEntity a => SqlSelect (SqlExpr (Entity a)) (Entity a) where
           in (process, mempty)
 
     sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
-    sqlSelectProcessRow = parseEntityValues ed
+instance PersistEntity a => SqlSelect (SqlExpr_ ctx (Entity a)) (Entity a) where
+    sqlSelectProcessRow _ = parseEntityValues ed
       where
         ed = entityDef $ getEntityVal (Proxy :: Proxy (SqlExpr (Entity a)))
 
-getEntityVal :: Proxy (SqlExpr (Entity a)) -> Proxy a
+getEntityVal :: Proxy (SqlExpr_ ctx (Entity a)) -> Proxy a
 getEntityVal = const Proxy
 
--- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
-instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
-    sqlSelectCols info e = sqlSelectCols info (coerce e :: SqlExpr (Entity a))
+instance PersistEntity a => SqlSelectCols (SqlExpr_ ctx (Maybe (Entity a))) where
+    sqlSelectCols info e = sqlSelectCols info (veryUnsafeCoerceSqlExpr e :: SqlExpr (Entity a))
     sqlSelectColCount = sqlSelectColCount . fromEMaybe
       where
-        fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
+        fromEMaybe :: Proxy (SqlExpr_ ctx (Maybe e)) -> Proxy (SqlExpr_ ctx e)
         fromEMaybe = const Proxy
-    sqlSelectProcessRow cols
+-- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
+instance PersistEntity a => SqlSelect (SqlExpr_ ctx (Maybe (Entity a))) (Maybe (Entity a)) where
+    sqlSelectProcessRow _ cols
         | all (== PersistNull) cols = return Nothing
-        | otherwise                 = Just <$> sqlSelectProcessRow cols
+        | otherwise                 = Just <$> sqlSelectProcessRow (Proxy :: Proxy (SqlExpr (Entity a))) cols
 
 
 -- | You may return any single value (i.e. a single column) from
 -- a 'select' query.
-instance PersistField a => SqlSelect (SqlExpr (Value a)) (Value a) where
+instance PersistField a => SqlSelectCols (SqlExpr_ ctx (Value a)) where
     sqlSelectCols = materializeExpr
     sqlSelectColCount = const 1
-    sqlSelectProcessRow [pv] = Value <$> fromPersistValue pv
-    sqlSelectProcessRow pvs  = Value <$> fromPersistValue (PersistList pvs)
+instance PersistField a => SqlSelect (SqlExpr_ ctx (Value a)) (Value a) where
+    sqlSelectProcessRow _ [pv] = Value <$> fromPersistValue pv
+    sqlSelectProcessRow _ pvs  = Value <$> fromPersistValue (PersistList pvs)
 
 -- | Materialize a @SqlExpr (Value a)@.
-materializeExpr :: IdentInfo -> SqlExpr (Value a) -> (TLB.Builder, [PersistValue])
+materializeExpr :: IdentInfo -> SqlExpr_ ctx a -> (TLB.Builder, [PersistValue])
 materializeExpr info (ERaw m f)
     | Just fields <- sqlExprMetaCompositeFields m = (uncommas $ fmap parens $ fields info, [])
     | Just alias <- sqlExprMetaAlias m
@@ -3391,7 +3486,7 @@ materializeExpr info (ERaw m f)
 
 -- | You may return tuples (up to 16-tuples) and tuples of tuples
 -- from a 'select' query.
-instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
+instance (SqlSelectCols a, SqlSelectCols b) => SqlSelectCols (a, b) where
     sqlSelectCols esc (a, b) =
         uncommas'
             [ sqlSelectCols esc a
@@ -3401,7 +3496,8 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
       where
         fromTuple :: Proxy (a,b) -> (Proxy a, Proxy b)
         fromTuple = const (Proxy, Proxy)
-    sqlSelectProcessRow =
+instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
+    sqlSelectProcessRow _ =
       let x = getType processRow
           getType :: SqlSelect a r => (z -> Either y (r,x)) -> Proxy a
           getType = const Proxy
@@ -3410,16 +3506,16 @@ instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a, b) (ra, rb) where
 
           processRow row =
               let (rowFst, rowSnd) = splitAt colCountFst row
-              in (,) <$> sqlSelectProcessRow rowFst
-                     <*> sqlSelectProcessRow rowSnd
+              in (,) <$> sqlSelectProcessRow (Proxy :: Proxy a) rowFst
+                     <*> sqlSelectProcessRow (Proxy :: Proxy b) rowSnd
 
       in colCountFst `seq` processRow
          -- Avoids recalculating 'colCountFst'.
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         ) => SqlSelect (a, b, c) (ra, rb, rc) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         ) => SqlSelectCols (a, b, c) where
   sqlSelectCols esc (a, b, c) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3427,7 +3523,12 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc c
       ]
   sqlSelectColCount   = sqlSelectColCount . from3P
-  sqlSelectProcessRow = fmap to3 . sqlSelectProcessRow
+
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         ) => SqlSelect (a, b, c) (ra, rb, rc) where
+  sqlSelectProcessRow p = fmap to3 . sqlSelectProcessRow (from3P p)
 
 from3P :: Proxy (a,b,c) -> Proxy ((a,b),c)
 from3P = const Proxy
@@ -3438,11 +3539,11 @@ from3 (a,b,c) = ((a,b),c)
 to3 :: ((a,b),c) -> (a,b,c)
 to3 ((a,b),c) = (a,b,c)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         ) => SqlSelect (a, b, c, d) (ra, rb, rc, rd) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         ) => SqlSelectCols (a, b, c, d) where
   sqlSelectCols esc (a, b, c, d) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3451,7 +3552,12 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc d
       ]
   sqlSelectColCount   = sqlSelectColCount . from4P
-  sqlSelectProcessRow = fmap to4 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         ) => SqlSelect (a, b, c, d) (ra, rb, rc, rd) where
+  sqlSelectProcessRow p = fmap to4 . sqlSelectProcessRow (from4P p)
 
 from4P :: Proxy (a,b,c,d) -> Proxy ((a,b),(c,d))
 from4P = const Proxy
@@ -3462,12 +3568,12 @@ from4 (a,b,c,d) = ((a,b),(c,d))
 to4 :: ((a,b),(c,d)) -> (a,b,c,d)
 to4 ((a,b),(c,d)) = (a,b,c,d)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         ) => SqlSelect (a, b, c, d, e) (ra, rb, rc, rd, re) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         ) => SqlSelectCols (a, b, c, d, e) where
   sqlSelectCols esc (a, b, c, d, e) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3477,7 +3583,13 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc e
       ]
   sqlSelectColCount   = sqlSelectColCount . from5P
-  sqlSelectProcessRow = fmap to5 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         ) => SqlSelect (a, b, c, d, e) (ra, rb, rc, rd, re) where
+  sqlSelectProcessRow p = fmap to5 . sqlSelectProcessRow (from5P p)
 
 from5P :: Proxy (a,b,c,d,e) -> Proxy ((a,b),(c,d),e)
 from5P = const Proxy
@@ -3488,13 +3600,13 @@ from5 (a,b,c,d,e) = ((a,b),(c,d),e)
 to5 :: ((a,b),(c,d),e) -> (a,b,c,d,e)
 to5 ((a,b),(c,d),e) = (a,b,c,d,e)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         ) => SqlSelect (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         ) => SqlSelectCols (a, b, c, d, e, f) where
   sqlSelectCols esc (a, b, c, d, e, f) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3505,7 +3617,14 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc f
       ]
   sqlSelectColCount   = sqlSelectColCount . from6P
-  sqlSelectProcessRow = fmap to6 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         ) => SqlSelect (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf) where
+  sqlSelectProcessRow p = fmap to6 . sqlSelectProcessRow (from6P p)
 
 from6P :: Proxy (a,b,c,d,e,f) -> Proxy ((a,b),(c,d),(e,f))
 from6P = const Proxy
@@ -3516,14 +3635,14 @@ from6 (a,b,c,d,e,f) = ((a,b),(c,d),(e,f))
 to6 :: ((a,b),(c,d),(e,f)) -> (a,b,c,d,e,f)
 to6 ((a,b),(c,d),(e,f)) = (a,b,c,d,e,f)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         ) => SqlSelect (a, b, c, d, e, f, g) (ra, rb, rc, rd, re, rf, rg) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         ) => SqlSelectCols (a, b, c, d, e, f, g) where
   sqlSelectCols esc (a, b, c, d, e, f, g) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3535,7 +3654,15 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc g
       ]
   sqlSelectColCount   = sqlSelectColCount . from7P
-  sqlSelectProcessRow = fmap to7 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         ) => SqlSelect (a, b, c, d, e, f, g) (ra, rb, rc, rd, re, rf, rg) where
+  sqlSelectProcessRow p = fmap to7 . sqlSelectProcessRow (from7P p)
 
 from7P :: Proxy (a,b,c,d,e,f,g) -> Proxy ((a,b),(c,d),(e,f),g)
 from7P = const Proxy
@@ -3546,15 +3673,15 @@ from7 (a,b,c,d,e,f,g) = ((a,b),(c,d),(e,f),g)
 to7 :: ((a,b),(c,d),(e,f),g) -> (a,b,c,d,e,f,g)
 to7 ((a,b),(c,d),(e,f),g) = (a,b,c,d,e,f,g)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         , SqlSelect h rh
-         ) => SqlSelect (a, b, c, d, e, f, g, h) (ra, rb, rc, rd, re, rf, rg, rh) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3567,7 +3694,16 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc h
       ]
   sqlSelectColCount   = sqlSelectColCount . from8P
-  sqlSelectProcessRow = fmap to8 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         ) => SqlSelect (a, b, c, d, e, f, g, h) (ra, rb, rc, rd, re, rf, rg, rh) where
+  sqlSelectProcessRow p = fmap to8 . sqlSelectProcessRow (from8P p)
 
 from8P :: Proxy (a,b,c,d,e,f,g,h) -> Proxy ((a,b),(c,d),(e,f),(g,h))
 from8P = const Proxy
@@ -3578,16 +3714,16 @@ from8 (a,b,c,d,e,f,g,h) = ((a,b),(c,d),(e,f),(g,h))
 to8 :: ((a,b),(c,d),(e,f),(g,h)) -> (a,b,c,d,e,f,g,h)
 to8 ((a,b),(c,d),(e,f),(g,h)) = (a,b,c,d,e,f,g,h)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         , SqlSelect h rh
-         , SqlSelect i ri
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i) (ra, rb, rc, rd, re, rf, rg, rh, ri) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3601,7 +3737,17 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc i
       ]
   sqlSelectColCount   = sqlSelectColCount . from9P
-  sqlSelectProcessRow = fmap to9 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i) (ra, rb, rc, rd, re, rf, rg, rh, ri) where
+  sqlSelectProcessRow p = fmap to9 . sqlSelectProcessRow (from9P p)
 
 from9P :: Proxy (a,b,c,d,e,f,g,h,i) -> Proxy ((a,b),(c,d),(e,f),(g,h),i)
 from9P = const Proxy
@@ -3612,17 +3758,17 @@ from9 (a,b,c,d,e,f,g,h,i) = ((a,b),(c,d),(e,f),(g,h),i)
 to9 :: ((a,b),(c,d),(e,f),(g,h),i) -> (a,b,c,d,e,f,g,h,i)
 to9 ((a,b),(c,d),(e,f),(g,h),i) = (a,b,c,d,e,f,g,h,i)
 
-instance ( SqlSelect a ra
-         , SqlSelect b rb
-         , SqlSelect c rc
-         , SqlSelect d rd
-         , SqlSelect e re
-         , SqlSelect f rf
-         , SqlSelect g rg
-         , SqlSelect h rh
-         , SqlSelect i ri
-         , SqlSelect j rj
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj) where
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3637,17 +3783,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc j
       ]
   sqlSelectColCount   = sqlSelectColCount . from10P
-  sqlSelectProcessRow = fmap to10 . sqlSelectProcessRow
-
-from10P :: Proxy (a,b,c,d,e,f,g,h,i,j) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j))
-from10P = const Proxy
-
-from10 :: (a,b,c,d,e,f,g,h,i,j) -> ((a,b),(c,d),(e,f),(g,h),(i,j))
-from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
-
-to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
-to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3658,8 +3793,30 @@ instance ( SqlSelect a ra
          , SqlSelect h rh
          , SqlSelect i ri
          , SqlSelect j rj
-         , SqlSelect k rk
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj) where
+  sqlSelectProcessRow p = fmap to10 . sqlSelectProcessRow (from10P p)
+
+from10P :: Proxy (a,b,c,d,e,f,g,h,i,j) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10P = const Proxy
+
+from10 :: (a,b,c,d,e,f,g,h,i,j) -> ((a,b),(c,d),(e,f),(g,h),(i,j))
+from10 (a,b,c,d,e,f,g,h,i,j) = ((a,b),(c,d),(e,f),(g,h),(i,j))
+
+to10 :: ((a,b),(c,d),(e,f),(g,h),(i,j)) -> (a,b,c,d,e,f,g,h,i,j)
+to10 ((a,b),(c,d),(e,f),(g,h),(i,j)) = (a,b,c,d,e,f,g,h,i,j)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3675,14 +3832,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc k
       ]
   sqlSelectColCount   = sqlSelectColCount . from11P
-  sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
-
-from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
-from11P = const Proxy
-
-to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
-to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3694,8 +3843,28 @@ instance ( SqlSelect a ra
          , SqlSelect i ri
          , SqlSelect j rj
          , SqlSelect k rk
-         , SqlSelect l rl
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk) where
+  sqlSelectProcessRow p = fmap to11 . sqlSelectProcessRow (from11P p)
+
+from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11P = const Proxy
+
+to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
+to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         , SqlSelectCols l
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k, l) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3712,14 +3881,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc l
       ]
   sqlSelectColCount   = sqlSelectColCount . from12P
-  sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
-
-from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
-from12P = const Proxy
-
-to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
-to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3732,8 +3893,29 @@ instance ( SqlSelect a ra
          , SqlSelect j rj
          , SqlSelect k rk
          , SqlSelect l rl
-         , SqlSelect m rm
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl) where
+  sqlSelectProcessRow p = fmap to12 . sqlSelectProcessRow (from12P p)
+
+from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12P = const Proxy
+
+to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
+to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         , SqlSelectCols l
+         , SqlSelectCols m
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k, l, m) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3751,14 +3933,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc m
       ]
   sqlSelectColCount   = sqlSelectColCount . from13P
-  sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
-
-from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
-from13P = const Proxy
-
-to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
-to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3772,8 +3946,30 @@ instance ( SqlSelect a ra
          , SqlSelect k rk
          , SqlSelect l rl
          , SqlSelect m rm
-         , SqlSelect n rn
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm) where
+  sqlSelectProcessRow p = fmap to13 . sqlSelectProcessRow (from13P p)
+
+from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13P = const Proxy
+
+to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
+to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         , SqlSelectCols l
+         , SqlSelectCols m
+         , SqlSelectCols n
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k, l, m, n) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3792,14 +3988,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc n
       ]
   sqlSelectColCount   = sqlSelectColCount . from14P
-  sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
-
-from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
-from14P = const Proxy
-
-to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
-to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3814,8 +4002,31 @@ instance ( SqlSelect a ra
          , SqlSelect l rl
          , SqlSelect m rm
          , SqlSelect n rn
-         , SqlSelect o ro
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn) where
+  sqlSelectProcessRow p = fmap to14 . sqlSelectProcessRow (from14P p)
+
+from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14P = const Proxy
+
+to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         , SqlSelectCols l
+         , SqlSelectCols m
+         , SqlSelectCols n
+         , SqlSelectCols o
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3835,14 +4046,6 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc o
       ]
   sqlSelectColCount   = sqlSelectColCount . from15P
-  sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
-
-from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
-from15P = const Proxy
-
-to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
-to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
-
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3858,8 +4061,32 @@ instance ( SqlSelect a ra
          , SqlSelect m rm
          , SqlSelect n rn
          , SqlSelect o ro
-         , SqlSelect p rp
-         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro, rp) where
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro) where
+  sqlSelectProcessRow p = fmap to15 . sqlSelectProcessRow (from15P p)
+
+from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15P = const Proxy
+
+to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
+to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
+
+instance ( SqlSelectCols a
+         , SqlSelectCols b
+         , SqlSelectCols c
+         , SqlSelectCols d
+         , SqlSelectCols e
+         , SqlSelectCols f
+         , SqlSelectCols g
+         , SqlSelectCols h
+         , SqlSelectCols i
+         , SqlSelectCols j
+         , SqlSelectCols k
+         , SqlSelectCols l
+         , SqlSelectCols m
+         , SqlSelectCols n
+         , SqlSelectCols o
+         , SqlSelectCols p
+         ) => SqlSelectCols (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) where
   sqlSelectCols esc (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) =
     uncommas'
       [ sqlSelectCols esc a
@@ -3880,7 +4107,24 @@ instance ( SqlSelect a ra
       , sqlSelectCols esc p
       ]
   sqlSelectColCount   = sqlSelectColCount . from16P
-  sqlSelectProcessRow = fmap to16 . sqlSelectProcessRow
+instance ( SqlSelect a ra
+         , SqlSelect b rb
+         , SqlSelect c rc
+         , SqlSelect d rd
+         , SqlSelect e re
+         , SqlSelect f rf
+         , SqlSelect g rg
+         , SqlSelect h rh
+         , SqlSelect i ri
+         , SqlSelect j rj
+         , SqlSelect k rk
+         , SqlSelect l rl
+         , SqlSelect m rm
+         , SqlSelect n rn
+         , SqlSelect o ro
+         , SqlSelect p rp
+         ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro, rp) where
+  sqlSelectProcessRow p = fmap to16 . sqlSelectProcessRow (from16P p)
 
 from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 from16P = const Proxy
@@ -3908,7 +4152,7 @@ insertSelectCount a = rawEsqueleto INSERT_INTO a
 -- representation of the clauses passed to an "On" clause.
 --
 -- @since 3.2.0
-renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
+renderExpr :: SqlBackend -> SqlExpr_ ctx (Value Bool) -> T.Text
 renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues ->
          let (builder, _) = mkBuilderValues Never (sqlBackend, initialIdentState)
