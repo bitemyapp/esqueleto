@@ -1,3 +1,11 @@
+4.0.0.0
+=======
+- @belevy
+    - Change Database.Esqueleto to use the new syntax, add warning to Database.Esqueleto.Experimental/Legacy mentioning their deprecation.
+    - Split SqlSelectCols typeclass out of SqlSelect, simplifying subquery type inference
+    - Change SqlExpr type to alias for new SqlExpr_ allowing for value "contexts". Currently used by window functions to avoid allowing double windowing. This change lays the groundwork for aggregate values as being contextually different from single values.
+    - Add support for window functions in Postgres module
+
 3.5.9.0
 =======
 - @9999years

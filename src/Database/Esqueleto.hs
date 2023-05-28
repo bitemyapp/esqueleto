@@ -38,9 +38,9 @@
 -- in this module will be replaced with those at the 4.0.0.0 version, so you are
 -- encouraged to migrate to the new method.
 --
--- This module has an attached WARNING message indicating that the Experimental
--- syntax will become the default. If you want to continue using the old syntax,
--- please refer to "Database.Esqueleto.Legacy" as a drop-in replacement.
+-- This module now exports the new syntax. If you want to continue using the old syntax for a while longer,
+-- please refer to "Database.Esqueleto.Legacy" as a drop-in replacement. The legacy syntax will be dropped
+-- at the next major release.
 module Database.Esqueleto
     ( -- * Setup
       -- $setup
