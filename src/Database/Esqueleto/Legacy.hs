@@ -41,7 +41,7 @@
 --
 -- Other than identifier name clashes, @esqueleto@ does not
 -- conflict with @persistent@ in any way.
-module Database.Esqueleto.Legacy {-# WARNING "This module will be removed in the next major release. Please migrate to the new syntax in the Database.Esqueleto module if you wish to upgrade." -#}
+module Database.Esqueleto.Legacy {-# WARNING "This module will be removed in the next major release. Please migrate to the new syntax in the Database.Esqueleto module if you wish to upgrade." #-}
   ( -- * Setup
     -- $setup
 

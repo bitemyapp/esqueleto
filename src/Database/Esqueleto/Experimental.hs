@@ -6,7 +6,7 @@
 --
 -- This syntax will become the default syntax exported from the library in
 -- version @3.6.0.0@. To use the old syntax, see "Database.Esqueleto.Legacy".
-module Database.Esqueleto.Experimental {-# WARNING "This module will be removed in the next major release as the Expermintal syntax is now the default behavior. Please import the Database.Esqueleto module instead." -#}
+module Database.Esqueleto.Experimental {-# WARNING "This module will be removed in the next major release as the Expermintal syntax is now the default behavior. Please import the Database.Esqueleto module instead." #-}
     ( -- * Setup
       -- $setup
 
