@@ -1,3 +1,10 @@
+3.5.10.0
+========
+- @parsonsmatt
+    - []()
+        - Add `isNothing_` and `groupBy_` to avoid name conflicts with
+          `Data.List` and `Data.Maybe`.
+
 3.5.9.0
 =======
 - @9999years
