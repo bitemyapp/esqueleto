@@ -1,7 +1,7 @@
 3.5.10.0
 ========
 - @parsonsmatt
-    - []()
+    - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
         - Add `isNothing_` and `groupBy_` to avoid name conflicts with
           `Data.List` and `Data.Maybe`.
 
