@@ -88,3 +88,126 @@ instance ( ToAliasReference a
          ) => ToAliasReference (a,b,c,d,e,f,g,h) where
     toAliasReference ident x = to8 <$> (toAliasReference ident $ from8 x)
 
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i) where
+    toAliasReference ident x = to9 <$> (toAliasReference ident $ from9 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j) where
+    toAliasReference ident x = to10 <$> (toAliasReference ident $ from10 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k) where
+    toAliasReference ident x = to11 <$> (toAliasReference ident $ from11 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         , ToAliasReference l
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k,l) where
+    toAliasReference ident x = to12 <$> (toAliasReference ident $ from12 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         , ToAliasReference l
+         , ToAliasReference m
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k,l,m) where
+    toAliasReference ident x = to13 <$> (toAliasReference ident $ from13 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         , ToAliasReference l
+         , ToAliasReference m
+         , ToAliasReference n
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k,l,m,n) where
+    toAliasReference ident x = to14 <$> (toAliasReference ident $ from14 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         , ToAliasReference l
+         , ToAliasReference m
+         , ToAliasReference n
+         , ToAliasReference o
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) where
+    toAliasReference ident x = to15 <$> (toAliasReference ident $ from15 x)
+
+instance ( ToAliasReference a
+         , ToAliasReference b
+         , ToAliasReference c
+         , ToAliasReference d
+         , ToAliasReference e
+         , ToAliasReference f
+         , ToAliasReference g
+         , ToAliasReference h
+         , ToAliasReference i
+         , ToAliasReference j
+         , ToAliasReference k
+         , ToAliasReference l
+         , ToAliasReference m
+         , ToAliasReference n
+         , ToAliasReference o
+         , ToAliasReference p
+         ) => ToAliasReference (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) where
+    toAliasReference ident x = to16 <$> (toAliasReference ident $ from16 x)

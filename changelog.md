@@ -1,5 +1,9 @@
 3.5.10.0
-========
+=======
+- @ivanbakel
+    - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
+        - Add `ToAlias` instances for 9- to 16-tuples
+        - Add `ToAliasReference` instances for 9- to 16-tuples
 - @parsonsmatt
     - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
         - Add `isNothing_` and `groupBy_` to avoid name conflicts with

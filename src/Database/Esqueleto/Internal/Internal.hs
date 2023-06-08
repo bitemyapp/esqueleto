@@ -3694,6 +3694,9 @@ instance ( SqlSelect a ra
 from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
 from11P = const Proxy
 
+from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+
 to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
 to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
 
@@ -3730,6 +3733,9 @@ instance ( SqlSelect a ra
 
 from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 from12P = const Proxy
+
+from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 
 to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
 to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
@@ -3769,6 +3775,9 @@ instance ( SqlSelect a ra
 
 from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 from13P = const Proxy
+
+from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 
 to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
 to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
@@ -3810,6 +3819,9 @@ instance ( SqlSelect a ra
 
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
+
+from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 
 to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
@@ -3853,6 +3865,9 @@ instance ( SqlSelect a ra
 
 from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 from15P = const Proxy
+
+from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 
 to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
 to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
@@ -3898,6 +3913,9 @@ instance ( SqlSelect a ra
 
 from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 from16P = const Proxy
+
+from16 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
