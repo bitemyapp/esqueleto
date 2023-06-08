@@ -1,12 +1,67 @@
-3.5.7.0
+3.5.10.0
 =======
 - @ivanbakel
     - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
         - Add `ToAlias` instances for 9- to 16-tuples
         - Add `ToAliasReference` instances for 9- to 16-tuples
 
-3.5.6.1
+3.5.9.1
 =======
+- @duplode
+    - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
+      - Add missing `just` to left join examples in the Haddocks
+
+3.5.9.0
+=======
+- @9999years
+    - [#350](https://github.com/bitemyapp/esqueleto/pull/350)
+      - Add `GetFirstTable`, `getTable`, `getTableMaybe` helpers for selecting
+        tables from `:&` chains
+- @josephsumabat
+    - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
+      - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
+- @parsonsmatt
+    - [#342](https://github.com/bitemyapp/esqueleto/pull/342)
+        - Create a `TypeError` instance for `Functor SqlExpr`, adding
+          documentation and work arounds for the need.
+- @9999years
+    - [#327](https://github.com/bitemyapp/esqueleto/pull/327)
+        - Fixed a Haddock typo causing documentation to render incorrectly
+
+3.5.8.1
+=======
+- @belevy
+    - [#336](https://github.com/bitemyapp/esqueleto/pull/336)
+        - Fix bug with multiple nested subqueries introduced in 3.5.7.1
+        - Set operations will now only reuse variable names within the context of the set operation.
+            a subquery that references the set operation will correctly pick up where the subquery left off
+3.5.8.0
+=======
+- @ivanbakel
+    - [#331](https://github.com/bitemyapp/esqueleto/pull/331)
+        - Add `deriveEsqueletoRecordWith` to derive Esqueleto instances for
+          records using custom deriving settings.
+        - Add `DeriveEsqueletoRecordSettings` to control how Esqueleto record
+          instances are derived.
+        - Add `sqlNameModifier` to control how Esqueleto record instance
+          deriving generates the SQL record type name.
+        - Add `sqlFieldModifier` to control how Esqueleto record instance
+          deriving generates the SQL record fields.
+
+3.5.7.1
+=======
+- @belevy
+    - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
+        - Fix alias name bug with union and subselect
+
+3.5.7.0
+=======
+- @ivanbakel
+    - [#329](https://github.com/bitemyapp/esqueleto/pull/329)
+        - Add `ToAlias` and `ToAliasReference` instances to the type produced
+          by `deriveEsqueletoRecord`, allowing in-SQL records to be used in
+          CTEs
+
 - @9999years
     - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
         - Add ability to use nested records with `deriveEsqueletoRecord`

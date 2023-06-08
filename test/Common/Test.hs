@@ -85,11 +85,12 @@ import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
-import qualified UnliftIO.Resource as R
+import Database.Esqueleto.PostgreSQL as EP
 import Database.Persist.Class.PersistEntity
+import qualified UnliftIO.Resource as R
 
-import Common.Test.Select
 import Common.Record (testDeriveEsqueletoRecord)
+import Common.Test.Select
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -1613,32 +1614,31 @@ testCase = do
 
         asserting $ ret `shouldBe` [ Value (3) ]
 
-
-
-
-
 testLocking :: SpecDb
 testLocking = do
+  let toText conn q =
+        let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+         in TLB.toLazyText tlb
+      complexQuery =
+        from $ \(p1' `InnerJoin` p2') -> do
+        on (p1' ^. PersonName ==. p2' ^. PersonName)
+        where_ (p1' ^. PersonFavNum >. val 2)
+        orderBy [desc (p2' ^. PersonAge)]
+        limit 3
+        offset 9
+        groupBy (p1' ^. PersonId)
+        having (countRows <. val (0 :: Int))
+        return (p1', p2')
   describe "locking" $ do
     -- The locking clause is the last one, so try to use many
     -- others to test if it's at the right position.  We don't
     -- care about the text of the rest, nor with the RDBMS'
     -- reaction to the clause.
     let sanityCheck kind syntax = do
-          let complexQuery =
-                from $ \(p1' `InnerJoin` p2') -> do
-                on (p1' ^. PersonName ==. p2' ^. PersonName)
-                where_ (p1' ^. PersonFavNum >. val 2)
-                orderBy [desc (p2' ^. PersonAge)]
-                limit 3
-                offset 9
-                groupBy (p1' ^. PersonId)
-                having (countRows <. val (0 :: Int))
-                return (p1', p2')
-              queryWithClause1 = do
-                r <- complexQuery
-                locking kind
-                return r
+          let queryWithClause1 = do
+                 r <- complexQuery
+                 locking kind
+                 return r
               queryWithClause2 = do
                 locking ForUpdate
                 r <- complexQuery
@@ -1648,9 +1648,6 @@ testLocking = do
               queryWithClause3 = do
                 locking kind
                 complexQuery
-              toText conn q =
-                let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
-                in TLB.toLazyText tlb
           conn <- ask
           [complex, with1, with2, with3] <-
             return $
@@ -1658,15 +1655,52 @@ testLocking = do
           let expected = complex <> "\n" <> syntax
           asserting $
               (with1, with2, with3) `shouldBe` (expected, expected, expected)
-
     itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
     itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
+  describe "Monoid instance" $ do
+    let
+        multiplePostgresLockingClauses p = do
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
 
+        multipleLegacyLockingClauses = do
+            locking ForShare
+            locking ForUpdate
 
+        multipleLockingQueryPostgresLast = do
+            p <- Experimental.from $ table @Person
+            multipleLegacyLockingClauses
+            multiplePostgresLockingClauses p
 
+        multipleLockingQueryLegacyLast = do
+            p <- Experimental.from $ table @Person
+            multiplePostgresLockingClauses p
+            multipleLegacyLockingClauses
+
+        expectedPostgresQuery = do
+            p <- Experimental.from $ table @Person
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
+
+        expectedLegacyQuery = do
+            p <- Experimental.from $ table @Person
+            locking ForUpdate
+
+    itDb "prioritizes last grouping of locks when mixing legacy and postgres specific locks" $ do
+
+        conn <- ask
+        let resPostgresLast = toText conn multipleLockingQueryPostgresLast
+            resLegacyLast = toText conn multipleLockingQueryLegacyLast
+            resExpectedPostgres = toText conn expectedPostgresQuery
+            resExpectedLegacy = toText conn expectedLegacyQuery
+
+        asserting $ resPostgresLast `shouldBe` resExpectedPostgres
+        asserting $ resLegacyLast `shouldBe` resExpectedLegacy
 
 testCountingRows :: SpecDb
 testCountingRows = do
@@ -2330,6 +2364,7 @@ tests :: SpecDb
 tests =
     describe "Esqueleto" $ do
         testSelect
+        testGetTable
         testSubSelect
         testSelectOne
         testSelectSource
@@ -2475,3 +2510,27 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
     it "is only supported in GHC 9.2 or above" $ \_ -> do
         pending
 #endif
+
+testGetTable :: SpecDb
+testGetTable =
+    describe "GetFirstTable" $ do
+        itDb "works to make long join chains easier" $ do
+            select $ do
+                (person :& blogPost :& profile :& reply) <-
+                    Experimental.from $
+                        table @Person
+                        `leftJoin` table @BlogPost
+                            `Experimental.on` do
+                                \(p :& bp) ->
+                                    just (p ^. PersonId) ==. bp ?. BlogPostAuthorId
+                        `leftJoin` table @Profile
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& profile) ->
+                                    just (p ^. PersonId) ==. profile ?. ProfilePerson
+                        `leftJoin` table @Reply
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& reply) ->
+                                    just (p ^. PersonId) ==. reply ?. ReplyGuy
+                pure (person, blogPost, profile, reply)
+            asserting noExceptions
+

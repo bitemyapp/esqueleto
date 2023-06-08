@@ -9,12 +9,18 @@
 
 module Database.Esqueleto.Record
   ( deriveEsqueletoRecord
+  , deriveEsqueletoRecordWith
+
+  , DeriveEsqueletoRecordSettings(..)
+  , defaultDeriveEsqueletoRecordSettings
   ) where
 
 import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
+import Database.Esqueleto.Experimental.ToAlias (ToAlias(..))
+import Database.Esqueleto.Experimental.ToAliasReference (ToAliasReference(..))
 import Database.Esqueleto.Internal.Internal (SqlSelect(..))
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
@@ -31,9 +37,9 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 -- with data extracted with esqueleto.
 --
 -- Note that because the input record and the @Sql@-prefixed record share field
--- names, the @{-# LANGUAGE DuplicateRecordFields #-}@ extension is required in
--- modules that use `deriveEsqueletoRecord`. Additionally, the @{-# LANGUAGE
--- TypeApplications #-}@ extension is required for some of the generated code.
+-- names, the @{-\# LANGUAGE DuplicateRecordFields \#-}@ extension is required in
+-- modules that use `deriveEsqueletoRecord`. Additionally, the @{-\# LANGUAGE
+-- TypeApplications \#-}@ extension is required for some of the generated code.
 --
 -- Given the following record:
 --
@@ -113,15 +119,62 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --
 -- @since 3.5.6.0
 deriveEsqueletoRecord :: Name -> Q [Dec]
-deriveEsqueletoRecord originalName = do
-  info <- getRecordInfo originalName
+deriveEsqueletoRecord = deriveEsqueletoRecordWith defaultDeriveEsqueletoRecordSettings
+
+-- | Codegen settings for 'deriveEsqueletoRecordWith'.
+--
+-- @since 3.5.8.0
+data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
+  { sqlNameModifier :: String -> String
+    -- ^ Function applied to the Haskell record's type name and constructor
+    -- name to produce the SQL record's type name and constructor name.
+    --
+    -- @since 3.5.8.0
+  , sqlFieldModifier :: String -> String
+    -- ^ Function applied to the Haskell record's field names to produce the
+    -- SQL record's field names.
+    --
+    -- @since 3.5.8.0
+  }
+
+-- | The default codegen settings for 'deriveEsqueletoRecord'.
+--
+-- These defaults will cause you to require @{-# LANGUAGE DuplicateRecordFields #-}@
+-- in certain cases (see 'deriveEsqueletoRecord'.) If you don't want to do this,
+-- change the value of 'sqlFieldModifier' so the field names of the generated SQL
+-- record different from those of the Haskell record.
+--
+-- @since 3.5.8.0
+defaultDeriveEsqueletoRecordSettings :: DeriveEsqueletoRecordSettings
+defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
+  { sqlNameModifier = ("Sql" ++)
+  , sqlFieldModifier = id
+  }
+
+-- | Takes the name of a Haskell record type and creates a variant of that
+-- record based on the supplied settings which can be used in esqueleto
+-- expressions. This reduces the amount of pattern matching on large tuples
+-- required to interact with data extracted with esqueleto.
+--
+-- This is a variant of 'deriveEsqueletoRecord' which allows you to avoid the
+-- use of @{-# LANGUAGE DuplicateRecordFields #-}@, by configuring the
+-- 'DeriveEsqueletoRecordSettings' used to generate the SQL record.
+--
+-- @since 3.5.8.0
+deriveEsqueletoRecordWith :: DeriveEsqueletoRecordSettings -> Name -> Q [Dec]
+deriveEsqueletoRecordWith settings originalName = do
+  info <- getRecordInfo settings originalName
   -- It would be nicer to use `mconcat` here but I don't think the right
   -- instance is available in GHC 8.
   recordDec <- makeSqlRecord info
-  instanceDec <- makeSqlSelectInstance info
+  sqlSelectInstanceDec <- makeSqlSelectInstance info
+  toAliasInstanceDec <- makeToAliasInstance info
+  toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
   pure
     [ recordDec
-    , instanceDec
+    , sqlSelectInstanceDec
+    , toAliasInstanceDec
+    , toAliasReferenceInstanceDec
     ]
 
 -- | Information about a record we need to generate the declarations.
@@ -130,7 +183,7 @@ deriveEsqueletoRecord originalName = do
 data RecordInfo = RecordInfo
   { -- | The original record's name.
     name :: Name
-  , -- | The generated @Sql@-prefixed record's name.
+  , -- | The generated SQL record's name.
     sqlName :: Name
   , -- | The original record's constraints. If this isn't empty it'll probably
     -- cause problems, but it's easy to pass around so might as well.
@@ -145,17 +198,19 @@ data RecordInfo = RecordInfo
     kind :: Maybe Kind
   , -- | The original record's constructor name.
     constructorName :: Name
+  , -- | The generated SQL record's constructor name.
+    sqlConstructorName :: Name
   , -- | The original record's field names and types, derived from the
     -- constructors.
     fields :: [(Name, Type)]
-  , -- | The generated @Sql@-prefixed record's field names and types, computed
+  , -- | The generated SQL record's field names and types, computed
     -- with 'sqlFieldType'.
     sqlFields :: [(Name, Type)]
   }
 
 -- | Get a `RecordInfo` instance for the given record name.
-getRecordInfo :: Name -> Q RecordInfo
-getRecordInfo name = do
+getRecordInfo :: DeriveEsqueletoRecordSettings -> Name -> Q RecordInfo
+getRecordInfo settings name = do
   TyConI dec <- reify name
   (constraints, typeVarBinders, kind, constructors) <-
         case dec of
@@ -172,7 +227,8 @@ getRecordInfo name = do
           RecC name' _fields -> name'
           con -> error $ nonRecordConstructorMessage con
       fields = getFields constructor
-      sqlName = makeSqlName name
+      sqlName = makeSqlName settings name
+      sqlConstructorName = makeSqlName settings constructorName
 
   sqlFields <- mapM toSqlField fields
 
@@ -183,12 +239,13 @@ getRecordInfo name = do
     getFields con = error $ nonRecordConstructorMessage con
 
     toSqlField (fieldName', ty) = do
+      let modifier = mkName . sqlFieldModifier settings . nameBase
       sqlTy <- sqlFieldType ty
-      pure (fieldName', sqlTy)
+      pure (modifier fieldName', sqlTy)
 
 -- | Create a new name by prefixing @Sql@ to a given name.
-makeSqlName :: Name -> Name
-makeSqlName name = mkName $ "Sql" ++ nameBase name
+makeSqlName :: DeriveEsqueletoRecordSettings -> Name -> Name
+makeSqlName settings name = mkName $ sqlNameModifier settings $ nameBase name
 
 -- | Transforms a record field type into a corresponding `SqlExpr` type.
 --
@@ -222,7 +279,7 @@ sqlFieldType fieldType = do
 -- record's information.
 makeSqlRecord :: RecordInfo -> Q Dec
 makeSqlRecord RecordInfo {..} = do
-  let newConstructor = RecC (makeSqlName constructorName) (makeField `map` sqlFields)
+  let newConstructor = RecC sqlConstructorName (makeField `map` sqlFields)
       derivingClauses = []
   pure $ DataD constraints sqlName typeVarBinders kind [newConstructor] derivingClauses
   where
@@ -509,3 +566,89 @@ nonRecordConstructorMessage con =
         -- only show you the first name.
         (GadtC names _fields _ret) -> head names
         (RecGadtC names _fields _ret) -> head names
+
+makeToAliasInstance :: RecordInfo -> Q Dec
+makeToAliasInstance info@RecordInfo {..} = do
+  toAliasDec' <- toAliasDec info
+  let overlap = Nothing
+      instanceConstraints = []
+      instanceType =
+        (ConT ''ToAlias)
+          `AppT` (ConT sqlName)
+  pure $ InstanceD overlap instanceConstraints instanceType [toAliasDec']
+
+toAliasDec :: RecordInfo -> Q Dec
+toAliasDec RecordInfo {..} = do
+  (statements, fieldPatterns, fieldExps) <-
+    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+      fieldPatternName <- newName (nameBase fieldName')
+      boundValueName <- newName (nameBase fieldName')
+      pure
+        ( BindS
+            (VarP boundValueName)
+            (VarE 'toAlias `AppE` VarE fieldPatternName)
+        , (fieldName', VarP fieldPatternName)
+        , (fieldName', VarE boundValueName)
+        ))
+
+  pure $
+    FunD
+      'toAlias
+      [ Clause
+          [ RecP sqlName fieldPatterns
+          ]
+          ( NormalB $
+              DoE
+#if MIN_VERSION_template_haskell(2,17,0)
+                Nothing
+#endif
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+          )
+          -- `where` clause.
+          []
+      ]
+
+makeToAliasReferenceInstance :: RecordInfo -> Q Dec
+makeToAliasReferenceInstance info@RecordInfo {..} = do
+  toAliasReferenceDec' <- toAliasReferenceDec info
+  let overlap = Nothing
+      instanceConstraints = []
+      instanceType =
+        (ConT ''ToAliasReference)
+          `AppT` (ConT sqlName)
+  pure $ InstanceD overlap instanceConstraints instanceType [toAliasReferenceDec']
+
+toAliasReferenceDec :: RecordInfo -> Q Dec
+toAliasReferenceDec RecordInfo {..} = do
+  identInfo <- newName "identInfo"
+
+  (statements, fieldPatterns, fieldExps) <-
+    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+      fieldPatternName <- newName (nameBase fieldName')
+      boundValueName <- newName (nameBase fieldName')
+      pure
+        ( BindS
+            (VarP boundValueName)
+            (VarE 'toAliasReference `AppE` VarE identInfo `AppE` VarE fieldPatternName)
+        , (fieldName', VarP fieldPatternName)
+        , (fieldName', VarE boundValueName)
+        ))
+
+  pure $
+    FunD
+      'toAliasReference
+      [ Clause
+          [ VarP identInfo
+          , RecP sqlName fieldPatterns
+          ]
+          ( NormalB $
+              DoE
+#if MIN_VERSION_template_haskell(2,17,0)
+                Nothing
+#endif
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+          )
+          -- `where` clause.
+          []
+      ]
+
