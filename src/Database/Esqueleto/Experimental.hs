@@ -339,8 +339,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $
 -- from $ \\(people \`LeftOuterJoin\` blogPosts) -> do
--- on (people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
--- where_ (people ^. PersonAge >. val 18)
+-- on (just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. just (val 18))
 -- pure (people, blogPosts)
 -- @
 --
@@ -354,8 +354,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 --     from $ table \@Person
 --     \`leftJoin\` table \@BlogPost
 --     \`on\` (\\(people :& blogPosts) ->
---             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
--- where_ (people ^. PersonAge >. val 18)
+--             just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. just (val 18))
 -- pure (people, blogPosts)
 -- @
 --

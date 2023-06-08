@@ -230,7 +230,7 @@ crossJoinLateral lhs rhsFn = From $ do
 -- from $ table \@Person
 -- \`leftJoin\` table \@BlogPost
 -- \`on\` (\\(p :& bp) ->
---         p ^. PersonId ==. bp ?. BlogPostAuthorId)
+--         just (p ^. PersonId) ==. bp ?. BlogPostAuthorId)
 -- @
 --
 -- @since 3.5.0.0
