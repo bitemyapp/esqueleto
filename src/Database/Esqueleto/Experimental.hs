@@ -65,6 +65,7 @@ module Database.Esqueleto.Experimental
     -- * The Normal Stuff
     , where_
     , groupBy
+    , groupBy_
     , orderBy
     , rand
     , asc
@@ -85,6 +86,7 @@ module Database.Esqueleto.Experimental
 
     , val
     , isNothing
+    , isNothing_
     , just
     , nothing
     , joinV

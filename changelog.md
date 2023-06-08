@@ -4,12 +4,17 @@
     - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
         - Add `ToAlias` instances for 9- to 16-tuples
         - Add `ToAliasReference` instances for 9- to 16-tuples
+- @parsonsmatt
+    - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
+        - Add `isNothing_` and `groupBy_` to avoid name conflicts with
+          `Data.List` and `Data.Maybe`.
 
 3.5.9.1
 =======
 - @duplode
     - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
       - Add missing `just` to left join examples in the Haddocks
+
 
 3.5.9.0
 =======

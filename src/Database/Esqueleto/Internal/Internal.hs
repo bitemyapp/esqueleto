@@ -261,6 +261,13 @@ on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 groupBy :: (ToSomeValues a) => a -> SqlQuery ()
 groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
+-- | An alias for 'groupBy' that avoids conflict with the term from "Data.List"
+-- 'Data.List.groupBy'.
+--
+-- @since 3.5.10.0
+groupBy_ :: (ToSomeValues a) => a -> SqlQuery ()
+groupBy_  = groupBy
+
 -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
 --
 -- Multiple calls to 'orderBy' get concatenated on the final
@@ -659,6 +666,13 @@ isNothing v =
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
     isNullExpr = first ((<> " IS NULL"))
+
+-- | An alias for 'isNothing' that avoids clashing with the function from
+-- "Data.Maybe" 'Data.Maybe.isNothing'.
+--
+-- @since 3.5.10.0
+isNothing_ :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
+isNothing_ = isNothing
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
