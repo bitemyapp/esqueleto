@@ -57,7 +57,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 -- @
 -- data SqlMyRecord =
 --   SqlMyRecord { myName    :: 'SqlExpr' ('Value' Text)
---               , myAge     :: 'SqlExpr' ('Value' Int)
+--               , myAge     :: 'SqlExpr' ('Value' ('Maybe' Int))
 --               , myUser    :: 'SqlExpr' ('Entity' User)
 --               , myAddress :: 'SqlExpr' ('Maybe' ('Entity' Address))
 --               }
@@ -75,7 +75,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --   'sqlSelectColCount' _ =
 --     'sqlSelectColCount'
 --       ('Proxy' \@(   ('SqlExpr' ('Value' Text))
---                :& ('SqlExpr' ('Value' Int))
+--                :& ('SqlExpr' ('Value' ('Maybe' Int)))
 --                :& ('SqlExpr' ('Entity' User))
 --                :& ('SqlExpr' ('Maybe' ('Entity' Address)))))
 --
@@ -85,7 +85,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --     where
 --       process = do
 --         'Value' myName <- 'takeColumns' \@('SqlExpr' ('Value' Text))
---         'Value' myAge  <- 'takeColumns' \@('SqlExpr' ('Value' Int))
+--         'Value' myAge  <- 'takeColumns' \@('SqlExpr' ('Value' ('Maybe' Int)))
 --         myUser       <- 'takeColumns' \@('SqlExpr' ('Entity' User))
 --         myAddress    <- 'takeColumns' \@('SqlExpr' ('Maybe' ('Entity' Address)))
 --         'pure' MyRecord { myName = myName
