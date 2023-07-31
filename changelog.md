@@ -1,5 +1,11 @@
+3.5.10.1
+========
+- @9999years
+    - [#369](https://github.com/bitemyapp/esqueleto/pull/369)
+        - Fix `myAge` type in `deriveEsqueletoRecord` documentation
+
 3.5.10.0
-=======
+========
 - @ivanbakel
     - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
         - Add `ToAlias` instances for 9- to 16-tuples
