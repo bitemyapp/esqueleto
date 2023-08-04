@@ -130,11 +130,21 @@ data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
     -- name to produce the SQL record's type name and constructor name.
     --
     -- @since 3.5.8.0
+  , sqlMaybeNameModifier :: String -> String
+    -- ^ Function applied to the Haskell record's type name and constructor
+    -- name to produce the 'ToMaybe' record's type name and constructor name.
+    --
+    -- @since 3.5.11.0
   , sqlFieldModifier :: String -> String
     -- ^ Function applied to the Haskell record's field names to produce the
     -- SQL record's field names.
     --
     -- @since 3.5.8.0
+  , sqlMaybeFieldModifier :: String -> String
+    -- ^ Function applied to the Haskell record's field names to produce the
+    -- 'ToMaybe' SQL record's field names.
+    --
+    -- @since 3.5.11.0
   }
 
 -- | The default codegen settings for 'deriveEsqueletoRecord'.
@@ -148,7 +158,9 @@ data DeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
 defaultDeriveEsqueletoRecordSettings :: DeriveEsqueletoRecordSettings
 defaultDeriveEsqueletoRecordSettings = DeriveEsqueletoRecordSettings
   { sqlNameModifier = ("Sql" ++)
+  , sqlMaybeNameModifier = ("SqlMaybe" ++)
   , sqlFieldModifier = id
+  , sqlMaybeFieldModifier = id
   }
 
 -- | Takes the name of a Haskell record type and creates a variant of that
@@ -168,11 +180,15 @@ deriveEsqueletoRecordWith settings originalName = do
   -- instance is available in GHC 8.
   recordDec <- makeSqlRecord info
   sqlSelectInstanceDec <- makeSqlSelectInstance info
+  sqlMaybeRecordDec <- makeSqlMaybeRecord info
+  toMaybeInstanceDec <- makeToMaybeInstance info
   toAliasInstanceDec <- makeToAliasInstance info
   toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
   pure
     [ recordDec
     , sqlSelectInstanceDec
+    , sqlMaybeRecordDec
+    , toMaybeInstanceDec
     , toAliasInstanceDec
     , toAliasReferenceInstanceDec
     ]
@@ -185,6 +201,8 @@ data RecordInfo = RecordInfo
     name :: Name
   , -- | The generated SQL record's name.
     sqlName :: Name
+  , -- | The generated SQL 'ToMaybe' record's name.
+    sqlMaybeName :: Name
   , -- | The original record's constraints. If this isn't empty it'll probably
     -- cause problems, but it's easy to pass around so might as well.
     constraints :: Cxt
@@ -200,12 +218,17 @@ data RecordInfo = RecordInfo
     constructorName :: Name
   , -- | The generated SQL record's constructor name.
     sqlConstructorName :: Name
+  , -- | The generated SQL 'ToMaybe' record's constructor name.
+    sqlMaybeConstructorName :: Name
   , -- | The original record's field names and types, derived from the
     -- constructors.
     fields :: [(Name, Type)]
   , -- | The generated SQL record's field names and types, computed
     -- with 'sqlFieldType'.
     sqlFields :: [(Name, Type)]
+  , -- | The generated SQL 'ToMaybe' record's field names and types, computed
+    -- with 'sqlMaybeFieldType'.
+    sqlMaybeFields :: [(Name, Type)]
   }
 
 -- | Get a `RecordInfo` instance for the given record name.
@@ -228,9 +251,12 @@ getRecordInfo settings name = do
           con -> error $ nonRecordConstructorMessage con
       fields = getFields constructor
       sqlName = makeSqlName settings name
+      sqlMaybeName = makeSqlMaybeName settings name
       sqlConstructorName = makeSqlName settings constructorName
+      sqlMaybeConstructorName = makeSqlMaybeName settings constructorName
 
   sqlFields <- mapM toSqlField fields
+  sqlMaybeFields <- mapM toSqlMaybeField fields
 
   pure RecordInfo {..}
   where
@@ -243,9 +269,18 @@ getRecordInfo settings name = do
       sqlTy <- sqlFieldType ty
       pure (modifier fieldName', sqlTy)
 
+    toSqlMaybeField (fieldName', ty) = do
+      let modifier = mkName . sqlMaybeFieldModifier settings . nameBase
+      sqlTy <- sqlMaybeFieldType ty
+      pure (modifier fieldName', sqlTy)
+
 -- | Create a new name by prefixing @Sql@ to a given name.
 makeSqlName :: DeriveEsqueletoRecordSettings -> Name -> Name
 makeSqlName settings name = mkName $ sqlNameModifier settings $ nameBase name
+
+-- | Create a new name by prefixing @SqlMaybe@ to a given name.
+makeSqlMaybeName :: DeriveEsqueletoRecordSettings -> Name -> Name
+makeSqlMaybeName settings name = mkName $ sqlMaybeNameModifier settings $ nameBase name
 
 -- | Transforms a record field type into a corresponding `SqlExpr` type.
 --
@@ -274,6 +309,37 @@ sqlFieldType fieldType = do
         _ -> (ConT ''SqlExpr)
                 `AppT` ((ConT ''Value)
                         `AppT` fieldType)
+
+-- | Transforms a record field type into a corresponding `SqlExpr` `ToMaybe` type.
+--
+-- * @'Entity' x@ is transformed into @'SqlExpr' ('Maybe' ('Entity' x))@.
+-- * @'Maybe' ('Entity' x)@ is transformed into @'SqlExpr' ('Maybe' ('Maybe' ('Entity' x)))@.
+-- * @x@ is transformed into @'SqlExpr' ('Value' ('Maybe' x))@.
+-- * If there exists an instance @'SqlSelect' sql x@, then @x@ is transformed into @sql@.
+--
+-- This function should match `sqlSelectProcessRowPat`.
+sqlMaybeFieldType :: Type -> Q Type
+sqlMaybeFieldType fieldType = do
+  maybeSqlType <- reifySqlSelectType fieldType
+
+  pure $
+    flip fromMaybe maybeSqlType $
+      case fieldType of
+        -- Field type -> Sql type -> Sql Maybe type
+        -- Entity x -> SqlExpr (Entity x) -> SqlExpr (Maybe (Entity x))
+        AppT (ConT ((==) ''Entity -> True)) _innerType ->
+          (ConT ''SqlExpr) `AppT` ((ConT ''Maybe) `AppT` fieldType)
+
+        -- Maybe (Entity x) -> SqlExpr (Maybe (Entity x)) -> SqlExpr (Maybe (Maybe (Entity x)))
+        (ConT ((==) ''Maybe -> True))
+          `AppT` ((ConT ((==) ''Entity -> True))
+                  `AppT` _innerType) ->
+                    (ConT ''SqlExpr) `AppT` ((ConT ''Maybe) `AppT` ((ConT ''Maybe) `AppT` fieldType))
+
+        -- x -> SqlExpr (Value x) -> SqlExpr (Value (Maybe x))
+        _ -> (ConT ''SqlExpr)
+                `AppT` ((ConT ''Value)
+                        `AppT` ((ConT ''Maybe) `AppT` fieldType)
 
 -- | Generates the declaration for an @Sql@-prefixed record, given the original
 -- record's information.
@@ -652,3 +718,43 @@ toAliasReferenceDec RecordInfo {..} = do
           []
       ]
 
+-- | Generates the declaration for an @SqlMaybe@-prefixed record, given the original
+-- record's information.
+makeSqlMaybeRecord :: RecordInfo -> Q Dec
+makeSqlMaybeRecord  RecordInfo {..} = do
+  let newConstructor = RecC sqlMaybeConstructorName (makeField `map` sqlMaybeFields)
+      derivingClauses = []
+  pure $ DataD constraints sqlName typeVarBinders kind [newConstructor] derivingClauses
+  where
+    makeField (fieldName', fieldType) =
+      (fieldName', Bang NoSourceUnpackedness NoSourceStrictness, fieldType)
+
+
+-- | Generates a `ToMaybe` instance for the given record.
+makeToMaybeInstance :: RecordInfo -> Q Dec
+makeToMaybeInstance info@RecordInfo {..} = do
+  toMaybeTDec' <- toMaybeTDec info
+  toMaybeDec' <- toMaybeDec info
+  let overlap = Nothing
+      instanceConstraints = []
+      instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlName)
+
+  pure $ InstanceD overlap instanceConstraints instanceType [toMaybeTDec', toMaybeDec]
+
+-- | Generates a `type ToMaybeT ... = ...` declaration for the given record.
+toMaybeTDec :: RecordInfo -> Q Dec
+toMaybeTDec RecordInfo {..} = do
+  let binders = Nothing
+      lhs = (ConT ''ToMaybeT) `AppT` (ConT sqlName)
+      rhs = ConT sqlMaybeName
+  pure $ TySynInstD $ TySynEqn binders lhs rhs
+
+-- | Generates a `toMaybe value = ...` declaration for the given record.
+toMaybeDec :: RecordInfo -> Q Dec
+toMaybeDec RecordInfo {..} = do
+  valueName <- newName "value"
+  let patterns = [VarP valueName]
+      body = NormalB $ RecConE sqlMaybeName fields
+      fields = []
+      decs = []
+  pure $ FunD 'toMaybe [Clause patterns body decs]
