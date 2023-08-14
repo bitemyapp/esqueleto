@@ -53,7 +53,10 @@ with query = do
     let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
     Q $ W.tell mempty{sdCteClause = [clause]}
     ref <- toAliasReference ident aliasedValue
-    pure $ From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+    pure $ From $ do
+      newIdent <- newIdentFor (DBName "cte")
+      localRef <- toAliasReference newIdent ref
+      pure (localRef, (\_ info -> (useIdent info ident <> " AS " <> useIdent info newIdent, mempty)))
 
 -- | @WITH@ @RECURSIVE@ allows one to make a recursive subquery, which can
 -- reference itself. Like @WITH@, this is supported in most modern SQL engines.
