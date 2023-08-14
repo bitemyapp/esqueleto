@@ -1,3 +1,9 @@
+3.5.10.2
+========
+- @RikvanToor
+    - [#373](https://github.com/bitemyapp/esqueleto/pull/373)
+        - Fix name clashes when using CTEs multiple times
+
 3.5.10.1
 ========
 - @9999years
