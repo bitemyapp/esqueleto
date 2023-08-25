@@ -2978,7 +2978,7 @@ toRawSql mode (conn, firstIdentState) query =
         -- that no name clashes will occur on subqueries that may
         -- appear on the expressions below.
         info = (projectBackend conn, finalIdentState)
-    in mconcat
+    in mconcat $ intersperse ("\n", [])
         [ makeCte        info cteClause
         , makeInsertInto info mode ret
         , makeSelect     info mode distinctClause ret
@@ -3213,11 +3213,11 @@ makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _ [] = mempty
 makeOrderBy info is =
     let (tlb, vals) = makeOrderByNoNewline info is
-    in ("\n" <> tlb, vals)
+    in (tlb, vals)
 
 makeLimit :: IdentInfo -> LimitClause -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) =
-    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
+    let limitRaw = getConnLimitOffset (v ml, v mo) "" conn
         v :: Maybe Int64 -> Int
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
