@@ -1,3 +1,16 @@
+3.5.10.2
+========
+- @parsonsmatt
+    - [#376](https://github.com/bitemyapp/esqueleto/pull/376)
+        - When using Postgres 15, `LIMIT`, and the `locking` functions, you
+          could accidentally construct SQL code like:
+
+          > ... LIMIT 1FOR UPDATE ...
+
+          This parsed on Postgres <15, but the new Postgres parser is more
+          strict, and fails to parse. This PR introduces newlines between each
+          query chunk, which fixes the issue.
+
 3.5.10.1
 ========
 - @9999years
