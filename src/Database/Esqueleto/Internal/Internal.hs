@@ -2963,6 +2963,15 @@ toRawSql mode (conn, firstIdentState) query =
             flip S.runState firstIdentState $
             W.runWriterT $
             unQ query
+        deleteRepeatedNewlines txt =
+            let
+                (preNewlines, rest) = TL.break (== '\n') txt
+                (_, rest') = TL.break (/= '\n') rest
+             in
+                if TL.null rest'
+                    then preNewlines <> "\n"
+                    else preNewlines <> "\n" <> deleteRepeatedNewlines rest'
+
         SideData distinctClause
                  fromClauses
                  setClauses
@@ -2978,7 +2987,7 @@ toRawSql mode (conn, firstIdentState) query =
         -- that no name clashes will occur on subqueries that may
         -- appear on the expressions below.
         info = (projectBackend conn, finalIdentState)
-    in mconcat $ intersperse ("\n", [])
+    in (\(x, t) -> (TLB.fromLazyText $ deleteRepeatedNewlines $ TL.strip $ TLB.toLazyText x, t)) $ mconcat $ intersperse ("\n", [])
         [ makeCte        info cteClause
         , makeInsertInto info mode ret
         , makeSelect     info mode distinctClause ret
@@ -2991,6 +3000,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeLimit      info limitClause
         , makeLocking    info lockingClause
         ]
+
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
