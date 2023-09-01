@@ -427,21 +427,19 @@ putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 tellReturning :: ReturningClause -> SqlQuery ()
 tellReturning clause = Q $ W.tell mempty { sdReturningClause = clause }
 
-{-#
-  DEPRECATED
-    sub_select
-    "sub_select \n \
-sub_select is an unsafe function to use. If used with a SqlQuery that \n \
-returns 0 results, then it may return NULL despite not mentioning Maybe \n \
-in the return type. If it returns more than 1 result, then it will throw a \n \
-SQL error.\n\n Instead, consider using one of the following alternatives: \n \
-- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
-- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
-  has a Maybe in the return type. \n \
-- subSelectCount: Performs a count of the query - this is always safe. \n \
-- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
-  countRows and friends."
-  #-}
+{-# DEPRECATED sub_select
+  [ "sub_select is an unsafe function to use. If used with a SqlQuery that"
+  , "returns 0 results, then it may return NULL despite not mentioning Maybe"
+  , "in the return type. If it returns more than 1 result, then it will throw a"
+  , "SQL error.\n\n Instead, consider using one of the following alternatives:"
+  , "- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe. "
+  , "- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already"
+  , "  has a Maybe in the return type."
+  , "- subSelectCount: Performs a count of the query - this is always safe."
+  , "- subSelectUnsafe: Performs no checks or guarantees. Safe to use with"
+  , "  countRows and friends."
+  ]
+#-}
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- simple value so should be used only when the @SELECT@ query
 -- is guaranteed to return just one row.
