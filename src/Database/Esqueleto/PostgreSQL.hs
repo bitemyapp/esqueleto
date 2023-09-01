@@ -496,7 +496,7 @@ forShareOf lockableEntities onLockedBehavior =
 --     -- return p -- also works, returning (Entity Person)
 -- @
 --
--- @since 3.5.9.1
+-- @since 3.5.10.2
 updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
                 => (from -> SqlQuery ex)
                 -> R.ReaderT backend m [ret]
@@ -518,7 +518,7 @@ updateReturning block = do
 --     return (p, p ^. PersonName)
 -- @
 --
--- @since 3.5.9.1
+-- @since 3.5.10.2
 deleteReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
                 => (from -> SqlQuery ex)
                 -> R.ReaderT backend m [ret]
