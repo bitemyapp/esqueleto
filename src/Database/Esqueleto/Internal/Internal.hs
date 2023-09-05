@@ -3257,7 +3257,7 @@ makeLocking info (PostgresLockingClauses clauses) =
             makeLockingStrength PostgresForShare = plain "FOR SHARE"
 
             makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
-            makeLockingBehavior NoWait = plain "NO WAIT"
+            makeLockingBehavior NoWait = plain "NOWAIT"
             makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
             makeLockingBehavior Wait = plain ""
 
