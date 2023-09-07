@@ -1,3 +1,9 @@
+3.5.10.3
+========
+- @ttuegel
+    - [#377](https://github.com/bitemyapp/esqueleto/pull/377)
+        - Fix Postgres syntax for `noWait`
+
 3.5.10.2
 ========
 - @parsonsmatt
