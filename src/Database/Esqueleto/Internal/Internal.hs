@@ -1,19 +1,26 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
 {-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
+
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 {-# OPTIONS_GHC -fno-warn-redundant-constraints #-}
@@ -26,8 +33,6 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NEL
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -38,6 +43,8 @@ import Control.Monad.Trans.Resource (MonadResource, release)
 import Data.Acquire (Acquire, allocateAcquire, with)
 import Data.Int (Int64)
 import Data.List (intersperse)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NEL
 import qualified Data.Maybe as Maybe
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
@@ -46,9 +53,12 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
 import qualified Data.HashSet as HS
+import Data.Kind (Type)
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import qualified Data.Monoid as Monoid
 import Data.Proxy (Proxy(..))
@@ -60,18 +70,18 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist.SqlBackend
+import Database.Persist (EntityNameDB(..), FieldNameDB(..), SymbolToField(..))
 import qualified Database.Persist
 import Database.Persist.Sql.Util
        ( entityColumnCount
-       , keyAndEntityColumnNames
        , isIdField
+       , keyAndEntityColumnNames
        , parseEntityValues
        )
-import Text.Blaze.Html (Html)
-import Data.Coerce (coerce)
-import Data.Kind (Type)
+import Database.Persist.SqlBackend
 import GHC.Records
+import GHC.TypeLits
+import Text.Blaze.Html (Html)
 
 -- | (Internal) Start a 'from' query with an entity. 'from'
 -- does two kinds of magic using 'fromStart', 'fromJoin' and
@@ -251,6 +261,13 @@ on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 groupBy :: (ToSomeValues a) => a -> SqlQuery ()
 groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
+-- | An alias for 'groupBy' that avoids conflict with the term from "Data.List"
+-- 'Data.List.groupBy'.
+--
+-- @since 3.5.10.0
+groupBy_ :: (ToSomeValues a) => a -> SqlQuery ()
+groupBy_  = groupBy
+
 -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
 --
 -- Multiple calls to 'orderBy' get concatenated on the final
@@ -395,13 +412,20 @@ having expr = Q $ W.tell mempty { sdHavingClause = Where expr }
 
 -- | Add a locking clause to the query.  Please read
 -- 'LockingKind' documentation and your RDBMS manual.
+-- Unsafe since not all locking clauses are implemented for every RDBMS
 --
 -- If multiple calls to 'locking' are made on the same query,
 -- the last one is used.
 --
 -- @since 2.2.7
 locking :: LockingKind -> SqlQuery ()
-locking kind = Q $ W.tell mempty { sdLockingClause = Monoid.Last (Just kind) }
+locking kind = putLocking $ LegacyLockingClause kind
+
+-- | Helper to add a any type of locking clause to a query
+--
+-- @since 3.5.9.0
+putLocking :: LockingClause -> SqlQuery ()
+putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
 {-#
   DEPRECATED
@@ -642,6 +666,13 @@ isNothing v =
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
     isNullExpr = first ((<> " IS NULL"))
+
+-- | An alias for 'isNothing' that avoids clashing with the function from
+-- "Data.Maybe" 'Data.Maybe.isNothing'.
+--
+-- @since 3.5.10.0
+isNothing_ :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
+isNothing_ = isNothing
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
@@ -1396,6 +1427,21 @@ data Update
 -- | Phantom type used by 'insertSelect'.
 data Insertion a
 
+-- | A left-precedence pair. Pronounced \"and\". Used to represent expressions
+-- that have been joined together.
+--
+-- The precedence behavior can be demonstrated by:
+--
+-- @
+-- a :& b :& c == ((a :& b) :& c)
+-- @
+--
+-- See the examples at the beginning of this module to see how this
+-- operator is used in 'JOIN' operations.
+data (:&) a b = a :& b
+    deriving (Eq, Show)
+infixl 2 :&
+
 -- | Different kinds of locking clauses supported by 'locking'.
 --
 -- Note that each RDBMS has different locking support.  The
@@ -1424,6 +1470,75 @@ data LockingKind
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
+
+-- | Postgres specific locking, used only internally
+--
+-- @since 3.5.9.0
+data PostgresLockingKind =
+    PostgresLockingKind
+        {
+          postgresRowLevelLockStrength :: PostgresRowLevelLockStrength
+        , postgresLockingOfClause :: Maybe LockingOfClause
+        , postgresOnLockedBehavior :: OnLockedBehavior
+        }
+
+-- Arranged in order of lock strength
+data PostgresRowLevelLockStrength =
+    PostgresForUpdate
+    | PostgresForShare
+  deriving (Ord, Eq)
+
+data LockingOfClause where
+    LockingOfClause :: LockableEntity a => a -> LockingOfClause
+
+data OnLockedBehavior =
+    NoWait
+    -- ^ @NOWAIT@ syntax locking behaviour.
+    --  query excutes immediately failing on locked rows
+    --
+    -- @since 3.5.9.0
+      | SkipLocked
+    -- ^ @SKIP LOCKED@ syntax locking behaviour.
+    --  query skips locked rows
+    --
+    -- @since 3.5.9.0
+      | Wait
+    -- ^ default locking behaviour.
+    --  query will wait on locked rows
+    --
+    -- @since 3.5.9.0
+      deriving (Ord, Eq, Show)
+
+
+-- | Lockable entity
+--
+-- Example use:
+--
+-- @
+-- select $ do
+--     (p :& bp) <- from $
+--         table @Person
+--         `innerJoin` table @BlogPost
+--             `on` do
+--                 \(p :& bp) -> p ^. PersonId ==. b ^. BlogPostAuthorId
+--     forUpdateOf (p :& b) skipLocked
+--     return p
+-- @
+class LockableEntity a where
+    flattenLockableEntity :: a -> NonEmpty LockableSqlExpr
+
+makeLockableEntity :: LockableEntity a => IdentInfo -> a -> (TLB.Builder, [PersistValue])
+makeLockableEntity info lockableEntity =
+    uncommas' $ Set.toList . Set.fromList $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
+
+instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
+    flattenLockableEntity e = LockableSqlExpr e :| []
+
+instance (LockableEntity a, LockableEntity b) => LockableEntity (a :& b) where
+    flattenLockableEntity (a :& b) = flattenLockableEntity a <> flattenLockableEntity b
+
+data LockableSqlExpr where
+    LockableSqlExpr :: PersistEntity val => (SqlExpr (Entity val)) -> LockableSqlExpr
 
 -- | Phantom class of data types that are treated as strings by the
 -- RDBMS.  It has no methods because it's only used to avoid type
@@ -1983,10 +2098,24 @@ instance Semigroup LimitClause where
 
 instance Monoid LimitClause where
   mempty = Limit mzero mzero
-  mappend = (<>)
 
 -- | A locking clause.
-type LockingClause = Monoid.Last LockingKind
+data LockingClause =
+    LegacyLockingClause LockingKind
+    -- ^ Locking clause not specific to any database implementation
+    | PostgresLockingClauses [PostgresLockingKind]
+    -- ^ Locking clause specific to postgres
+    | NoLockingClause
+
+instance Semigroup LockingClause where
+  -- Postgres allows us to have multiple locking clauses
+    (<>) (PostgresLockingClauses pleft) (PostgresLockingClauses pright) = PostgresLockingClauses (pleft <> pright)
+    (<>) mleft NoLockingClause = mleft
+    (<>) _ mright = mright
+--
+instance Monoid LockingClause where
+    mempty = NoLockingClause
+    mappend = (<>)
 
 ----------------------------------------------------------------------
 
@@ -2103,6 +2232,46 @@ entityAsValueMaybe = coerce
 -- string ('TLB.Builder') and a list of values to be
 -- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
+
+-- | Folks often want the ability to promote a Haskell function into the
+-- 'SqlExpr' expression language - and naturally reach for 'fmap'.
+-- Unfortunately, this is impossible. We cannot send *functions* to the
+-- database, which is what we would need to do in order for this to make sense.
+-- Let's consider the type of 'fmap' for 'SqlExpr':
+--
+-- @
+-- fmap :: (a -> b) -> 'SqlExpr' a -> 'SqlExpr' b
+-- @
+--
+-- This type signature is making a pretty strong claim: "Give me a Haskell
+-- function from @a -> b@. I will then transform a SQL expression representing
+-- a Haskell value of type @a@ and turn it into a SQL expression representing
+-- a Haskell value of type @b@."
+--
+-- Let's suppose we *could* do this - @fmap (+1)@ would have to somehow inspect
+-- the function expression means "add one", and then translate that to the
+-- appropriate SQL.
+--
+-- This is why @esqueleto@ defines a bunch of operators: @x '+.' ('val' 1)@ can
+-- be used instead of @'fmap' (+1) x@.
+--
+-- If you do have a SQL function, then you can provide a safe type and introduce
+-- it with 'unsafeSqlFunction' or 'unsafeSqlBinOp'.
+--
+-- @since 3.5.8.2
+instance TypeError SqlExprFunctorMessage => Functor SqlExpr where
+    fmap = error "impossible"
+
+-- | The type error message given when you try to do 'fmap' on a 'SqlExpr'. This
+-- is intended to guide folks towards the docs, which should guide them towards
+-- alternative implementations.
+--
+-- @since 3.5.8.2
+type SqlExprFunctorMessage =
+    'Text "You're trying to treat `SqlExpr` like a `Functor`, but it cannot be one."
+    ':$$: 'Text "We would need to send arbitrary functions to the database for interpretation to support that instance."
+    ':$$: 'Text "See the docs for the fake instance of `Functor SqlExpr` for more information."
+    ':$$: 'Text "Consider using a SQL function with `unsafeSqlFunction` and a good type signature."
 
 -- |  This instance allows you to use @record.field@ notation with GHC 9.2's
 -- @OverloadedRecordDot@ extension.
@@ -2794,6 +2963,15 @@ toRawSql mode (conn, firstIdentState) query =
             flip S.runState firstIdentState $
             W.runWriterT $
             unQ query
+        deleteRepeatedNewlines txt =
+            let
+                (preNewlines, rest) = TL.break (== '\n') txt
+                (_, rest') = TL.break (/= '\n') rest
+             in
+                if TL.null rest'
+                    then preNewlines <> "\n"
+                    else preNewlines <> "\n" <> deleteRepeatedNewlines rest'
+
         SideData distinctClause
                  fromClauses
                  setClauses
@@ -2809,7 +2987,7 @@ toRawSql mode (conn, firstIdentState) query =
         -- that no name clashes will occur on subqueries that may
         -- appear on the expressions below.
         info = (projectBackend conn, finalIdentState)
-    in mconcat
+    in (\(x, t) -> (TLB.fromLazyText $ deleteRepeatedNewlines $ TL.strip $ TLB.toLazyText x, t)) $ mconcat $ intersperse ("\n", [])
         [ makeCte        info cteClause
         , makeInsertInto info mode ret
         , makeSelect     info mode distinctClause ret
@@ -2820,8 +2998,9 @@ toRawSql mode (conn, firstIdentState) query =
         , makeHaving     info havingClause
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
-        , makeLocking         lockingClause
+        , makeLocking    info lockingClause
         ]
+
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
@@ -3044,22 +3223,50 @@ makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _ [] = mempty
 makeOrderBy info is =
     let (tlb, vals) = makeOrderByNoNewline info is
-    in ("\n" <> tlb, vals)
+    in (tlb, vals)
 
 makeLimit :: IdentInfo -> LimitClause -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) =
-    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
+    let limitRaw = getConnLimitOffset (v ml, v mo) "" conn
         v :: Maybe Int64 -> Int
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
 
-makeLocking :: LockingClause -> (TLB.Builder, [PersistValue])
-makeLocking = flip (,) [] . maybe mempty toTLB . Monoid.getLast
-  where
-    toTLB ForUpdate           = "\nFOR UPDATE"
-    toTLB ForUpdateSkipLocked = "\nFOR UPDATE SKIP LOCKED"
-    toTLB ForShare            = "\nFOR SHARE"
-    toTLB LockInShareMode     = "\nLOCK IN SHARE MODE"
+makeLocking :: IdentInfo -> LockingClause -> (TLB.Builder, [PersistValue])
+makeLocking _ (LegacyLockingClause lockingClause) =
+    case lockingClause of
+        ForUpdate           -> ("\nFOR UPDATE", [])
+        ForUpdateSkipLocked -> ("\nFOR UPDATE SKIP LOCKED", [])
+        ForShare            -> ("\nFOR SHARE", [])
+        LockInShareMode     -> ("\nLOCK IN SHARE MODE", [])
+makeLocking info (PostgresLockingClauses clauses) =
+    List.foldl' combineBuilderValPairs ("",[]) (makePostgresLockingClauses <$> clauses)
+        where
+            combineBuilderValPairs (builder1, persistvals1) (builder2,persistvals2) =
+                (builder1 <> builder2 <> "\n", persistvals1 <> persistvals2)
+
+            makePostgresLockingClauses :: PostgresLockingKind -> (TLB.Builder , [PersistValue])
+            makePostgresLockingClauses l =
+                makeLockingStrength (postgresRowLevelLockStrength l)
+                    <> plain " "
+                    <> makeOfClause (postgresLockingOfClause l)
+                    <> plain " "
+                    <> makeLockingBehavior (postgresOnLockedBehavior l)
+            makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
+            makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
+            makeLockingStrength PostgresForShare = plain "FOR SHARE"
+
+            makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
+            makeLockingBehavior NoWait = plain "NOWAIT"
+            makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
+            makeLockingBehavior Wait = plain ""
+
+            makeOfClause :: Maybe LockingOfClause -> (TLB.Builder, [PersistValue])
+            makeOfClause (Just (LockingOfClause lockableEnts)) = plain "OF " <> makeLockableEntity info lockableEnts
+            makeOfClause Nothing = plain ""
+
+            plain v = (v,[])
+makeLocking _ NoLockingClause = mempty
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
@@ -3497,6 +3704,9 @@ instance ( SqlSelect a ra
 from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
 from11P = const Proxy
 
+from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+
 to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
 to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
 
@@ -3533,6 +3743,9 @@ instance ( SqlSelect a ra
 
 from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 from12P = const Proxy
+
+from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 
 to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
 to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
@@ -3572,6 +3785,9 @@ instance ( SqlSelect a ra
 
 from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 from13P = const Proxy
+
+from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 
 to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
 to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
@@ -3613,6 +3829,9 @@ instance ( SqlSelect a ra
 
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
+
+from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 
 to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
@@ -3656,6 +3875,9 @@ instance ( SqlSelect a ra
 
 from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 from15P = const Proxy
+
+from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 
 to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
 to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
@@ -3701,6 +3923,9 @@ instance ( SqlSelect a ra
 
 from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 from16P = const Proxy
+
+from16 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)

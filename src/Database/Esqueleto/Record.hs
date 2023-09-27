@@ -37,9 +37,9 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 -- with data extracted with esqueleto.
 --
 -- Note that because the input record and the @Sql@-prefixed record share field
--- names, the @{-# LANGUAGE DuplicateRecordFields #-}@ extension is required in
--- modules that use `deriveEsqueletoRecord`. Additionally, the @{-# LANGUAGE
--- TypeApplications #-}@ extension is required for some of the generated code.
+-- names, the @{-\# LANGUAGE DuplicateRecordFields \#-}@ extension is required in
+-- modules that use `deriveEsqueletoRecord`. Additionally, the @{-\# LANGUAGE
+-- TypeApplications \#-}@ extension is required for some of the generated code.
 --
 -- Given the following record:
 --
@@ -57,7 +57,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 -- @
 -- data SqlMyRecord =
 --   SqlMyRecord { myName    :: 'SqlExpr' ('Value' Text)
---               , myAge     :: 'SqlExpr' ('Value' Int)
+--               , myAge     :: 'SqlExpr' ('Value' ('Maybe' Int))
 --               , myUser    :: 'SqlExpr' ('Entity' User)
 --               , myAddress :: 'SqlExpr' ('Maybe' ('Entity' Address))
 --               }
@@ -75,7 +75,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --   'sqlSelectColCount' _ =
 --     'sqlSelectColCount'
 --       ('Proxy' \@(   ('SqlExpr' ('Value' Text))
---                :& ('SqlExpr' ('Value' Int))
+--                :& ('SqlExpr' ('Value' ('Maybe' Int)))
 --                :& ('SqlExpr' ('Entity' User))
 --                :& ('SqlExpr' ('Maybe' ('Entity' Address)))))
 --
@@ -85,7 +85,7 @@ import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
 --     where
 --       process = do
 --         'Value' myName <- 'takeColumns' \@('SqlExpr' ('Value' Text))
---         'Value' myAge  <- 'takeColumns' \@('SqlExpr' ('Value' Int))
+--         'Value' myAge  <- 'takeColumns' \@('SqlExpr' ('Value' ('Maybe' Int)))
 --         myUser       <- 'takeColumns' \@('SqlExpr' ('Entity' User))
 --         myAddress    <- 'takeColumns' \@('SqlExpr' ('Maybe' ('Entity' Address)))
 --         'pure' MyRecord { myName = myName

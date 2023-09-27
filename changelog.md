@@ -1,3 +1,63 @@
+3.5.10.3
+========
+- @ttuegel
+    - [#377](https://github.com/bitemyapp/esqueleto/pull/377)
+        - Fix Postgres syntax for `noWait`
+
+3.5.10.2
+========
+- @parsonsmatt
+    - [#376](https://github.com/bitemyapp/esqueleto/pull/376)
+        - When using Postgres 15, `LIMIT`, and the `locking` functions, you
+          could accidentally construct SQL code like:
+
+          > ... LIMIT 1FOR UPDATE ...
+
+          This parsed on Postgres <15, but the new Postgres parser is more
+          strict, and fails to parse. This PR introduces newlines between each
+          query chunk, which fixes the issue.
+
+3.5.10.1
+========
+- @9999years
+    - [#369](https://github.com/bitemyapp/esqueleto/pull/369)
+        - Fix `myAge` type in `deriveEsqueletoRecord` documentation
+
+3.5.10.0
+========
+- @ivanbakel
+    - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
+        - Add `ToAlias` instances for 9- to 16-tuples
+        - Add `ToAliasReference` instances for 9- to 16-tuples
+- @parsonsmatt
+    - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
+        - Add `isNothing_` and `groupBy_` to avoid name conflicts with
+          `Data.List` and `Data.Maybe`.
+
+3.5.9.1
+=======
+- @duplode
+    - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
+      - Add missing `just` to left join examples in the Haddocks
+
+
+3.5.9.0
+=======
+- @9999years
+    - [#350](https://github.com/bitemyapp/esqueleto/pull/350)
+      - Add `GetFirstTable`, `getTable`, `getTableMaybe` helpers for selecting
+        tables from `:&` chains
+- @josephsumabat
+    - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
+      - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
+- @parsonsmatt
+    - [#342](https://github.com/bitemyapp/esqueleto/pull/342)
+        - Create a `TypeError` instance for `Functor SqlExpr`, adding
+          documentation and work arounds for the need.
+- @9999years
+    - [#327](https://github.com/bitemyapp/esqueleto/pull/327)
+        - Fixed a Haddock typo causing documentation to render incorrectly
+
 3.5.8.1
 =======
 - @belevy
@@ -22,7 +82,7 @@
 =======
 - @belevy
     - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
-        - Fix alias name bug with union and subselect 
+        - Fix alias name bug with union and subselect
 
 3.5.7.0
 =======
