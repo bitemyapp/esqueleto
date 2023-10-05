@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -8,7 +9,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedLabels #-}
-{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -17,6 +17,10 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+#if __GLASGOW_HASKELL__ >= 902
+{-# LANGUAGE OverloadedRecordDot #-}
+#endif
 
 -- Tests for `Database.Esqueleto.Record`.
 module Common.Record (testDeriveEsqueletoRecord) where
@@ -29,14 +33,16 @@ import Data.Maybe (catMaybes)
 import Data.Proxy (Proxy(..))
 import Database.Esqueleto.Experimental
 import Database.Esqueleto.Internal.Internal (SqlSelect(..))
-import Database.Esqueleto.Record
-  ( DeriveEsqueletoRecordSettings(..)
-  , defaultDeriveEsqueletoRecordSettings
-  , deriveEsqueletoRecord
-  , deriveEsqueletoRecordWith
-  , takeColumns
-  , takeMaybeColumns
-  )
+import Database.Esqueleto.Record (
+  DeriveEsqueletoRecordSettings(..),
+  defaultDeriveEsqueletoRecordSettings,
+  deriveEsqueletoRecord,
+  deriveEsqueletoRecordWith,
+  takeColumns,
+  takeMaybeColumns,
+ )
+
+#if __GLASGOW_HASKELL__ >= 902
 
 data MyRecord =
     MyRecord
@@ -313,3 +319,8 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                                                     }
                                               })) -> True
                  _ -> True)
+
+#else
+    it "is only supported in GHC 9.2 or above" $ \_ -> do
+        pending
+#endif
