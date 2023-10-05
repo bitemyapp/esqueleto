@@ -42,8 +42,8 @@ import Database.Esqueleto.Record (
   takeMaybeColumns,
  )
 
-#if __GLASGOW_HASKELL__ >= 902
 
+#if __GLASGOW_HASKELL__ >= 902
 data MyRecord =
     MyRecord
         { myName :: Text
@@ -135,9 +135,12 @@ mySubselectRecordQuery = do
       myRecordQuery
       `on` (do \(user :& record) -> just (user ^. #id) ==. record.myUser ?. #id)
   pure $ record.myAddress
+#endif
 
 testDeriveEsqueletoRecord :: SpecDb
 testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
+#if __GLASGOW_HASKELL__ >= 902
+
     let setup :: MonadIO m => SqlPersistT m ()
         setup = do
           _ <- insert $ User { userAddress = Nothing, userName = "Rebecca" }
