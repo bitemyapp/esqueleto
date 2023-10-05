@@ -877,7 +877,11 @@ sqlMaybeSelectProcessRowDec RecordInfo {..} = do
   colsName <- newName "columns"
 
   let
+#if MIN_VERSION_template_haskell(2,17,0)
     bodyExp = DoE Nothing
+#else
+    bodyExp = DoE
+#endif
         [ BindS joinedFields (AppE (VarE 'sqlSelectProcessRow) (VarE colsName))
         , NoBindS
             $ AppE (VarE 'pure) (
