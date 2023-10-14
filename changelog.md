@@ -3,7 +3,7 @@
 - @9999years, @halogenandtoast
     - [#378](https://github.com/bitemyapp/esqueleto/pull/378)
         - `ToMaybe` instances are now derived for records so you can now left
-          join in queries
+          join them in queries
 
 3.5.10.1
 ========
