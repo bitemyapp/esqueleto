@@ -42,7 +42,6 @@ import Database.Esqueleto.Record (
   takeMaybeColumns,
  )
 
-
 #if __GLASGOW_HASKELL__ >= 902
 data MyRecord =
     MyRecord
@@ -318,6 +317,29 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case ( _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
+                                                                    , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                                                    }
+                                              })) -> True
+                 _ -> True)
+
+    itDb "can handle multiple left joins on the same record" $ do
+        setup
+        records <- select $ do
+          from
+            ( table @User
+                `leftJoin` myNestedRecordQuery
+                `on` (do \(user :& record) -> just (user ^. #id) ==. record.myRecord.myUser ?. #id)
+                `leftJoin` myNestedRecordQuery
+                `on` (do \(user :& record1 :& record2) -> record1.myRecord.myUser ?. #id ==. record2.myRecord.myUser ?. #id)
+            )
+        let sortedRecords = sortOn (\(Entity _ user :& _ :& _) -> user.userName) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case (_ :& _ :& Just (MyNestedRecord {myRecord = MyRecord {myName = "Rebecca", myAddress = Nothing}})) -> True
+                 _ -> False)
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case ( _ :& _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
                                                                     , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
