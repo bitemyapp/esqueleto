@@ -2963,6 +2963,15 @@ toRawSql mode (conn, firstIdentState) query =
             flip S.runState firstIdentState $
             W.runWriterT $
             unQ query
+        deleteRepeatedNewlines txt =
+            let
+                (preNewlines, rest) = TL.break (== '\n') txt
+                (_, rest') = TL.break (/= '\n') rest
+             in
+                if TL.null rest'
+                    then preNewlines <> "\n"
+                    else preNewlines <> "\n" <> deleteRepeatedNewlines rest'
+
         SideData distinctClause
                  fromClauses
                  setClauses
@@ -2978,7 +2987,7 @@ toRawSql mode (conn, firstIdentState) query =
         -- that no name clashes will occur on subqueries that may
         -- appear on the expressions below.
         info = (projectBackend conn, finalIdentState)
-    in mconcat
+    in (\(x, t) -> (TLB.fromLazyText $ deleteRepeatedNewlines $ TL.strip $ TLB.toLazyText x, t)) $ mconcat $ intersperse ("\n", [])
         [ makeCte        info cteClause
         , makeInsertInto info mode ret
         , makeSelect     info mode distinctClause ret
@@ -2991,6 +3000,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeLimit      info limitClause
         , makeLocking    info lockingClause
         ]
+
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
@@ -3213,11 +3223,11 @@ makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _ [] = mempty
 makeOrderBy info is =
     let (tlb, vals) = makeOrderByNoNewline info is
-    in ("\n" <> tlb, vals)
+    in (tlb, vals)
 
 makeLimit :: IdentInfo -> LimitClause -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) =
-    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
+    let limitRaw = getConnLimitOffset (v ml, v mo) "" conn
         v :: Maybe Int64 -> Int
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
@@ -3247,7 +3257,7 @@ makeLocking info (PostgresLockingClauses clauses) =
             makeLockingStrength PostgresForShare = plain "FOR SHARE"
 
             makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
-            makeLockingBehavior NoWait = plain "NO WAIT"
+            makeLockingBehavior NoWait = plain "NOWAIT"
             makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
             makeLockingBehavior Wait = plain ""
 

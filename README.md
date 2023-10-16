@@ -219,7 +219,7 @@ Advantages:
 - `ON` clause is attached directly to the relevant join, so you never need to
   worry about how they're ordered, nor will you ever run into bugs where the
   `on` clause is on the wrong `JOIN`
-- The `ON` clause lambda will all the available tables in it. This forbids
+- The `ON` clause lambda will exclusively have all the available tables in it. This forbids
   runtime errors where an `ON` clause refers to a table that isn't in scope yet.
 - You can join on a table twice, and the aliases work out fine with the `ON`
   clause.

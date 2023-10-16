@@ -1423,6 +1423,15 @@ testPostgresqlLocking = do
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
+    describe "noWait" $ do
+        itDb "doesn't crash" $ do
+            select $ do
+                t <- Experimental.from $ table @Person
+                EP.forUpdateOf t EP.noWait
+                pure t
+
+            asserting noExceptions
+
 -- Since lateral queries arent supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
 testLateralQuery :: SpecDb
