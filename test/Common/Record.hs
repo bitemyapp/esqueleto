@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DuplicateRecordFields #-}
@@ -17,10 +16,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
-
-#if __GLASGOW_HASKELL__ >= 902
-{-# LANGUAGE OverloadedRecordDot #-}
-#endif
 
 -- Tests for `Database.Esqueleto.Record`.
 module Common.Record (testDeriveEsqueletoRecord) where
@@ -41,8 +36,8 @@ import Database.Esqueleto.Record (
   takeColumns,
   takeMaybeColumns,
  )
+import GHC.Records
 
-#if __GLASGOW_HASKELL__ >= 902
 data MyRecord =
     MyRecord
         { myName :: Text
@@ -132,14 +127,11 @@ mySubselectRecordQuery = do
     table @User
       `leftJoin`
       myRecordQuery
-      `on` (do \(user :& record) -> just (user ^. #id) ==. record.myUser ?. #id)
-  pure $ record.myAddress
-#endif
+      `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" record ?. #id)
+  pure $ getField @"myAddress" record
 
 testDeriveEsqueletoRecord :: SpecDb
 testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
-#if __GLASGOW_HASKELL__ >= 902
-
     let setup :: MonadIO m => SqlPersistT m ()
         setup = do
           _ <- insert $ User { userAddress = Nothing, userName = "Rebecca" }
@@ -266,9 +258,9 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         records <- select $ do
           from
             ( table @User
-                `leftJoin` myRecordQuery `on` (do \(user :& record) -> just (user ^. #id) ==. record.myUser ?. #id)
+                `leftJoin` myRecordQuery `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" record ?. #id)
             )
-        let sortedRecords = sortOn (\(Entity _ user :& _) -> user.userName) records
+        let sortedRecords = sortOn (\(Entity _ user :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case (_ :& Just (MyRecord {myName = "Rebecca", myAddress = Nothing})) -> True
@@ -286,9 +278,9 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         records <- select $ do
           from
             ( table @User
-                `leftJoin` myRecordQuery `on` (do \(user :& record) -> user ^. #address ==. record.myAddress ?. #id)
+                `leftJoin` myRecordQuery `on` (do \(user :& record) -> user ^. #address ==. getField @"myAddress" record ?. #id)
             )
-        let sortedRecords = sortOn (\(Entity _ user :& _) -> user.userName) records
+        let sortedRecords = sortOn (\(Entity _ user :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case (_ :& Nothing) -> True
@@ -307,9 +299,9 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
           from
             ( table @User
                 `leftJoin` myNestedRecordQuery
-                `on` (do \(user :& record) -> just (user ^. #id) ==. record.myRecord.myUser ?. #id)
+                `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" (getField @"myRecord" record) ?. #id)
             )
-        let sortedRecords = sortOn (\(Entity _ user :& _) -> user.userName) records
+        let sortedRecords = sortOn (\(Entity _ user :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case (_ :& Just (MyNestedRecord {myRecord = MyRecord {myName = "Rebecca", myAddress = Nothing}})) -> True
@@ -328,11 +320,11 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
           from
             ( table @User
                 `leftJoin` myNestedRecordQuery
-                `on` (do \(user :& record) -> just (user ^. #id) ==. record.myRecord.myUser ?. #id)
+                `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" (getField @"myRecord" record) ?. #id)
                 `leftJoin` myNestedRecordQuery
-                `on` (do \(user :& record1 :& record2) -> record1.myRecord.myUser ?. #id !=. record2.myRecord.myUser ?. #id)
+                `on` (do \(user :& record1 :& record2) -> getField @"myUser" (getField @"myRecord" record1) ?. #id !=. getField @"myUser" (getField @"myRecord" record2) ?. #id)
             )
-        let sortedRecords = sortOn (\(Entity _ user :& _ :& _) -> user.userName) records
+        let sortedRecords = sortOn (\(Entity _ user :& _ :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case ( _ :& _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
@@ -344,8 +336,3 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
           `shouldSatisfy`
           (\case (_ :& _ :& Just (MyNestedRecord {myRecord = MyRecord {myName = "Rebecca", myAddress = Nothing}})) -> True
                  _ -> False)
-
-#else
-    it "is only supported in GHC 9.2 or above" $ \_ -> do
-        pending
-#endif
