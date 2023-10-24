@@ -760,7 +760,7 @@ toMaybeTDec RecordInfo {..} = do
 #if MIN_VERSION_template_haskell(2,15,0)
   pure $ TySynInstD $ TySynEqn binders lhs rhs
 #else
-  pure $ TySynInstD $ TySynEqn lhs rhs
+  pure $ TySynInstD sqlName $ TySynEqn [lhs] rhs
 #endif
 
 -- | Generates a `toMaybe value = ...` declaration for the given record.
