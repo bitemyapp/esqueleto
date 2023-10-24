@@ -757,7 +757,11 @@ toMaybeTDec RecordInfo {..} = do
   let binders = Nothing
       lhs = (ConT ''ToMaybeT) `AppT` (ConT sqlName)
       rhs = ConT sqlMaybeName
+#if MIN_VERSION_template_haskell(2,15,0)
   pure $ TySynInstD $ TySynEqn binders lhs rhs
+#else
+  pure $ TySynInstD $ TySynEqn lhs rhs
+#endif
 
 -- | Generates a `toMaybe value = ...` declaration for the given record.
 toMaybeDec :: RecordInfo -> Q Dec
