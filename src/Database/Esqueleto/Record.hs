@@ -754,13 +754,16 @@ makeToMaybeInstance info@RecordInfo {..} = do
 -- | Generates a `type ToMaybeT ... = ...` declaration for the given record.
 toMaybeTDec :: RecordInfo -> Q Dec
 toMaybeTDec RecordInfo {..} = do
-  let binders = Nothing
-      lhs = (ConT ''ToMaybeT) `AppT` (ConT sqlName)
-      rhs = ConT sqlMaybeName
+  pure $ mkTySynInstD ''ToMaybeT (ConT sqlName) (ConT sqlMaybeName)
+  where
+    mkTySynInstD className lhsArg rhs =
 #if MIN_VERSION_template_haskell(2,15,0)
-  pure $ TySynInstD $ TySynEqn binders lhs rhs
+        let binders = Nothing
+            lhs = ConT className `AppT` lhsArg
+        in
+            TySynInstD $ TySynEqn binders lhs rhs
 #else
-  pure $ TySynInstD sqlName $ TySynEqn [lhs] rhs
+       TySynInstD className $ TySynEqn [lhsArg] rhs
 #endif
 
 -- | Generates a `toMaybe value = ...` declaration for the given record.
