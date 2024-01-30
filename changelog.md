@@ -4,6 +4,9 @@
     - [#378](https://github.com/bitemyapp/esqueleto/pull/378)
         - `ToMaybe` instances are now derived for records so you can now left
           join them in queries
+- @arguri
+    - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
+        - Fix build for ghc 9.8.1 / template-haskell 2.18
 
 3.5.10.3
 ========
