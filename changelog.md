@@ -1,3 +1,9 @@
+3.5.11.2
+========
+- @arguri
+    - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
+        - Fix build for ghc 9.8.1 / template-haskell 2.18
+
 3.5.11.0
 ========
 - @9999years, @halogenandtoast

@@ -214,7 +214,9 @@ data RecordInfo = RecordInfo
     -- cause problems, but it's easy to pass around so might as well.
     constraints :: Cxt
   , -- | The original record's type-variable-binders.
-#if MIN_VERSION_template_haskell(2,17,0)
+#if MIN_VERSION_template_haskell(2,21,0)
+    typeVarBinders :: [TyVarBndr BndrVis]
+#elif MIN_VERSION_template_haskell(2,17,0)
     typeVarBinders :: [TyVarBndr ()]
 #else
     typeVarBinders :: [TyVarBndr]
