@@ -1,4 +1,4 @@
-3.5.11.1
+3.5.11.2
 ========
 - @arguri
     - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
