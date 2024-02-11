@@ -34,6 +34,10 @@ module Database.Esqueleto.PostgreSQL
     , forShareOf
     , filterWhere
     , values
+    , ascNullsFirst
+    , ascNullsLast
+    , descNullsFirst
+    , descNullsLast
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -477,3 +481,21 @@ forUpdateOf lockableEntities onLockedBehavior =
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | Ascending order of this field or SqlExpression with nulls coming first.
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Ascending order of this field or SqlExpression with nulls coming last.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsLast = orderByExpr " ASC NULLS LAST"
+
+-- | Descending order of this field or SqlExpression with nulls coming first.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsFirst = orderByExpr " DESC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming last.
+descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsLast = orderByExpr " DESC NULLS LAST"
