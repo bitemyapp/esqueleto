@@ -49,21 +49,21 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
   YetAnother
     argh ShoopId
 
-  Person
+  Person json
     name String
     age Int Maybe
     weight Int Maybe
     favNum Int
     deriving Eq Show Ord
-  BlogPost
+  BlogPost json
     title String
     authorId PersonId
     deriving Eq Show
-  Comment
+  Comment json
     body String
     blog BlogPostId
     deriving Eq Show
-  CommentReply
+  CommentReply json
     body String
     comment CommentId
   Profile
