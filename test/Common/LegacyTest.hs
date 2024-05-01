@@ -1447,205 +1447,207 @@ testCase = do
 
 testLocking :: SpecDb
 testLocking = do
-  let toText conn q =
-        let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
-         in TLB.toLazyText tlb
-      complexQuery =
-        from $ \(p1' `InnerJoin` p2') -> do
-        on (p1' ^. PersonName ==. p2' ^. PersonName)
-        where_ (p1' ^. PersonFavNum >. val 2)
-        orderBy [desc (p2' ^. PersonAge)]
-        limit 3
-        offset 9
-        groupBy (p1' ^. PersonId)
-        having (countRows <. val (0 :: Int))
-        return (p1', p2')
-  describe "locking" $ do
-    -- The locking clause is the last one, so try to use many
-    -- others to test if it's at the right position.  We don't
-    -- care about the text of the rest, nor with the RDBMS'
-    -- reaction to the clause.
-    let sanityCheck kind syntax = do
-          let queryWithClause1 = do
-                 r <- complexQuery
-                 locking kind
-                 return r
-              queryWithClause2 = do
-                locking ForUpdate
-                r <- complexQuery
-                locking ForShare
-                locking kind
-                return r
-              queryWithClause3 = do
-                locking kind
-                complexQuery
-          conn <- ask
-          [complex, with1, with2, with3] <-
-            return $
-              map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
-          let expected = complex <> syntax
-          asserting $ do
-              TL.strip with1 `shouldBe` expected
-              TL.strip with2 `shouldBe` expected
-              TL.strip with3 `shouldBe` expected
-    itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
-    itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
-    itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
-    itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
+    let toText conn q =
+            let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+             in TLB.toLazyText tlb
+        complexQuery =
+            from $ \(p1' `InnerJoin` p2') -> do
+            on (p1' ^. PersonName ==. p2' ^. PersonName)
+            where_ (p1' ^. PersonFavNum >. val 2)
+            orderBy [desc (p2' ^. PersonAge)]
+            limit 3
+            offset 9
+            groupBy (p1' ^. PersonId)
+            having (countRows <. val (0 :: Int))
+            return (p1', p2')
+    describe "locking" $ do
+        -- The locking clause is the last one, so try to use many
+        -- others to test if it's at the right position.  We don't
+        -- care about the text of the rest, nor with the RDBMS'
+        -- reaction to the clause.
+        let sanityCheck kind syntax = do
+              let queryWithClause1 = do
+                      r <- complexQuery
+                      locking kind
+                      return r
+                  queryWithClause2 = do
+                      locking ForUpdate
+                      r <- complexQuery
+                      locking ForShare
+                      locking kind
+                      return r
+                  queryWithClause3 = do
+                      locking kind
+                      complexQuery
+              conn <- ask
+              [complex, with1, with2, with3] <-
+                  return $
+                      map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
+              let expected = complex <> syntax
+              asserting $ do
+                  TL.strip with1 `shouldBe` expected
+                  TL.strip with2 `shouldBe` expected
+                  TL.strip with3 `shouldBe` expected
+        itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
+        itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
+        itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
+        itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
 testCountingRows :: SpecDb
 testCountingRows = do
-  describe "counting rows" $ do
-    forM_ [ ("count (test A)",    count . (^. PersonAge),         4)
-          , ("count (test B)",    count . (^. PersonWeight),      5)
-          , ("countRows",         const countRows,                5)
-          , ("countDistinct",     countDistinct . (^. PersonAge), 2) ] $
-      \(title, countKind, expected) ->
-      itDb (title ++ " works as expected") $
-        do
-          mapM_ insert
-            [ Person "" (Just 1) (Just 1) 1
-            , Person "" (Just 2) (Just 1) 1
-            , Person "" (Just 2) (Just 1) 1
-            , Person "" (Just 2) (Just 2) 1
-            , Person "" Nothing  (Just 3) 1]
-          [Value n] <- select $ from $ return . countKind
-          asserting $ (n :: Int) `shouldBe` expected
+    describe "counting rows" $ do
+        let cases =
+                [ ("count (test A)",    count . (^. PersonAge),         4)
+                , ("count (test B)",    count . (^. PersonWeight),      5)
+                , ("countRows",         const countRows,                5)
+                , ("countDistinct",     countDistinct . (^. PersonAge), 2)
+                ]
+        forM_ cases $ \(title, countKind, expected) -> do
+          itDb (title ++ " works as expected") $ do
+              insertMany_
+                  [ Person "" (Just 1) (Just 1) 1
+                  , Person "" (Just 2) (Just 1) 1
+                  , Person "" (Just 2) (Just 1) 1
+                  , Person "" (Just 2) (Just 2) 1
+                  , Person "" Nothing  (Just 3) 1
+                  ]
+              [Value n] <- select $ from $ return . countKind
+              asserting $ (n :: Int) `shouldBe` expected
 
 testRenderSql :: SpecDb
 testRenderSql = do
-  describe "testRenderSql" $ do
-    itDb "works" $ do
-      (queryText, queryVals) <- renderQuerySelect $
-        from $ \p -> do
-        where_ $ p ^. PersonName ==. val "Johhny Depp"
-        pure (p ^. PersonName, p ^. PersonAge)
-      -- the different backends use different quote marks, so I filter them out
-      -- here instead of making a duplicate test
-      asserting $ do
-          Text.filter (\c -> c `notElem` ['`', '"']) queryText
-            `shouldBe`
-              Text.unlines
-                [ "SELECT Person.name, Person.age"
-                , "FROM Person"
-                , "WHERE Person.name = ?"
-                ]
-          queryVals
-            `shouldBe`
-              [toPersistValue ("Johhny Depp" :: TL.Text)]
+    describe "testRenderSql" $ do
+        itDb "works" $ do
+            (queryText, queryVals) <- renderQuerySelect $
+                from $ \p -> do
+                where_ $ p ^. PersonName ==. val "Johhny Depp"
+                pure (p ^. PersonName, p ^. PersonAge)
+            -- the different backends use different quote marks, so I filter them out
+            -- here instead of making a duplicate test
+            asserting $ do
+                Text.filter (\c -> c `notElem` ['`', '"']) queryText
+                  `shouldBe`
+                    Text.unlines
+                      [ "SELECT Person.name, Person.age"
+                      , "FROM Person"
+                      , "WHERE Person.name = ?"
+                      ]
+                queryVals
+                  `shouldBe`
+                    [toPersistValue ("Johhny Depp" :: TL.Text)]
 
-  describe "renderExpr" $ do
-    itDb "renders a value" $ do
-      (c, expr) <- do
-        conn <- ask
-        let Right c = P.mkEscapeChar conn
-        let user = EI.unsafeSqlEntity (EI.I "user")
-            blogPost = EI.unsafeSqlEntity (EI.I "blog_post")
-        pure $ (,) c $ EI.renderExpr conn $
-          user ^. PersonId ==. blogPost ^. BlogPostAuthorId
-      asserting $ do
-          expr
-            `shouldBe`
-              Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
-              <>
-              " = "
-              <>
-              Text.intercalate (Text.singleton c) ["", "blog_post", ".", "authorId", ""]
+        describe "renderExpr" $ do
+            itDb "renders a value" $ do
+                (c, expr) <- do
+                    conn <- ask
+                    let Right c = P.mkEscapeChar conn
+                    let user = EI.unsafeSqlEntity (EI.I "user")
+                        blogPost = EI.unsafeSqlEntity (EI.I "blog_post")
+                    pure $ (,) c $ EI.renderExpr conn $
+                        user ^. PersonId ==. blogPost ^. BlogPostAuthorId
+                asserting $ do
+                    expr
+                        `shouldBe`
+                            Text.intercalate (Text.singleton c) ["", "user", ".", "id", ""]
+                            <>
+                            " = "
+                            <>
+                            Text.intercalate (Text.singleton c) ["", "blog_post", ".", "authorId", ""]
 
-    itDb "renders ? for a val" $ do
-      expr <- ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
-      asserting $ expr `shouldBe` "? = ?"
+            itDb "renders ? for a val" $ do
+                expr <- ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
+                asserting $ expr `shouldBe` "? = ?"
 
-  beforeWith (\_ -> pure ()) $ describe "ExprParser" $ do
-    let parse parser = AP.parseOnly (parser '#')
-    describe "parseEscapedChars" $ do
-      let subject = parse P.parseEscapedChars
-      it "parses words" $ do
-        subject "hello world"
-          `shouldBe`
-            Right "hello world"
-      it "only returns a single escape-char if present" $ do
-        subject "i_am##identifier##"
-          `shouldBe`
-            Right "i_am#identifier#"
-    describe "parseEscapedIdentifier" $ do
-      let subject = parse P.parseEscapedIdentifier
-      it "parses the quotes out" $ do
-        subject "#it's a me, mario#"
-          `shouldBe`
-            Right "it's a me, mario"
-      it "requires a beginning and end quote" $ do
-        subject "#alas, i have no end"
-          `shouldSatisfy`
-            isLeft
-    describe "parseTableAccess" $ do
-      let subject = parse P.parseTableAccess
-      it "parses a table access" $ do
-        subject "#foo#.#bar#"
-          `shouldBe`
-            Right P.TableAccess
-              { P.tableAccessTable = "foo"
-              , P.tableAccessColumn = "bar"
-              }
-    describe "onExpr" $ do
-      let subject = parse P.onExpr
-      it "works" $ do
-        subject "#foo#.#bar# = #bar#.#baz#"
-          `shouldBe` do
-            Right $ S.fromList
-              [ P.TableAccess
-                { P.tableAccessTable = "foo"
-                , P.tableAccessColumn = "bar"
-                }
-              , P.TableAccess
-                { P.tableAccessTable = "bar"
-                , P.tableAccessColumn = "baz"
-                }
-              ]
-      it "also works with other nonsense" $ do
-        subject "#foo#.#bar# = 3"
-          `shouldBe` do
-            Right $ S.fromList
-              [ P.TableAccess
-                { P.tableAccessTable = "foo"
-                , P.tableAccessColumn = "bar"
-                }
-              ]
-      it "handles a conjunction" $ do
-        subject "#foo#.#bar# = #bar#.#baz# AND #bar#.#baz# > 10"
-          `shouldBe` do
-            Right $ S.fromList
-              [ P.TableAccess
-                { P.tableAccessTable = "foo"
-                , P.tableAccessColumn = "bar"
-                }
-              , P.TableAccess
-                { P.tableAccessTable = "bar"
-                , P.tableAccessColumn = "baz"
-                }
-              ]
-      it "handles ? okay" $ do
-        subject "#foo#.#bar# = ?"
-          `shouldBe` do
-            Right $ S.fromList
-              [ P.TableAccess
-                { P.tableAccessTable = "foo"
-                , P.tableAccessColumn = "bar"
-                }
-              ]
-      it "handles degenerate cases" $ do
-        subject "false" `shouldBe` pure mempty
-        subject "true" `shouldBe` pure mempty
-        subject "1 = 1" `shouldBe` pure mempty
-      it "works even if an identifier isn't first" $ do
-        subject "true and #foo#.#bar# = 2"
-          `shouldBe` do
-            Right $ S.fromList
-              [ P.TableAccess
-                { P.tableAccessTable = "foo"
-                , P.tableAccessColumn = "bar"
-                }
-              ]
+    beforeWith (\_ -> pure ()) $ describe "ExprParser" $ do
+        let parse parser = AP.parseOnly (parser '#')
+        describe "parseEscapedChars" $ do
+            let subject = parse P.parseEscapedChars
+            it "parses words" $ do
+                subject "hello world"
+                    `shouldBe`
+                        Right "hello world"
+            it "only returns a single escape-char if present" $ do
+                subject "i_am##identifier##"
+                    `shouldBe`
+                        Right "i_am#identifier#"
+        describe "parseEscapedIdentifier" $ do
+            let subject = parse P.parseEscapedIdentifier
+            it "parses the quotes out" $ do
+                subject "#it's a me, mario#"
+                    `shouldBe`
+                        Right "it's a me, mario"
+            it "requires a beginning and end quote" $ do
+                subject "#alas, i have no end"
+                    `shouldSatisfy`
+                        isLeft
+        describe "parseTableAccess" $ do
+            let subject = parse P.parseTableAccess
+            it "parses a table access" $ do
+                subject "#foo#.#bar#"
+                    `shouldBe`
+                        Right P.TableAccess
+                          { P.tableAccessTable = "foo"
+                          , P.tableAccessColumn = "bar"
+                          }
+        describe "onExpr" $ do
+            let subject = parse P.onExpr
+            it "works" $ do
+                subject "#foo#.#bar# = #bar#.#baz#"
+                    `shouldBe` do
+                        Right $ S.fromList
+                            [ P.TableAccess
+                                { P.tableAccessTable = "foo"
+                                , P.tableAccessColumn = "bar"
+                                }
+                            , P.TableAccess
+                                { P.tableAccessTable = "bar"
+                                , P.tableAccessColumn = "baz"
+                                }
+                            ]
+            it "also works with other nonsense" $ do
+                subject "#foo#.#bar# = 3"
+                    `shouldBe` do
+                        Right $ S.fromList
+                            [ P.TableAccess
+                                { P.tableAccessTable = "foo"
+                                , P.tableAccessColumn = "bar"
+                                }
+                            ]
+            it "handles a conjunction" $ do
+                subject "#foo#.#bar# = #bar#.#baz# AND #bar#.#baz# > 10"
+                    `shouldBe` do
+                        Right $ S.fromList
+                            [ P.TableAccess
+                                { P.tableAccessTable = "foo"
+                                , P.tableAccessColumn = "bar"
+                                }
+                            , P.TableAccess
+                                { P.tableAccessTable = "bar"
+                                , P.tableAccessColumn = "baz"
+                                }
+                            ]
+            it "handles ? okay" $ do
+                subject "#foo#.#bar# = ?"
+                    `shouldBe` do
+                        Right $ S.fromList
+                            [ P.TableAccess
+                                { P.tableAccessTable = "foo"
+                                , P.tableAccessColumn = "bar"
+                                }
+                            ]
+            it "handles degenerate cases" $ do
+                subject "false" `shouldBe` pure mempty
+                subject "true" `shouldBe` pure mempty
+                subject "1 = 1" `shouldBe` pure mempty
+            it "works even if an identifier isn't first" $ do
+                subject "true and #foo#.#bar# = 2"
+                    `shouldBe` do
+                        Right $ S.fromList
+                            [ P.TableAccess
+                                { P.tableAccessTable = "foo"
+                                , P.tableAccessColumn = "bar"
+                                }
+                            ]
 
 testOnClauseOrder :: SpecDb
 testOnClauseOrder = describe "On Clause Ordering" $ do
