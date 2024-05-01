@@ -501,9 +501,9 @@ updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWr
                 => (from -> SqlQuery ex)
                 -> R.ReaderT backend m [ret]
 updateReturning block = do
-  conn <- R.ask
-  conduit <- rawSelectSource UPDATE (tellReturning ReturningStar >> from block)
-  liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
+    conn <- R.ask
+    conduit <- rawSelectSource UPDATE (tellReturning ReturningStar >> from block)
+    liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
 
 -- | `DELETE .. RETURNING` SQL extension supported by Postgres.
 --
@@ -523,6 +523,6 @@ deleteReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWr
                 => (from -> SqlQuery ex)
                 -> R.ReaderT backend m [ret]
 deleteReturning block = do
-  conn <- R.ask
-  conduit <- rawSelectSource DELETE (tellReturning ReturningStar >> from block)
-  liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
+    conn <- R.ask
+    conduit <- rawSelectSource DELETE (tellReturning ReturningStar >> from block)
+    liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource

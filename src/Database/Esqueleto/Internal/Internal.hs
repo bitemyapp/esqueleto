@@ -2121,13 +2121,13 @@ instance Monoid LockingClause where
     mappend = (<>)
 
 instance Semigroup ReturningClause where
-  (<>) ReturningNothing x = x
-  (<>) x ReturningNothing = x
-  (<>) ReturningStar ReturningStar = ReturningStar
+    (<>) ReturningNothing x = x
+    (<>) x ReturningNothing = x
+    (<>) ReturningStar ReturningStar = ReturningStar
 
 instance Monoid ReturningClause where
-  mempty = ReturningNothing
-  mappend = (<>)
+    mempty = ReturningNothing
+    mappend = (<>)
 
 ----------------------------------------------------------------------
 
@@ -2420,25 +2420,33 @@ existsHelper = sub SELECT . (>> return true)
 -- The fundeps duplicate those of 'SqlSelect' solely to provide somewhat more directly
 -- understandable type errors.
 class SqlSelect a r => InferReturning a r | r -> a, a -> r
+
 instance PersistEntity ent => InferReturning (SqlExpr (Entity ent)) (Entity ent)
+
 instance PersistEntity ent => InferReturning (SqlExpr (Maybe (Entity ent))) (Maybe (Entity ent))
+
 instance PersistField a => InferReturning (SqlExpr (Value a)) (Value a)
+
 instance ( InferReturning a ra, InferReturning b rb) => InferReturning (a, b) (ra, rb)
+
 instance ( InferReturning a ra
          , InferReturning b rb
          , InferReturning c rc
          ) => InferReturning (a, b, c) (ra, rb, rc)
+
 instance ( InferReturning a ra
          , InferReturning b rb
          , InferReturning c rc
          , InferReturning d rd
          ) => InferReturning (a, b, c, d) (ra, rb, rc, rd)
+
 instance ( InferReturning a ra
          , InferReturning b rb
          , InferReturning c rc
          , InferReturning d rd
          , InferReturning e re
          ) => InferReturning (a, b, c, d, e) (ra, rb, rc, rd, re)
+
 instance ( InferReturning a ra
          , InferReturning b rb
          , InferReturning c rc
