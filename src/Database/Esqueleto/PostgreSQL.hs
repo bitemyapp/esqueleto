@@ -23,6 +23,8 @@ module Database.Esqueleto.PostgreSQL
     , chr
     , now_
     , random_
+    , deleteReturning
+    , updateReturning
     , upsert
     , upsertBy
     , insertSelectWithConflict
@@ -41,6 +43,7 @@ module Database.Esqueleto.PostgreSQL
 #if __GLASGOW_HASKELL__ < 804
 import Data.Semigroup
 #endif
+import Conduit (withAcquire)
 import Control.Arrow (first)
 import Control.Exception (throw)
 import Control.Monad (void)
@@ -75,7 +78,7 @@ maybeArray ::
      (PersistField a, PersistField [a])
   => SqlExpr (Value (Maybe [a]))
   -> SqlExpr (Value [a])
-maybeArray x = coalesceDefault [x] (emptyArray)
+maybeArray x = coalesceDefault [x] emptyArray
 
 -- | Aggregate mode
 data AggMode
@@ -477,3 +480,49 @@ forUpdateOf lockableEntities onLockedBehavior =
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | `UPDATE .. RETURNING ..` SQL extension supported by Postgres.
+--
+-- The instances of 'InferReturning' say what can be returned; currently includes
+-- whole entities, 'PersistField's, SQL expressions, tuples (possibly nested).
+--
+-- Usage example:
+--
+-- @
+--   tuples <- updateReturning $ \p -> do
+--     set p [ PersonAge =. val (Just 0) ]
+--     where_ (isNothing $ p ^. PersonAge)
+--     return (val True, p ^. PersonName, (p ^. PersonFavNum) *. val 100)
+--     -- return p -- also works, returning (Entity Person)
+-- @
+--
+-- @since 3.5.11.3
+updateReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
+                => (from -> SqlQuery ex)
+                -> R.ReaderT backend m [ret]
+updateReturning block = do
+    conn <- R.ask
+    conduit <- rawSelectSource UPDATE (tellReturning ReturningStar >> from block)
+    liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource
+
+-- | `DELETE .. RETURNING` SQL extension supported by Postgres.
+--
+-- The instances of 'InferReturning' say what can be returned; currently includes
+-- whole entities, 'PersistField's, SQL expressions, tuples (possibly nested).
+--
+-- Usage example:
+--
+-- @
+--   removedRowsWithNames <- deleteReturning $ \p -> do
+--     where_ (isNothing $ p ^. PersonWeight)
+--     return (p, p ^. PersonName)
+-- @
+--
+-- @since 3.5.11.3
+deleteReturning :: (MonadIO m, From from, InferReturning ex ret, SqlBackendCanWrite backend)
+                => (from -> SqlQuery ex)
+                -> R.ReaderT backend m [ret]
+deleteReturning block = do
+    conn <- R.ask
+    conduit <- rawSelectSource DELETE (tellReturning ReturningStar >> from block)
+    liftIO . withAcquire conduit $ flip R.runReaderT conn . runSource

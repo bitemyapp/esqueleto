@@ -1,8 +1,5 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE TypeApplications #-}
-{-# language DerivingStrategies, GeneralizedNewtypeDeriving #-}
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -14,7 +11,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -427,21 +423,23 @@ locking kind = putLocking $ LegacyLockingClause kind
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
-{-#
-  DEPRECATED
-    sub_select
-    "sub_select \n \
-sub_select is an unsafe function to use. If used with a SqlQuery that \n \
-returns 0 results, then it may return NULL despite not mentioning Maybe \n \
-in the return type. If it returns more than 1 result, then it will throw a \n \
-SQL error.\n\n Instead, consider using one of the following alternatives: \n \
-- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
-- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
-  has a Maybe in the return type. \n \
-- subSelectCount: Performs a count of the query - this is always safe. \n \
-- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
-  countRows and friends."
-  #-}
+-- | (Internal) Remember a @RETURNING@ clause in a query
+tellReturning :: ReturningClause -> SqlQuery ()
+tellReturning clause = Q $ W.tell mempty { sdReturningClause = clause }
+
+{-# DEPRECATED sub_select
+  [ "sub_select is an unsafe function to use. If used with a SqlQuery that"
+  , "returns 0 results, then it may return NULL despite not mentioning Maybe"
+  , "in the return type. If it returns more than 1 result, then it will throw a"
+  , "SQL error.\n\n Instead, consider using one of the following alternatives:"
+  , "- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe. "
+  , "- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already"
+  , "  has a Maybe in the return type."
+  , "- subSelectCount: Performs a count of the query - this is always safe."
+  , "- subSelectUnsafe: Performs no checks or guarantees. Safe to use with"
+  , "  countRows and friends."
+  ]
+#-}
 -- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
 -- simple value so should be used only when the @SELECT@ query
 -- is guaranteed to return just one row.
@@ -665,7 +663,7 @@ isNothing v =
                         first (parensM p) . isNullExpr $ f Never info
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
-    isNullExpr = first ((<> " IS NULL"))
+    isNullExpr = first (<> " IS NULL")
 
 -- | An alias for 'isNothing' that avoids clashing with the function from
 -- "Data.Maybe" 'Data.Maybe.isNothing'.
@@ -1835,14 +1833,15 @@ data SideData = SideData
     , sdLimitClause    :: !LimitClause
     , sdLockingClause  :: !LockingClause
     , sdCteClause      :: ![CommonTableExpressionClause]
+    , sdReturningClause :: !ReturningClause
     }
 
 instance Semigroup SideData where
-    SideData d f s w g h o l k c <> SideData d' f' s' w' g' h' o' l' k' c' =
-        SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c')
+    SideData d f s w g h o l k c r <> SideData d' f' s' w' g' h' o' l' k' c' r' =
+        SideData (d <> d') (f <> f') (s <> s') (w <> w') (g <> g') (h <> h') (o <> o') (l <> l') (k <> k') (c <> c') (r <> r')
 
 instance Monoid SideData where
-    mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
+    mempty = SideData mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty mempty
     mappend = (<>)
 
 -- | The @DISTINCT@ "clause".
@@ -1878,6 +1877,10 @@ data CommonTableExpressionKind
 
 data CommonTableExpressionClause =
     CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+
+data ReturningClause
+    = ReturningNothing  -- ^ The default, absent clause.
+    | ReturningStar     -- ^ @RETURNING@ is present.
 
 data SubQueryType
     = NormalSubQuery
@@ -2079,10 +2082,10 @@ instance Monoid GroupByClause where
   mempty = GroupBy []
   mappend = (<>)
 
--- | A @HAVING@ cause.
+-- | A @HAVING@ clause.
 type HavingClause = WhereClause
 
--- | A @ORDER BY@ clause.
+-- | An @ORDER BY@ clause.
 type OrderByClause = SqlExpr OrderBy
 
 -- | A @LIMIT@ clause.
@@ -2115,6 +2118,15 @@ instance Semigroup LockingClause where
 --
 instance Monoid LockingClause where
     mempty = NoLockingClause
+    mappend = (<>)
+
+instance Semigroup ReturningClause where
+    (<>) ReturningNothing x = x
+    (<>) x ReturningNothing = x
+    (<>) ReturningStar ReturningStar = ReturningStar
+
+instance Monoid ReturningClause where
+    mempty = ReturningNothing
     mappend = (<>)
 
 ----------------------------------------------------------------------
@@ -2400,6 +2412,50 @@ existsHelper = sub SELECT . (>> return true)
     true  :: SqlExpr (Value Bool)
     true = val True
 
+-- | (Internal) The types which can appear in @RETURNING@ part of @UPDATE@ or @DELETE@
+--
+-- Many constructs appearing in @SELECT@ can go under @RETURNING@ -- but not all (e.g.
+-- certainly not subqueries, @VALUES@ and such). Thus, this is a subclass of 'SqlSelect'.
+--
+-- The fundeps duplicate those of 'SqlSelect' solely to provide somewhat more directly
+-- understandable type errors.
+class SqlSelect a r => InferReturning a r | r -> a, a -> r
+
+instance PersistEntity ent => InferReturning (SqlExpr (Entity ent)) (Entity ent)
+
+instance PersistEntity ent => InferReturning (SqlExpr (Maybe (Entity ent))) (Maybe (Entity ent))
+
+instance PersistField a => InferReturning (SqlExpr (Value a)) (Value a)
+
+instance ( InferReturning a ra, InferReturning b rb) => InferReturning (a, b) (ra, rb)
+
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         ) => InferReturning (a, b, c) (ra, rb, rc)
+
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         ) => InferReturning (a, b, c, d) (ra, rb, rc, rd)
+
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         , InferReturning e re
+         ) => InferReturning (a, b, c, d, e) (ra, rb, rc, rd, re)
+
+instance ( InferReturning a ra
+         , InferReturning b rb
+         , InferReturning c rc
+         , InferReturning d rd
+         , InferReturning e re
+         , InferReturning f rf
+         ) => InferReturning (a, b, c, d, e, f) (ra, rb, rc, rd, re, rf)
+-- tuple nesting provides unlimited arity if 6-tuple isn't enough
+
 -- | (Internal) Create a case statement.
 --
 -- Since: 2.1.1
@@ -2424,7 +2480,7 @@ unsafeSqlCase when v = ERaw noMeta buildCase
         in ( b0 <> " WHEN " <> b1 <> " THEN " <> b2, vals0 <> vals1 <> vals2 )
 
     valueToSql :: SqlExpr (Value a) -> NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue])
-    valueToSql (ERaw _ f) p = f p
+    valueToSql (ERaw _ f) = f
 
 -- | (Internal) Create a custom binary operator.  You /should/
 -- /not/ use this function directly since its type is very
@@ -2908,7 +2964,7 @@ deleteCount
     :: (MonadIO m, SqlBackendCanWrite backend)
     => SqlQuery ()
     -> R.ReaderT backend m Int64
-deleteCount a = rawEsqueleto DELETE a
+deleteCount = rawEsqueleto DELETE
 
 -- | Execute an @esqueleto@ @UPDATE@ query inside @persistent@'s
 -- 'SqlPersistT' monad.  Note that currently there are no type
@@ -2981,7 +3037,8 @@ toRawSql mode (conn, firstIdentState) query =
                  orderByClauses
                  limitClause
                  lockingClause
-                 cteClause = sd
+                 cteClause
+                 returningClause = sd
         -- Pass the finalIdentState (containing all identifiers
         -- that were used) to the subsequent calls.  This ensures
         -- that no name clashes will occur on subqueries that may
@@ -2999,6 +3056,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeOrderBy    info orderByClauses
         , makeLimit      info limitClause
         , makeLocking    info lockingClause
+        , makeReturning  info returningClause ret
         ]
 
 
@@ -3267,6 +3325,12 @@ makeLocking info (PostgresLockingClauses clauses) =
 
             plain v = (v,[])
 makeLocking _ NoLockingClause = mempty
+
+makeReturning :: SqlSelect a r
+              => IdentInfo -> ReturningClause -> a -> (TLB.Builder, [PersistValue])
+makeReturning _    ReturningNothing _ = mempty
+makeReturning info ReturningStar  ret = ("RETURNING ", []) <> sqlSelectCols info ret
+
 
 parens :: TLB.Builder -> TLB.Builder
 parens b = "(" <> (b <> ")")
@@ -3937,14 +4001,14 @@ insertSelect
     :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
     -> R.ReaderT backend m ()
-insertSelect a = void $ insertSelectCount a
+insertSelect = void . insertSelectCount
 
 -- | Insert a 'PersistField' for every selected value, return the count afterward
 insertSelectCount
     :: (MonadIO m, PersistEntity a, SqlBackendCanWrite backend)
     => SqlQuery (SqlExpr (Insertion a))
     -> R.ReaderT backend m Int64
-insertSelectCount a = rawEsqueleto INSERT_INTO a
+insertSelectCount = rawEsqueleto INSERT_INTO
 
 -- | Renders an expression into 'Text'. Only useful for creating a textual
 -- representation of the clauses passed to an "On" clause.
@@ -3954,7 +4018,7 @@ renderExpr :: SqlBackend -> SqlExpr (Value Bool) -> T.Text
 renderExpr sqlBackend e = case e of
     ERaw _ mkBuilderValues ->
          let (builder, _) = mkBuilderValues Never (sqlBackend, initialIdentState)
-         in (builderToText builder)
+         in builderToText builder
 
 -- | An exception thrown by 'RenderExpr' - it's not designed to handle composite
 -- keys, and will blow up if you give it one.
