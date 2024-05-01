@@ -6,6 +6,61 @@
     - Change SqlExpr type to alias for new SqlExpr_ allowing for value "contexts". Currently used by window functions to avoid allowing double windowing. This change lays the groundwork for aggregate values as being contextually different from single values.
     - Add support for window functions in Postgres module
 
+3.5.11.2
+========
+- @arguri
+    - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
+        - Fix build for ghc 9.8.1 / template-haskell 2.18
+
+3.5.11.0
+========
+- @9999years, @halogenandtoast
+    - [#378](https://github.com/bitemyapp/esqueleto/pull/378)
+        - `ToMaybe` instances are now derived for records so you can now left
+          join them in queries
+
+3.5.10.3
+========
+- @ttuegel
+    - [#377](https://github.com/bitemyapp/esqueleto/pull/377)
+        - Fix Postgres syntax for `noWait`
+
+3.5.10.2
+========
+- @parsonsmatt
+    - [#376](https://github.com/bitemyapp/esqueleto/pull/376)
+        - When using Postgres 15, `LIMIT`, and the `locking` functions, you
+          could accidentally construct SQL code like:
+
+          > ... LIMIT 1FOR UPDATE ...
+
+          This parsed on Postgres <15, but the new Postgres parser is more
+          strict, and fails to parse. This PR introduces newlines between each
+          query chunk, which fixes the issue.
+
+3.5.10.1
+========
+- @9999years
+    - [#369](https://github.com/bitemyapp/esqueleto/pull/369)
+        - Fix `myAge` type in `deriveEsqueletoRecord` documentation
+
+3.5.10.0
+========
+- @ivanbakel
+    - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
+        - Add `ToAlias` instances for 9- to 16-tuples
+        - Add `ToAliasReference` instances for 9- to 16-tuples
+- @parsonsmatt
+    - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
+        - Add `isNothing_` and `groupBy_` to avoid name conflicts with
+          `Data.List` and `Data.Maybe`.
+
+3.5.9.1
+=======
+- @duplode
+    - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
+      - Add missing `just` to left join examples in the Haddocks
+
 3.5.9.0
 =======
 - @9999years

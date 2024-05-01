@@ -1667,9 +1667,11 @@ testLocking = do
           [complex, with1, with2, with3] <-
             return $
               map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
-          let expected = complex <> "\n" <> syntax
-          asserting $
-              (with1, with2, with3) `shouldBe` (expected, expected, expected)
+          let expected = complex <> syntax <> "\n"
+          asserting $ do
+            with1 `shouldBe` expected
+            with2 `shouldBe` expected
+            with3 `shouldBe` expected
     itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
     itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"

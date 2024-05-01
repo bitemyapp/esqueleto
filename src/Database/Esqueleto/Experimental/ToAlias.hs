@@ -90,3 +90,127 @@ instance ( ToAlias a
          , ToAlias h
          ) => ToAlias (a,b,c,d,e,f,g,h) where
     toAlias x = to8 <$> (toAlias $ from8 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         ) => ToAlias (a,b,c,d,e,f,g,h,i) where
+    toAlias x = to9 <$> (toAlias $ from9 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j) where
+    toAlias x = to10 <$> (toAlias $ from10 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k) where
+    toAlias x = to11 <$> (toAlias $ from11 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         , ToAlias l
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k,l) where
+    toAlias x = to12 <$> (toAlias $ from12 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         , ToAlias l
+         , ToAlias m
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k,l,m) where
+    toAlias x = to13 <$> (toAlias $ from13 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         , ToAlias l
+         , ToAlias m
+         , ToAlias n
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k,l,m,n) where
+    toAlias x = to14 <$> (toAlias $ from14 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         , ToAlias l
+         , ToAlias m
+         , ToAlias n
+         , ToAlias o
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) where
+    toAlias x = to15 <$> (toAlias $ from15 x)
+
+instance ( ToAlias a
+         , ToAlias b
+         , ToAlias c
+         , ToAlias d
+         , ToAlias e
+         , ToAlias f
+         , ToAlias g
+         , ToAlias h
+         , ToAlias i
+         , ToAlias j
+         , ToAlias k
+         , ToAlias l
+         , ToAlias m
+         , ToAlias n
+         , ToAlias o
+         , ToAlias p
+         ) => ToAlias (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) where
+    toAlias x = to16 <$> (toAlias $ from16 x)
