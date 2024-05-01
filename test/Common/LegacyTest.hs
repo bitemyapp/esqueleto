@@ -80,6 +80,7 @@ import qualified Data.Conduit.List as CL
 import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Text as Text
+import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
@@ -1482,9 +1483,11 @@ testLocking = do
           [complex, with1, with2, with3] <-
             return $
               map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
-          let expected = complex <> "\n" <> syntax
-          asserting $
-              (with1, with2, with3) `shouldBe` (expected, expected, expected)
+          let expected = complex <> syntax
+          asserting $ do
+              TL.strip with1 `shouldBe` expected
+              TL.strip with2 `shouldBe` expected
+              TL.strip with3 `shouldBe` expected
     itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
     itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"

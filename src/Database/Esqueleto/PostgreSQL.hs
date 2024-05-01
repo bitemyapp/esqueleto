@@ -455,7 +455,8 @@ values exprs = Ex.From $ do
     -> SqlExpr_ ctx (Value a)
 (%.)  = unsafeSqlBinOp " % "
 
--- | `NO WAIT` syntax for postgres locking
+-- | `NOWAIT` syntax for postgres locking
+--
 -- error will be thrown if locked rows are attempted to be selected
 --
 -- @since 3.5.9.0

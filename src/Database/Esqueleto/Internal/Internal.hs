@@ -261,6 +261,13 @@ on expr = Q $ W.tell mempty { sdFromClause = [OnClause expr] }
 groupBy :: (ToSomeValues a) => a -> SqlQuery ()
 groupBy expr = Q $ W.tell mempty { sdGroupByClause = GroupBy $ toSomeValues expr }
 
+-- | An alias for 'groupBy' that avoids conflict with the term from "Data.List"
+-- 'Data.List.groupBy'.
+--
+-- @since 3.5.10.0
+groupBy_ :: (ToSomeValues a) => a -> SqlQuery ()
+groupBy_  = groupBy
+
 -- | @ORDER BY@ clause. See also 'asc' and 'desc'.
 --
 -- Multiple calls to 'orderBy' get concatenated on the final
@@ -665,6 +672,13 @@ isNothing v =
   where
     isNullExpr :: (TLB.Builder, a) -> (TLB.Builder, a)
     isNullExpr = first (<> " IS NULL")
+
+-- | An alias for 'isNothing' that avoids clashing with the function from
+-- "Data.Maybe" 'Data.Maybe.isNothing'.
+--
+-- @since 3.5.10.0
+isNothing_ :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
+isNothing_ = isNothing
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
@@ -1572,7 +1586,7 @@ makeLockableEntity info lockableEntity =
     uncommas' $ Set.toList . Set.fromList $ (\(LockableSqlExpr (ERaw _ f)) -> f Never info) <$> NEL.toList (flattenLockableEntity lockableEntity)
 
 instance PersistEntity val => LockableEntity (SqlExpr (Entity val)) where
-    flattenLockableEntity e = pure $ LockableSqlExpr e 
+    flattenLockableEntity e = pure $ LockableSqlExpr e
 
 instance (LockableEntity a, LockableEntity b) => LockableEntity (a :& b) where
     flattenLockableEntity (a :& b) = flattenLockableEntity a <> flattenLockableEntity b
@@ -3036,6 +3050,15 @@ toRawSql mode (conn, firstIdentState) query =
             flip S.runState firstIdentState $
             W.runWriterT $
             unQ query
+        deleteRepeatedNewlines txt =
+            let
+                (preNewlines, rest) = TL.break (== '\n') txt
+                (_, rest') = TL.break (/= '\n') rest
+             in
+                if TL.null rest'
+                    then preNewlines <> "\n"
+                    else preNewlines <> "\n" <> deleteRepeatedNewlines rest'
+
         SideData distinctClause
                  fromClauses
                  setClauses
@@ -3051,7 +3074,7 @@ toRawSql mode (conn, firstIdentState) query =
         -- that no name clashes will occur on subqueries that may
         -- appear on the expressions below.
         info = (projectBackend conn, finalIdentState)
-    in mconcat
+    in (\(x, t) -> (TLB.fromLazyText $ deleteRepeatedNewlines $ TL.strip $ TLB.toLazyText x, t)) $ mconcat $ intersperse ("\n", [])
         [ makeCte        info cteClause
         , makeInsertInto info mode ret
         , makeSelect     info mode distinctClause ret
@@ -3064,6 +3087,7 @@ toRawSql mode (conn, firstIdentState) query =
         , makeLimit      info limitClause
         , makeLocking    info lockingClause
         ]
+
 
 -- | Renders a 'SqlQuery' into a 'Text' value along with the list of
 -- 'PersistValue's that would be supplied to the database for @?@ placeholders.
@@ -3286,11 +3310,11 @@ makeOrderBy :: IdentInfo -> [OrderByClause] -> (TLB.Builder, [PersistValue])
 makeOrderBy _ [] = mempty
 makeOrderBy info is =
     let (tlb, vals) = makeOrderByNoNewline info is
-    in ("\n" <> tlb, vals)
+    in (tlb, vals)
 
 makeLimit :: IdentInfo -> LimitClause -> (TLB.Builder, [PersistValue])
 makeLimit (conn, _) (Limit ml mo) =
-    let limitRaw = getConnLimitOffset (v ml, v mo) "\n" conn
+    let limitRaw = getConnLimitOffset (v ml, v mo) "" conn
         v :: Maybe Int64 -> Int
         v = maybe 0 fromIntegral
     in (TLB.fromText limitRaw, mempty)
@@ -3320,7 +3344,7 @@ makeLocking info (PostgresLockingClauses clauses) =
             makeLockingStrength PostgresForShare = plain "FOR SHARE"
 
             makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
-            makeLockingBehavior NoWait = plain "NO WAIT"
+            makeLockingBehavior NoWait = plain "NOWAIT"
             makeLockingBehavior SkipLocked = plain "SKIP LOCKED"
             makeLockingBehavior Wait = plain ""
 
@@ -3471,6 +3495,7 @@ instance PersistEntity a => SqlSelect (SqlExpr_ ctx (Maybe (Entity a))) (Maybe (
 instance PersistField a => SqlSelectCols (SqlExpr_ ctx (Value a)) where
     sqlSelectCols = materializeExpr
     sqlSelectColCount = const 1
+
 instance PersistField a => SqlSelect (SqlExpr_ ctx (Value a)) (Value a) where
     sqlSelectProcessRow _ [pv] = Value <$> fromPersistValue pv
     sqlSelectProcessRow _ pvs  = Value <$> fromPersistValue (PersistList pvs)
@@ -3832,6 +3857,7 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc k
       ]
   sqlSelectColCount   = sqlSelectColCount . from11P
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3848,6 +3874,9 @@ instance ( SqlSelect a ra
 
 from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
 from11P = const Proxy
+
+from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a, b), (c, d), (e, f), (g, h), (i, j), k)
 
 to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
 to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
@@ -3881,6 +3910,7 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc l
       ]
   sqlSelectColCount   = sqlSelectColCount . from12P
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3898,6 +3928,9 @@ instance ( SqlSelect a ra
 
 from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 from12P = const Proxy
+
+from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 
 to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
 to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
@@ -3933,6 +3966,7 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc m
       ]
   sqlSelectColCount   = sqlSelectColCount . from13P
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -3954,6 +3988,9 @@ from13P = const Proxy
 
 to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
 to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
+
+from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 
 instance ( SqlSelectCols a
          , SqlSelectCols b
@@ -3988,6 +4025,7 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc n
       ]
   sqlSelectColCount   = sqlSelectColCount . from14P
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -4007,6 +4045,9 @@ instance ( SqlSelect a ra
 
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
+
+from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 
 to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
@@ -4046,6 +4087,7 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc o
       ]
   sqlSelectColCount   = sqlSelectColCount . from15P
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -4066,6 +4108,9 @@ instance ( SqlSelect a ra
 
 from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 from15P = const Proxy
+
+from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 
 to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
 to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
@@ -4128,6 +4173,9 @@ instance ( SqlSelect a ra
 
 from16P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 from16P = const Proxy
+
+from16 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
+from16 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p))
 
 to16 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)
 to16 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),(o,p)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p)

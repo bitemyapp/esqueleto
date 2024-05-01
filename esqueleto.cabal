@@ -68,7 +68,7 @@ library
       , resourcet >=1.2
       , tagged >=0.2
       , template-haskell
-      , text >=0.11 && <2.1
+      , text >=0.11 && <2.2
       , time >=1.5.0.1 && <=1.13
       , transformers >=0.2
       , unliftio
