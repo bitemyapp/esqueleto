@@ -1,3 +1,9 @@
+3.5.11.3 (unreleased)
+========
+- @ulidtko
+    - [#362](https://github.com/bitemyapp/esqueleto/pull/362)
+      - Add `updateReturning`, `deleteReturning` as Postgres extensions.
+
 3.5.11.2
 ========
 - @arguri
