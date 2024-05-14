@@ -1,3 +1,9 @@
+3.5.11.3
+========
+- @isomorpheme
+    - [#393](https://github.com/bitemyapp/esqueleto/pull/393)
+        - Add Functor and Bifunctor instances for `(:&)`
+
 3.5.11.2
 ========
 - @arguri
