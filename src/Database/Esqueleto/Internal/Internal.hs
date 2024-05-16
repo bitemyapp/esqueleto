@@ -52,6 +52,7 @@ import Data.Semigroup
 import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
+import Data.Bifunctor (Bifunctor(bimap, second))
 import qualified Data.ByteString as B
 import Data.Coerce (coerce)
 import qualified Data.Conduit as C
@@ -1441,6 +1442,14 @@ data Insertion a
 data (:&) a b = a :& b
     deriving (Eq, Show)
 infixl 2 :&
+
+-- | @since 3.5.11.3
+instance Functor ((:&) a) where
+  fmap = second
+
+-- | @since 3.5.11.3
+instance Bifunctor (:&) where
+  bimap f g (x :& y) = f x :& g y
 
 -- | Different kinds of locking clauses supported by 'locking'.
 --
