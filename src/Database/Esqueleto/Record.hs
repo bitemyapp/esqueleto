@@ -762,7 +762,7 @@ makeToMaybeInstance info@RecordInfo {..} = do
       instanceConstraints = []
       instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlName)
 
-  pure $ InstanceD overlap instanceConstraints instanceType [toMaybeTDec', toMaybeDec']
+  pure $ InstanceD overlap instanceConstraints instanceType (toMaybeTDec' ++ [toMaybeDec'])
 
 -- | Generates a `ToMaybe` instance for the SqlMaybe of the given record.
 makeSqlMaybeToMaybeInstance :: RecordInfo -> Q Dec
@@ -772,22 +772,12 @@ makeSqlMaybeToMaybeInstance RecordInfo {..} = do
       overlap = Nothing
       instanceConstraints = []
       instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlMaybeName)
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlMaybeToMaybeTDec', toMaybeIdDec]
+  pure $ InstanceD overlap instanceConstraints instanceType (toMaybeIdDec:sqlMaybeToMaybeTDec')
 
 -- | Generates a `type ToMaybeT ... = ...` declaration for the given names.
-toMaybeTDec :: Name -> Name -> Q Dec
-toMaybeTDec nameLeft nameRight = do
-  pure $ mkTySynInstD ''ToMaybeT (ConT nameLeft) (ConT nameRight)
-  where
-    mkTySynInstD className lhsArg rhs =
-#if MIN_VERSION_template_haskell(2,15,0)
-        let binders = Nothing
-            lhs = ConT className `AppT` lhsArg
-        in
-            TySynInstD $ TySynEqn binders lhs rhs
-#else
-       TySynInstD className $ TySynEqn [lhsArg] rhs
-#endif
+toMaybeTDec :: Name -> Name -> Q [Dec]
+toMaybeTDec nameLeft nameRight =
+  [d| type instance ToMaybeT $(conT nameLeft) = $(conT nameRight) |]
 
 -- | Generates a `toMaybe value = ...` declaration for the given record.
 toMaybeDec :: RecordInfo -> Q Dec
