@@ -541,11 +541,7 @@ sqlSelectProcessRowPat fieldType var = do
           `AppT` ((ConT ((==) ''Entity -> True))
                   `AppT` _innerType) -> pure $ VarP var
         -- x -> Value var
-#if MIN_VERSION_template_haskell(2,18,0)
-        _ -> pure $ ConP 'Value [] [VarP var]
-#else
-        _ -> pure $ ConP 'Value [VarP var]
-#endif
+        _ -> [p| Value $(varP var) |]
 
 -- Given a type, find the corresponding SQL type.
 --
