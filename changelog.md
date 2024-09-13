@@ -1,3 +1,9 @@
+3.5.13.0
+========
+- @ac251
+    - [#402](https://github.com/bitemyapp/esqueleto/pull/402)
+      - Add `forNoKeyUpdate` and `forKeyShare` locking kinds for postgres
+
 3.5.12.0
 ========
 - @csamak

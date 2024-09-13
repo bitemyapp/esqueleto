@@ -1485,7 +1485,9 @@ data PostgresLockingKind =
 -- Arranged in order of lock strength
 data PostgresRowLevelLockStrength =
     PostgresForUpdate
+    | PostgresForNoKeyUpdate
     | PostgresForShare
+    | PostgresForKeyShare
   deriving (Ord, Eq)
 
 data LockingOfClause where
@@ -3254,7 +3256,9 @@ makeLocking info (PostgresLockingClauses clauses) =
                     <> makeLockingBehavior (postgresOnLockedBehavior l)
             makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
             makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
+            makeLockingStrength PostgresForNoKeyUpdate = plain "FOR NO KEY UPDATE"
             makeLockingStrength PostgresForShare = plain "FOR SHARE"
+            makeLockingStrength PostgresForKeyShare = plain "FOR KEY SHARE"
 
             makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
             makeLockingBehavior NoWait = plain "NOWAIT"
