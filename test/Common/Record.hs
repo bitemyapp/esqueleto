@@ -271,7 +271,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                         , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                         }
                               )) -> True
-                 _ -> True)
+                 _ -> False)
 
     itDb "can can handle joins on records with Nothing" $ do
         setup
@@ -291,7 +291,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                         , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                         }
                               )) -> True
-                 _ -> True)
+                 _ -> False)
 
     itDb "can left join on nested records" $ do
         setup
@@ -312,7 +312,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                                                     , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
-                 _ -> True)
+                 _ -> False)
 
     itDb "can handle multiple left joins on the same record" $ do
         setup
@@ -331,7 +331,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                                                     , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
-                 _ -> True)
+                 _ -> False)
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case (_ :& _ :& Just (MyNestedRecord {myRecord = MyRecord {myName = "Rebecca", myAddress = Nothing}})) -> True
