@@ -1,3 +1,9 @@
+3.5.11.3
+========
+- @TeofilC
+  - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+    - Use TH quotes to eliminate some CPP.
+
 3.5.11.2
 ========
 - @arguri
