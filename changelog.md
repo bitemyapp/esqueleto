@@ -1,3 +1,10 @@
+3.5.12.0
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+        - `ToMaybe` instances are now derived for Maybe records.
+          See [Issue #401](https://github.com/bitemyapp/esqueleto/issues/401).
+
 3.5.11.2
 ========
 - @arguri

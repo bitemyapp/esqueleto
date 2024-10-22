@@ -34,7 +34,7 @@ import Data.Text (Text)
 import Control.Monad (forM)
 import Data.Foldable (foldl')
 import GHC.Exts (IsString(fromString))
-import Data.Maybe (mapMaybe, fromMaybe, listToMaybe)
+import Data.Maybe (mapMaybe, fromMaybe, listToMaybe, isJust)
 
 -- | Takes the name of a Haskell record type and creates a variant of that
 -- record prefixed with @Sql@ which can be used in esqueleto expressions. This
@@ -187,17 +187,23 @@ deriveEsqueletoRecordWith settings originalName = do
   sqlSelectInstanceDec <- makeSqlSelectInstance info
   sqlMaybeRecordDec <- makeSqlMaybeRecord info
   toMaybeInstanceDec <- makeToMaybeInstance info
+  sqlMaybeToMaybeInstanceDec <- makeSqlMaybeToMaybeInstance info
   sqlMaybeRecordSelectInstanceDec <- makeSqlMaybeRecordSelectInstance info
   toAliasInstanceDec <- makeToAliasInstance info
+  sqlMaybeToAliasInstanceDec <- makeSqlMaybeToAliasInstance info
   toAliasReferenceInstanceDec <- makeToAliasReferenceInstance info
+  sqlMaybeToAliasReferenceInstanceDec <- makeSqlMaybeToAliasReferenceInstance info
   pure
     [ recordDec
     , sqlSelectInstanceDec
     , sqlMaybeRecordDec
     , toMaybeInstanceDec
+    , sqlMaybeToMaybeInstanceDec
     , sqlMaybeRecordSelectInstanceDec
     , toAliasInstanceDec
+    , sqlMaybeToAliasInstanceDec
     , toAliasReferenceInstanceDec
+    , sqlMaybeToAliasReferenceInstanceDec
     ]
 
 -- | Information about a record we need to generate the declarations.
@@ -646,19 +652,23 @@ nonRecordConstructorMessage con =
         (RecGadtC names _fields _ret) -> head names
 
 makeToAliasInstance :: RecordInfo -> Q Dec
-makeToAliasInstance info@RecordInfo {..} = do
-  toAliasDec' <- toAliasDec info
+makeToAliasInstance RecordInfo {..} = makeToAliasInstanceFor sqlName sqlFields
+
+makeSqlMaybeToAliasInstance :: RecordInfo -> Q Dec
+makeSqlMaybeToAliasInstance RecordInfo {..} = makeToAliasInstanceFor sqlMaybeName sqlMaybeFields
+
+makeToAliasInstanceFor :: Name -> [(Name, Type)] -> Q Dec
+makeToAliasInstanceFor name fields = do
+  toAliasDec' <- toAliasDec name fields
   let overlap = Nothing
       instanceConstraints = []
-      instanceType =
-        (ConT ''ToAlias)
-          `AppT` (ConT sqlName)
+      instanceType = (ConT ''ToAlias) `AppT` (ConT name)
   pure $ InstanceD overlap instanceConstraints instanceType [toAliasDec']
 
-toAliasDec :: RecordInfo -> Q Dec
-toAliasDec RecordInfo {..} = do
+toAliasDec :: Name -> [(Name, Type)] -> Q Dec
+toAliasDec name fields = do
   (statements, fieldPatterns, fieldExps) <-
-    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+    unzip3 <$> forM fields (\(fieldName', _) -> do
       fieldPatternName <- newName (nameBase fieldName')
       boundValueName <- newName (nameBase fieldName')
       pure
@@ -673,35 +683,40 @@ toAliasDec RecordInfo {..} = do
     FunD
       'toAlias
       [ Clause
-          [ RecP sqlName fieldPatterns
+          [ RecP name fieldPatterns
           ]
           ( NormalB $
               DoE
 #if MIN_VERSION_template_haskell(2,17,0)
                 Nothing
 #endif
-                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE name fieldExps)])
           )
           -- `where` clause.
           []
       ]
 
 makeToAliasReferenceInstance :: RecordInfo -> Q Dec
-makeToAliasReferenceInstance info@RecordInfo {..} = do
-  toAliasReferenceDec' <- toAliasReferenceDec info
+makeToAliasReferenceInstance RecordInfo {..} = makeToAliasReferenceInstanceFor sqlName sqlFields
+
+makeSqlMaybeToAliasReferenceInstance :: RecordInfo -> Q Dec
+makeSqlMaybeToAliasReferenceInstance RecordInfo {..} =
+  makeToAliasReferenceInstanceFor sqlMaybeName sqlMaybeFields
+
+makeToAliasReferenceInstanceFor :: Name -> [(Name, Type)] -> Q Dec
+makeToAliasReferenceInstanceFor name fields = do
+  toAliasReferenceDec' <- toAliasReferenceDec name fields
   let overlap = Nothing
       instanceConstraints = []
-      instanceType =
-        (ConT ''ToAliasReference)
-          `AppT` (ConT sqlName)
+      instanceType = (ConT ''ToAliasReference) `AppT` (ConT name)
   pure $ InstanceD overlap instanceConstraints instanceType [toAliasReferenceDec']
 
-toAliasReferenceDec :: RecordInfo -> Q Dec
-toAliasReferenceDec RecordInfo {..} = do
+toAliasReferenceDec :: Name -> [(Name, Type)] -> Q Dec
+toAliasReferenceDec name fields = do
   identInfo <- newName "identInfo"
 
   (statements, fieldPatterns, fieldExps) <-
-    unzip3 <$> forM sqlFields (\(fieldName', _) -> do
+    unzip3 <$> forM fields (\(fieldName', _) -> do
       fieldPatternName <- newName (nameBase fieldName')
       boundValueName <- newName (nameBase fieldName')
       pure
@@ -717,14 +732,14 @@ toAliasReferenceDec RecordInfo {..} = do
       'toAliasReference
       [ Clause
           [ VarP identInfo
-          , RecP sqlName fieldPatterns
+          , RecP name fieldPatterns
           ]
           ( NormalB $
               DoE
 #if MIN_VERSION_template_haskell(2,17,0)
                 Nothing
 #endif
-                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE sqlName fieldExps)])
+                (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE name fieldExps)])
           )
           -- `where` clause.
           []
@@ -745,7 +760,7 @@ makeSqlMaybeRecord  RecordInfo {..} = do
 -- | Generates a `ToMaybe` instance for the given record.
 makeToMaybeInstance :: RecordInfo -> Q Dec
 makeToMaybeInstance info@RecordInfo {..} = do
-  toMaybeTDec' <- toMaybeTDec info
+  toMaybeTDec' <- toMaybeTDec sqlName sqlMaybeName 
   toMaybeDec' <- toMaybeDec info
   let overlap = Nothing
       instanceConstraints = []
@@ -753,10 +768,20 @@ makeToMaybeInstance info@RecordInfo {..} = do
 
   pure $ InstanceD overlap instanceConstraints instanceType [toMaybeTDec', toMaybeDec']
 
--- | Generates a `type ToMaybeT ... = ...` declaration for the given record.
-toMaybeTDec :: RecordInfo -> Q Dec
-toMaybeTDec RecordInfo {..} = do
-  pure $ mkTySynInstD ''ToMaybeT (ConT sqlName) (ConT sqlMaybeName)
+-- | Generates a `ToMaybe` instance for the SqlMaybe of the given record.
+makeSqlMaybeToMaybeInstance :: RecordInfo -> Q Dec
+makeSqlMaybeToMaybeInstance RecordInfo {..} = do
+  sqlMaybeToMaybeTDec' <- toMaybeTDec sqlMaybeName sqlMaybeName
+  let toMaybeIdDec = FunD 'toMaybe [ Clause [] (NormalB (VarE 'id)) []]
+      overlap = Nothing
+      instanceConstraints = []
+      instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlMaybeName)
+  pure $ InstanceD overlap instanceConstraints instanceType [sqlMaybeToMaybeTDec', toMaybeIdDec]
+
+-- | Generates a `type ToMaybeT ... = ...` declaration for the given names.
+toMaybeTDec :: Name -> Name -> Q Dec
+toMaybeTDec nameLeft nameRight = do
+  pure $ mkTySynInstD ''ToMaybeT (ConT nameLeft) (ConT nameRight)
   where
     mkTySynInstD className lhsArg rhs =
 #if MIN_VERSION_template_haskell(2,15,0)
@@ -851,57 +876,28 @@ sqlMaybeSelectColsDec RecordInfo {..} = do
       ]
 
 -- | Generates the `sqlSelectProcessRow` declaration for an `SqlSelect`
--- instance.
+-- instance for a SqlMaybe.
 sqlMaybeSelectProcessRowDec :: RecordInfo -> Q Dec
 sqlMaybeSelectProcessRowDec RecordInfo {..} = do
-  let
-    sqlOp x = case x of
-            -- AppT (ConT ((==) ''Entity -> True)) _innerType -> id
-            -- (ConT ((==) ''Maybe -> True)) `AppT` ((ConT ((==) ''Entity -> True)) `AppT` _innerType) -> (AppE (VarE 'pure))
-            -- inner@((ConT ((==) ''Maybe -> True)) `AppT` _inner) -> (AppE (VarE 'unValue))
-            (AppT (ConT ((==) ''SqlExpr -> True)) (AppT (ConT ((==) ''Value -> True)) _)) -> (AppE (VarE 'unValue))
-            (AppT (ConT ((==) ''SqlExpr -> True)) (AppT (ConT ((==) ''Entity -> True)) _)) -> id
-            (AppT (ConT ((==) ''SqlExpr -> True)) (AppT (ConT ((==) ''Maybe -> True)) _)) -> (AppE (VarE 'pure))
-            (ConT _) -> id
-            _ -> error $ show x
-
-  fieldNames <- forM sqlFields (\(name', typ) -> do
-    var <- newName $ nameBase name'
-    pure (name', var, sqlOp typ (VarE var)))
-
-  let
-    joinedFields =
-        case (\(_,x,_) -> x) `map` fieldNames of
-          [] -> TupP []
-          [f1] -> VarP f1
-          f1 : rest ->
-            let helper lhs field =
-                  InfixP
-                    lhs
-                    '(:&)
-                    (VarP field)
-             in foldl' helper (VarP f1) rest
-
+  -- See sqlSelectProcessRowDec, which is similar but does not have special handling for Maybe
+  (statements, fieldExps) <-
+    unzip <$> forM (zip fields sqlMaybeFields) (\((fieldName', fieldType), (_, sqlType')) -> do
+      valueName <- newName (nameBase fieldName')
+      pattern <- sqlSelectProcessRowPat fieldType valueName
+      pure
+        ( BindS
+            pattern
+            (AppTypeE (VarE 'takeColumns) sqlType')
+        , (valueName, wrapJust fieldType $ VarE valueName)
+        ))
 
   colsName <- newName "columns"
+  processName <- newName "process"
 
-  let
-#if MIN_VERSION_template_haskell(2,17,0)
-    bodyExp = DoE Nothing
-#else
-    bodyExp = DoE
-#endif
-        [ BindS joinedFields (AppE (VarE 'sqlSelectProcessRow) (VarE colsName))
-        , NoBindS
-            $ AppE (VarE 'pure) (
-                case fieldNames of
-                    [] -> ConE constructorName
-                    (_,_,e):xs -> foldl'
-                        (\acc (_,_,e2) -> AppE (AppE (VarE '(<*>)) acc) e2)
-                        (AppE (AppE (VarE 'fmap) (ConE constructorName)) e)
-                        xs
-            )
-        ]
+  bodyExp <- [e|
+    first (fromString ("Failed to parse " ++ $(lift $ nameBase sqlMaybeName) ++ ": ") <>)
+          (evalStateT $(varE processName) $(varE colsName))
+    |]
 
   pure $
     FunD
@@ -909,8 +905,40 @@ sqlMaybeSelectProcessRowDec RecordInfo {..} = do
       [ Clause
           [VarP colsName]
           (NormalB bodyExp)
-          []
+          -- `where`
+          [ ValD
+              (VarP processName)
+              (NormalB $
+                  DoE
+#if MIN_VERSION_template_haskell(2,17,0)
+                    Nothing
+#endif
+                    (statements ++ [
+                      NoBindS $ AppE (VarE 'pure) (
+                        CondE
+                          (AppE
+                            (VarE 'or)
+                            (ListE $ fmap (\(n, _) -> AppE (VarE 'isJust) (VarE n)) fieldExps))
+                          (case snd <$> fieldExps of
+                              [] -> ConE constructorName
+                              x:xs ->  foldl'
+                                (\a b -> InfixE (Just a) (VarE '(<*>)) (Just b))
+                                (InfixE (Just $ ConE constructorName) (VarE '(<$>)) (Just x))
+                                xs)
+                          (ConE 'Nothing)
+                        )
+                      ]
+                    )
+              )
+              []
+          ]
       ]
+  where
+    wrapJust x = case x of
+      AppT (ConT ((==) ''Entity -> True)) _innerType -> id
+      ((ConT ((==) ''Maybe -> True)) `AppT` _inner) -> AppE (ConE 'Just)
+      (ConT _) -> id
+      _ -> error $ show x
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
 sqlMaybeSelectColCountDec :: RecordInfo -> Q Dec
