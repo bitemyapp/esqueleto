@@ -410,7 +410,7 @@ sqlSelectColsDec RecordInfo {..} = do
              in foldl' helper (VarE f1) rest
 
   identInfo <- newName "identInfo"
-  [d| sqlSelectCols $(varP identInfo) $(pure $ RecP sqlName fieldPatterns) =
+  [d| $(varP 'sqlSelectCols) = \ $(varP identInfo) $(pure $ RecP sqlName fieldPatterns) ->
         sqlSelectCols $(varE identInfo) $(pure joinedFields)
     |]
 
@@ -425,7 +425,7 @@ sqlSelectColCountDec RecordInfo {..} = do
                   InfixT lhs ''(:&) ty
              in foldl' helper t1 rest
 
-  [d| sqlSelectColCount _ = sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
+  [d| $(varP 'sqlSelectColCount) = \ _ -> sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
 
 -- | Generates the `sqlSelectProcessRow` declaration for an `SqlSelect`
 -- instance.
@@ -757,7 +757,7 @@ toMaybeDec RecordInfo {..} = do
             , (maybeFieldName', VarE 'toMaybe `AppE` VarE fieldPatternName)
             ))
 
-  [d| toMaybe $(pure $ RecP sqlName fieldPatterns) =
+  [d| $(varP 'toMaybe) = \ $(pure $ RecP sqlName fieldPatterns) ->
         $(pure $ RecConE sqlMaybeName fieldExps)
     |]
 
@@ -800,7 +800,7 @@ sqlMaybeSelectColsDec RecordInfo {..} = do
              in foldl' helper (VarE f1) rest
 
   identInfo <- newName "identInfo"
-  [d| sqlSelectCols $(varP identInfo) $(pure $ RecP sqlMaybeName fieldPatterns) =
+  [d| $(varP 'sqlSelectCols) = \ $(varP identInfo) $(pure $ RecP sqlMaybeName fieldPatterns) ->
         sqlSelectCols $(varE identInfo) $(pure joinedFields)
     |]
 
@@ -880,7 +880,7 @@ sqlMaybeSelectColCountDec RecordInfo {..} = do
                   InfixT lhs ''(:&) ty
              in foldl' helper t1 rest
 
-  [d| sqlSelectColCount _ = sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
+  [d| $(varP 'sqlSelectColCount) = \_ -> sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
 
 -- | Statefully parse some number of columns from a list of `PersistValue`s,
 -- where the number of columns to parse is determined by `sqlSelectColCount`
