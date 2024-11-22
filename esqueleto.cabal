@@ -30,6 +30,7 @@ source-repository head
 library
     exposed-modules:
         Database.Esqueleto
+        Database.Esqueleto.Compat
         Database.Esqueleto.Legacy
         Database.Esqueleto.Experimental
         Database.Esqueleto.Internal.Internal
@@ -86,6 +87,7 @@ test-suite specs
     type: exitcode-stdio-1.0
     main-is: Spec.hs
     other-modules:
+        Common.CompatSpec
         Common.Test
         Common.Test.Models
         Common.Test.Import
