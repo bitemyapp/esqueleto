@@ -717,16 +717,15 @@ countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr (Value Bool) -> SqlExpr (Value Bool)
-not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
+not_ v = ERaw noMeta (const $ first ("NOT " <>) . x)
   where
-    x p info =
+    x info =
         case v of
             ERaw m f ->
                 if hasCompositeKeyMeta m then
                     throw (CompositeKeyErr NotError)
                 else
-                    let (b, vals) = f Never info
-                    in (parensM p b, vals)
+                    f Parens info
 
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
