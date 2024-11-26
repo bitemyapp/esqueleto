@@ -1,3 +1,9 @@
+3.5.14.0
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+      - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors
+
 3.5.13.0
 ========
 - @ac251
