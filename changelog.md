@@ -1,4 +1,4 @@
-3.5.14.0
+3.5.13.1
 ========
 - @csamak
     - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
