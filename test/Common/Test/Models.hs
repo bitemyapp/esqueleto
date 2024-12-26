@@ -207,4 +207,3 @@ share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
 instance ToBaseId ArticleMetadata where
     type BaseEnt ArticleMetadata = Article
     toBaseIdWitness articleId = ArticleMetadataKey articleId
-

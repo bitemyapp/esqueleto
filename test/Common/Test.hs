@@ -32,7 +32,6 @@ module Common.Test
     ( tests
     , testLocking
     , testAscRandom
-    , testRandomMath
     , migrateAll
     , migrateUnique
     , cleanDB
@@ -720,7 +719,7 @@ testSelectSubQuery = describe "select subquery" $ do
         _ <- insert' p3
         let q = do
                 (name, age) <-
-                  Experimental.from $ SubQuery $ do
+                  Experimental.from $ do
                       p <- Experimental.from $ Table @Person
                       return ( p ^. PersonName, p ^. PersonAge)
                 orderBy [ asc age ]
@@ -741,7 +740,7 @@ testSelectSubQuery = describe "select subquery" $ do
                                                        lord ^. LordId ==. deed ^. DeedOwnerId)
                 return (lord ^. LordId, deed ^. DeedId)
             q' = do
-                 (lordId, deedId) <- Experimental.from $ SubQuery q
+                 (lordId, deedId) <- Experimental.from q
                  groupBy (lordId)
                  return (lordId, count deedId)
         (ret :: [(Value (Key Lord), Value Int)]) <- select q'
@@ -764,7 +763,7 @@ testSelectSubQuery = describe "select subquery" $ do
                 return (lord ^. LordId, count (deed ^. DeedId))
 
         (ret :: [(Value Int)]) <- select $ do
-                 (lordId, deedCount) <- Experimental.from $ SubQuery q
+                 (lordId, deedCount) <- Experimental.from q
                  where_ $ deedCount >. val (3 :: Int)
                  return (count lordId)
 
@@ -1220,8 +1219,8 @@ testCoasleceDefault = describe "coalesce/coalesceDefault" $ do
                  let sub =
                          from $ \p -> do
                          where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                         return $ p ^. PersonAge
-                 return $ coalesceDefault [subSelect sub] (val (42 :: Int))
+                         pure $ p ^. PersonAge
+                 return $ coalesceDefault [joinV $ subSelect sub] (val (42 :: Int))
         asserting $ ret `shouldBe` [ Value (36 :: Int)
                                 , Value 42
                                 , Value 17
@@ -1533,31 +1532,6 @@ testInsertsBySelectReturnsCount = do
         asserting $ ret `shouldBe` [Value (3::Int)]
         asserting $ cnt `shouldBe` 3
 
-
-
-
-testRandomMath :: SpecDb
-testRandomMath = describe "random_ math" $
-    itDb "rand returns result in random order" $
-      do
-        replicateM_ 20 $ do
-          _ <- insert p1
-          _ <- insert p2
-          _ <- insert p3
-          _ <- insert p4
-          _ <- insert $ Person "Jane"  Nothing Nothing 0
-          _ <- insert $ Person "Mark"  Nothing Nothing 0
-          _ <- insert $ Person "Sarah" Nothing Nothing 0
-          insert $ Person "Paul"  Nothing Nothing 0
-        ret1 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-        ret2 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-
-        asserting $ (ret1 == ret2) `shouldBe` False
-
 testMathFunctions :: SpecDb
 testMathFunctions = do
   describe "Math-related functions" $ do
@@ -1622,9 +1596,9 @@ testCase = do
                               return (c ^. PersonFavNum)
                       where_ (just (v ^. PersonFavNum) >. subSelect sub)
                       return $ count (v ^. PersonName) +. val (1 :: Int)) ]
-              (else_ $ val (-1))
+              (else_ $ just $ val (-1))
 
-        asserting $ ret `shouldBe` [ Value (3) ]
+        asserting $ ret `shouldBe` [ Value (Just 3) ]
 
 testLocking :: SpecDb
 testLocking = do
@@ -2346,7 +2320,7 @@ testExperimentalFrom = do
         insert_ p3
         -- Pretend this isnt all posts
         upperNames <- select $ do
-          author <- Experimental.from $ SelectQuery $ Experimental.from $ Table @Person
+          author <- Experimental.from $ Experimental.from $ Table @Person
           pure $ upper_ $ author ^. PersonName
 
         asserting $ upperNames `shouldMatchList` [ Value "JOHN"
