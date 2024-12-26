@@ -40,7 +40,8 @@ import Database.Esqueleto hiding (random_)
 import Database.Esqueleto.Experimental hiding (from, on, random_)
 import qualified Database.Esqueleto.Experimental as Experimental
 import qualified Database.Esqueleto.Internal.Internal as ES
-import Database.Esqueleto.PostgreSQL (random_)
+import Database.Esqueleto.PostgreSQL
+       (random_, withMaterialized, withNotMaterialized)
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
@@ -1231,6 +1232,80 @@ testCommonTableExpressions = do
             res <- Experimental.from cte2
             pure res
         asserting $ vals `shouldBe` fmap Value [2..11]
+
+    describe "MATERIALIZED CTEs" $ do
+      describe "withNotMaterialized" $ do
+        itDb "successfully executes query" $ do
+          void $ select $ do
+            limitedLordsCte <-
+                withNotMaterialized $ do
+                    lords <- Experimental.from $ Experimental.table @Lord
+                    limit 10
+                    pure lords
+            lords <- Experimental.from limitedLordsCte
+            orderBy [asc $ lords ^. LordId]
+            pure lords
+
+          asserting noExceptions
+
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withNotMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+
+      describe "withMaterialized" $ do
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+        itDb "successfully executes query" $ do
+            void $ select $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+            asserting noExceptions
 
 testPostgresqlLocking :: SpecDb
 testPostgresqlLocking = do
