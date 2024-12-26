@@ -3,6 +3,8 @@
 - @parsonsmatt
     - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
         - Derive `Foldable` and `Traversable` for `Value`.
+    - [#416](https://github.com/bitemyapp/esqueleto/pull/416)
+        - Derive `Functor` and `Bifunctor` for `:&`
 
 3.5.13.2
 ========
