@@ -6,6 +6,7 @@
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -1270,11 +1271,8 @@ else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
-newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
-
--- | @since 1.4.4
-instance Functor Value where
-    fmap f (Value a) = Value (f a)
+newtype Value a = Value { unValue :: a }
+    deriving (Eq, Ord, Show, Typeable, Functor, Foldable, Traversable)
 
 instance Applicative Value where
   (<*>) (Value f) (Value a) = Value (f a)
