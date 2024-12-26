@@ -82,6 +82,6 @@ jobs:
             ${{ runner.os }}-${{ matrix.ghc }}-
       - run: cabal v2-build --disable-optimization -j $CONFIG
       - run: cabal v2-test --disable-optimization -j $CONFIG --test-options "--fail-on-focus"
-      - if: ${{ matrix.ghc != '8.6.5' }}
+      - if: ${{ matrix.ghc != '8.6' }}
         run: cabal v2-haddock -j $CONFIG
       - run: cabal v2-sdist
