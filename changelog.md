@@ -2,15 +2,16 @@
 ========
 - @blujupiter32
     - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
-        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&.
-          b`
+        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&. b`
 - @TeofilC
-  - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
-    - Use TH quotes to eliminate some CPP.
+    - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+        - Use TH quotes to eliminate some CPP.
+- @parsonsmatt, @jappeace
+    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), [#411](https://github.com/bitemyapp/esqueleto/pull/411)
+        - Add docs for more SQL operators
 
 3.5.13.1
 ========
-
 - @csamak
     - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
       - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors

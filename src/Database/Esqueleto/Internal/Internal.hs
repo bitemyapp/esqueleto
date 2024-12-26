@@ -727,42 +727,157 @@ not_ v = ERaw noMeta (const $ first ("NOT " <>) . x)
                 else
                     f Parens info
 
+-- | This operator produces the SQL operator @=@, which is used to compare
+-- values for equality.
+--
+-- Example:
+--
+-- @
+--  query :: UserId -> SqlPersistT IO [Entity User]
+--  query userId = select $ do
+--      user <- from $ table \@User
+--      where_ (user ^. UserId ==. val userId)
+--      pure user
+-- @
+--
+-- This would generate the following SQL:
+--
+-- @
+--  SELECT user.*
+--  FROM user
+--  WHERE user.id = ?
+-- @
 (==.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
+-- | This operator translates to the SQL operator @>=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserAge >=. val 21
+-- @
 (>=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
+-- | This operator translates to the SQL operator @>@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserAge >. val 20
+-- @
 (>.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
+-- | This operator translates to the SQL operator @<=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ val 21 <=. user ^. UserAge
+-- @
 (<=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
+-- | This operator translates to the SQL operator @<@.
+--
+-- Example:
+--
+-- @
+--  where_ $ val 20 <. user ^. UserAge
+-- @
 (<.)  :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (<.)  = unsafeSqlBinOp " < "
+
+-- | This operator translates to the SQL operator @!=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserName !=. val "Bob"
+-- @
 (!=.) :: PersistField typ => SqlExpr (Value typ) -> SqlExpr (Value typ) -> SqlExpr (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
+-- | This operator translates to the SQL operator @AND@.
+--
+-- Example:
+--
+-- @
+--  where_ $
+--          user ^. UserName ==. val "Matt"
+--      &&. user ^. UserAge >=. val 21
+-- @
 (&&.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
+-- | This operator translates to the SQL operator @AND@.
+--
+-- Example:
+--
+-- @
+--  where_ $
+--          user ^. UserName ==. val "Matt"
+--      ||. user ^. UserName ==. val "John"
+-- @
 (||.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 
+-- | This operator translates to the SQL operator @+@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @+.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge +. val 10
+-- @
 (+.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (+.)  = unsafeSqlBinOp " + "
 
+-- | This operator translates to the SQL operator @-@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @-.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge -. val 10
+-- @
 (-.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (-.)  = unsafeSqlBinOp " - "
 
+-- | This operator translates to the SQL operator @/@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @/.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge /. val 10
+-- @
 (/.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (/.)  = unsafeSqlBinOp " / "
 
+-- | This operator translates to the SQL operator @*@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @*.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge *. val 10
+-- @
 (*.)  :: PersistField a => SqlExpr (Value a) -> SqlExpr (Value a) -> SqlExpr (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
--- | @BETWEEN@.
+-- | @a `between` (b, c)@ translates to the SQL expression @a >= b AND a <= c@.
+-- It does not use a SQL @BETWEEN@ operator.
 --
 -- @since: 3.1.0
 between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
