@@ -1,3 +1,10 @@
+3.5.13.2 (unreleased)
+========
+- @blujupiter32
+    - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
+        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&.
+          b`
+
 3.5.13.1
 ========
 - @csamak
