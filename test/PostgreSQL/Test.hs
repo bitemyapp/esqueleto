@@ -1262,7 +1262,8 @@ testCommonTableExpressions = do
           asserting $ sql `shouldBe` T.unlines
             [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
             , "FROM \"Lord\""
-            , " LIMIT 10)"
+            , " LIMIT 10"
+            , ")"
             , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
             , "FROM \"cte\""
             , "ORDER BY \"cte\".\"v_county\" ASC"
@@ -1285,7 +1286,8 @@ testCommonTableExpressions = do
           asserting $ sql `shouldBe` T.unlines
             [ "WITH \"cte\" AS MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
             , "FROM \"Lord\""
-            , " LIMIT 10)"
+            , " LIMIT 10"
+            , ")"
             , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
             , "FROM \"cte\""
             , "ORDER BY \"cte\".\"v_county\" ASC"
