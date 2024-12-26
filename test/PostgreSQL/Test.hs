@@ -1347,7 +1347,6 @@ testPostgresqlLocking = do
                                             EP.forUpdateOf p EP.skipLocked
                                             return p
 
-                                liftIO $ print nonLockedRowsSpecifiedTable
                                 pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
 
                     withAsync sideThread $ \sideThreadAsync -> do
@@ -1371,7 +1370,6 @@ testPostgresqlLocking = do
                                                     EP.forUpdateOf p EP.skipLocked
                                                     return p
 
-                            liftIO $ print nonLockedRowsAfterUpdate
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 

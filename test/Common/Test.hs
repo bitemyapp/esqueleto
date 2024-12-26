@@ -91,6 +91,7 @@ import qualified UnliftIO.Resource as R
 
 import Common.Record (testDeriveEsqueletoRecord)
 import Common.Test.Select
+import qualified Common.Test.CTE as CTESpec
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -2426,6 +2427,7 @@ tests =
         testLocking
         testOverloadedRecordDot
         testDeriveEsqueletoRecord
+        CTESpec.testCTE
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val

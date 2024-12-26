@@ -182,6 +182,16 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     address String
     deriving Show
     deriving Eq
+
+  A
+      k Int
+      v Int
+      Primary k
+
+  B
+      k Int
+      v Int
+      Primary k
 |]
 
 -- Unique Test schema
