@@ -12,7 +12,7 @@
         - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
           module
 - @JoelMcCracken
-    - [#354](https://github.com/bitemyapp/esqueleto/pull/354)
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
       - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
 
 3.5.13.2
