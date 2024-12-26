@@ -1,3 +1,9 @@
+3.5.14.0 (unreleased)
+========
+- @parsonsmatt
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+
 3.5.13.2
 ========
 - @blujupiter32
