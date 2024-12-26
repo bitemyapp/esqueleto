@@ -87,6 +87,7 @@ test-suite specs
     main-is: Spec.hs
     other-modules:
         Common.Test
+        Common.Test.CTE
         Common.Test.Models
         Common.Test.Import
         Common.Test.Select
