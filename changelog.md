@@ -7,7 +7,7 @@
     - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
         - Use TH quotes to eliminate some CPP.
 - @parsonsmatt, @jappeace
-    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), []()
+    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), [#411](https://github.com/bitemyapp/esqueleto/pull/411)
         - Add docs for more SQL operators
 
 3.5.13.1
