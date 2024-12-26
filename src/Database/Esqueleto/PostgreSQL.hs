@@ -36,6 +36,7 @@ module Database.Esqueleto.PostgreSQL
     , forKeyShareOf
     , filterWhere
     , values
+    , ilike
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -494,3 +495,9 @@ forShareOf lockableEntities onLockedBehavior =
 forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forKeyShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @ILIKE@ operator (case-insensitive @LIKE@).
+--
+-- @since 2.2.3
+ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
+ilike   = unsafeSqlBinOp    " ILIKE "

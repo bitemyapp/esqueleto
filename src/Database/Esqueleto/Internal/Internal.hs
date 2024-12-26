@@ -993,11 +993,14 @@ like    = unsafeSqlBinOp    " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
 --
--- Supported by PostgreSQL only.
+-- Supported by PostgreSQL only. Deprecated in version 3.6.0 in favor of the
+-- version available from "Database.Esqueleto.PostgreSQL".
 --
 -- @since 2.2.3
 ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
 ilike   = unsafeSqlBinOp    " ILIKE "
+
+{-# DEPRECATED ilike "Since 3.6.0: `ilike` is only supported on Postgres. Please import it from 'Database.Esqueleto.PostgreSQL." #-}
 
 -- | The string @'%'@.  May be useful while using 'like' and
 -- concatenation ('concat_' or '++.', depending on your
@@ -1011,13 +1014,19 @@ ilike   = unsafeSqlBinOp    " ILIKE "
 (%)     = unsafeSqlValue    "'%'"
 
 -- | The @CONCAT@ function with a variable number of
--- parameters.  Supported by MySQL and PostgreSQL.
+-- parameters.  Supported by MySQL and PostgreSQL. SQLite supports this in
+-- versions after 3.44.0, and @persistent-sqlite@ supports this in versions
+-- @2.13.3.0@ and after.
 concat_ :: SqlString s => [SqlExpr (Value s)] -> SqlExpr (Value s)
 concat_ = unsafeSqlFunction "CONCAT"
 
 -- | The @||@ string concatenation operator (named after
 -- Haskell's '++' in order to avoid naming clash with '||.').
+--
 -- Supported by SQLite and PostgreSQL.
+--
+-- MySQL support requires setting the SQL mode to @PIPES_AS_CONCAT@ or @ANSI@
+-- - see <https://stackoverflow.com/a/24777235 this StackOverflow answer>.
 (++.) :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value s)
 (++.)   = unsafeSqlBinOp    " || "
 
