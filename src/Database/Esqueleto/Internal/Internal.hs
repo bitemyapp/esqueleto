@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
@@ -53,6 +54,7 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Bifunctor (Bifunctor, bimap)
 import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
@@ -1553,8 +1555,11 @@ data Insertion a
 -- See the examples at the beginning of this module to see how this
 -- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
-    deriving (Eq, Show)
+    deriving (Eq, Show, Functor)
 infixl 2 :&
+
+instance Bifunctor (:&) where
+    bimap f g (a :& b) = f a :& g b
 
 -- | Different kinds of locking clauses supported by 'locking'.
 --
