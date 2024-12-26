@@ -7,6 +7,9 @@
 - @RikvanToor
     - [#373](https://github.com/bitemyapp/esqueleto/pull/373), [#410](https://github.com/bitemyapp/esqueleto/pull/410)
         - Fix name clashes when using CTEs multiple times
+- @TeofilC
+    - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+        - Use TH quotes to eliminate some CPP.
 
 3.5.13.1
 ========

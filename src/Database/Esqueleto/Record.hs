@@ -379,15 +379,12 @@ makeSqlSelectInstance info@RecordInfo {..} = do
   sqlSelectProcessRowDec' <- sqlSelectProcessRowDec info
   let overlap = Nothing
       instanceConstraints = []
-      instanceType =
-        (ConT ''SqlSelect)
-          `AppT` (ConT sqlName)
-          `AppT` (ConT name)
+  instanceType <- [t| SqlSelect $(conT sqlName) $(conT name) |]
 
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
+  pure $ InstanceD overlap instanceConstraints instanceType (sqlSelectColsDec' ++ sqlSelectColCountDec' ++ [ sqlSelectProcessRowDec'])
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
-sqlSelectColsDec :: RecordInfo -> Q Dec
+sqlSelectColsDec :: RecordInfo -> Q [Dec]
 sqlSelectColsDec RecordInfo {..} = do
   -- Pairs of record field names and local variable names.
   fieldNames <- forM sqlFields (\(name', _type) -> do
@@ -413,26 +410,12 @@ sqlSelectColsDec RecordInfo {..} = do
              in foldl' helper (VarE f1) rest
 
   identInfo <- newName "identInfo"
-  -- Roughly:
-  -- sqlSelectCols $identInfo SqlFoo{..} = sqlSelectCols $identInfo $joinedFields
-  pure $
-    FunD
-      'sqlSelectCols
-      [ Clause
-          [ VarP identInfo
-          , RecP sqlName fieldPatterns
-          ]
-          ( NormalB $
-              (VarE 'sqlSelectCols)
-                `AppE` (VarE identInfo)
-                `AppE` (ParensE joinedFields)
-          )
-          -- `where` clause.
-          []
-      ]
+  [d| $(varP 'sqlSelectCols) = \ $(varP identInfo) $(pure $ RecP sqlName fieldPatterns) ->
+        sqlSelectCols $(varE identInfo) $(pure joinedFields)
+    |]
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
-sqlSelectColCountDec :: RecordInfo -> Q Dec
+sqlSelectColCountDec :: RecordInfo -> Q [Dec]
 sqlSelectColCountDec RecordInfo {..} = do
   let joinedTypes =
         case snd `map` sqlFields of
@@ -442,23 +425,7 @@ sqlSelectColCountDec RecordInfo {..} = do
                   InfixT lhs ''(:&) ty
              in foldl' helper t1 rest
 
-  -- Roughly:
-  -- sqlSelectColCount _ = sqlSelectColCount (Proxy @($joinedTypes))
-  pure $
-    FunD
-      'sqlSelectColCount
-      [ Clause
-          [WildP]
-          ( NormalB $
-              AppE (VarE 'sqlSelectColCount) $
-                ParensE $
-                  AppTypeE
-                    (ConE 'Proxy)
-                    joinedTypes
-          )
-          -- `where` clause.
-          []
-      ]
+  [d| $(varP 'sqlSelectColCount) = \ _ -> sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
 
 -- | Generates the `sqlSelectProcessRow` declaration for an `SqlSelect`
 -- instance.
@@ -541,11 +508,7 @@ sqlSelectProcessRowPat fieldType var = do
           `AppT` ((ConT ((==) ''Entity -> True))
                   `AppT` _innerType) -> pure $ VarP var
         -- x -> Value var
-#if MIN_VERSION_template_haskell(2,18,0)
-        _ -> pure $ ConP 'Value [] [VarP var]
-#else
-        _ -> pure $ ConP 'Value [VarP var]
-#endif
+        _ -> [p| Value $(varP var) |]
 
 -- Given a type, find the corresponding SQL type.
 --
@@ -766,7 +729,7 @@ makeToMaybeInstance info@RecordInfo {..} = do
       instanceConstraints = []
       instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlName)
 
-  pure $ InstanceD overlap instanceConstraints instanceType [toMaybeTDec', toMaybeDec']
+  pure $ InstanceD overlap instanceConstraints instanceType (toMaybeTDec' ++ toMaybeDec')
 
 -- | Generates a `ToMaybe` instance for the SqlMaybe of the given record.
 makeSqlMaybeToMaybeInstance :: RecordInfo -> Q Dec
@@ -776,25 +739,15 @@ makeSqlMaybeToMaybeInstance RecordInfo {..} = do
       overlap = Nothing
       instanceConstraints = []
       instanceType = (ConT ''ToMaybe) `AppT` (ConT sqlMaybeName)
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlMaybeToMaybeTDec', toMaybeIdDec]
+  pure $ InstanceD overlap instanceConstraints instanceType (toMaybeIdDec:sqlMaybeToMaybeTDec')
 
 -- | Generates a `type ToMaybeT ... = ...` declaration for the given names.
-toMaybeTDec :: Name -> Name -> Q Dec
-toMaybeTDec nameLeft nameRight = do
-  pure $ mkTySynInstD ''ToMaybeT (ConT nameLeft) (ConT nameRight)
-  where
-    mkTySynInstD className lhsArg rhs =
-#if MIN_VERSION_template_haskell(2,15,0)
-        let binders = Nothing
-            lhs = ConT className `AppT` lhsArg
-        in
-            TySynInstD $ TySynEqn binders lhs rhs
-#else
-       TySynInstD className $ TySynEqn [lhsArg] rhs
-#endif
+toMaybeTDec :: Name -> Name -> Q [Dec]
+toMaybeTDec nameLeft nameRight =
+  [d| type instance ToMaybeT $(conT nameLeft) = $(conT nameRight) |]
 
 -- | Generates a `toMaybe value = ...` declaration for the given record.
-toMaybeDec :: RecordInfo -> Q Dec
+toMaybeDec :: RecordInfo -> Q [Dec]
 toMaybeDec RecordInfo {..} = do
   (fieldPatterns, fieldExps) <-
     unzip <$> forM (zip sqlFields sqlMaybeFields) (\((fieldName', _), (maybeFieldName', _)) -> do
@@ -804,15 +757,9 @@ toMaybeDec RecordInfo {..} = do
             , (maybeFieldName', VarE 'toMaybe `AppE` VarE fieldPatternName)
             ))
 
-  pure $
-    FunD
-        'toMaybe
-        [ Clause
-            [ RecP sqlName fieldPatterns
-            ]
-            (NormalB $ RecConE sqlMaybeName fieldExps)
-            []
-        ]
+  [d| $(varP 'toMaybe) = \ $(pure $ RecP sqlName fieldPatterns) ->
+        $(pure $ RecConE sqlMaybeName fieldExps)
+    |]
 
 -- | Generates an `SqlSelect` instance for the given record and its
 -- @Sql@-prefixed variant.
@@ -823,15 +770,11 @@ makeSqlMaybeRecordSelectInstance info@RecordInfo {..} = do
   sqlSelectProcessRowDec' <- sqlMaybeSelectProcessRowDec info
   let overlap = Nothing
       instanceConstraints = []
-      instanceType =
-        (ConT ''SqlSelect)
-          `AppT` (ConT sqlMaybeName)
-          `AppT` (AppT (ConT ''Maybe) (ConT name))
-
-  pure $ InstanceD overlap instanceConstraints instanceType [sqlSelectColsDec', sqlSelectColCountDec', sqlSelectProcessRowDec']
+  instanceType <- [t| SqlSelect $(conT sqlMaybeName) (Maybe $(conT name)) |]
+  pure $ InstanceD overlap instanceConstraints instanceType (sqlSelectColsDec' ++ sqlSelectColCountDec' ++ [sqlSelectProcessRowDec'])
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
-sqlMaybeSelectColsDec :: RecordInfo -> Q Dec
+sqlMaybeSelectColsDec :: RecordInfo -> Q [Dec]
 sqlMaybeSelectColsDec RecordInfo {..} = do
   -- Pairs of record field names and local variable names.
   fieldNames <- forM sqlMaybeFields (\(name', _type) -> do
@@ -857,23 +800,9 @@ sqlMaybeSelectColsDec RecordInfo {..} = do
              in foldl' helper (VarE f1) rest
 
   identInfo <- newName "identInfo"
-  -- Roughly:
-  -- sqlSelectCols $identInfo SqlFoo{..} = sqlSelectCols $identInfo $joinedFields
-  pure $
-    FunD
-      'sqlSelectCols
-      [ Clause
-          [ VarP identInfo
-          , RecP sqlMaybeName fieldPatterns
-          ]
-          ( NormalB $
-              (VarE 'sqlSelectCols)
-                `AppE` (VarE identInfo)
-                `AppE` (ParensE joinedFields)
-          )
-          -- `where` clause.
-          []
-      ]
+  [d| $(varP 'sqlSelectCols) = \ $(varP identInfo) $(pure $ RecP sqlMaybeName fieldPatterns) ->
+        sqlSelectCols $(varE identInfo) $(pure joinedFields)
+    |]
 
 -- | Generates the `sqlSelectProcessRow` declaration for an `SqlSelect`
 -- instance for a SqlMaybe.
@@ -939,7 +868,7 @@ sqlMaybeSelectProcessRowDec RecordInfo {..} = do
       _ -> id
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
-sqlMaybeSelectColCountDec :: RecordInfo -> Q Dec
+sqlMaybeSelectColCountDec :: RecordInfo -> Q [Dec]
 sqlMaybeSelectColCountDec RecordInfo {..} = do
   let joinedTypes =
         case snd `map` sqlMaybeFields of
@@ -949,23 +878,7 @@ sqlMaybeSelectColCountDec RecordInfo {..} = do
                   InfixT lhs ''(:&) ty
              in foldl' helper t1 rest
 
-  -- Roughly:
-  -- sqlSelectColCount _ = sqlSelectColCount (Proxy @($joinedTypes))
-  pure $
-    FunD
-      'sqlSelectColCount
-      [ Clause
-          [WildP]
-          ( NormalB $
-              AppE (VarE 'sqlSelectColCount) $
-                ParensE $
-                  AppTypeE
-                    (ConE 'Proxy)
-                    joinedTypes
-          )
-          -- `where` clause.
-          []
-      ]
+  [d| $(varP 'sqlSelectColCount) = \_ -> sqlSelectColCount (Proxy @($(pure joinedTypes))) |]
 
 -- | Statefully parse some number of columns from a list of `PersistValue`s,
 -- where the number of columns to parse is determined by `sqlSelectColCount`
