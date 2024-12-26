@@ -9,9 +9,6 @@ import Data.Coerce
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-{-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
-type ToAliasReferenceT a = a
-
 -- more tedious tuple magic
 class ToAliasReference a where
     toAliasReference :: Ident -> a -> SqlQuery a

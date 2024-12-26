@@ -57,7 +57,7 @@ import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
-import Database.Esqueleto.Internal.Internal hiding (random_, ilike)
+import Database.Esqueleto.Internal.Internal hiding (ilike)
 import Database.Esqueleto.Internal.PersistentImport hiding
        (uniqueFields, upsert, upsertBy)
 import Database.Persist.SqlBackend

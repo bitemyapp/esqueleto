@@ -160,19 +160,8 @@ testSubSelect = do
                   pure (n ^. NumbersInt)
             setup
             res <- select $ pure $ subSelect query
-            eres <- try $ do
-                select $ pure $ sub_select query
             asserting $ do
                 res `shouldBe` [Value (Just 1)]
-                case eres of
-                    Left (SomeException _) ->
-                        -- We should receive an exception, but the different database
-                        -- libraries throw different exceptions. Hooray.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
         itDb "is safe for queries that may not return anything" $ do
             let query =
@@ -184,21 +173,8 @@ testSubSelect = do
             res <- select $ pure $ subSelect query
             transactionUndo
 
-            eres <- try $ do
-                select $ pure $ sub_select query
-
             asserting $ do
                 res `shouldBe` [Value $ Just 1]
-                case eres of
-                    Left (_ :: PersistException) ->
-                        -- We expect to receive this exception. However, sqlite evidently has
-                        -- no problems with itDb, so we can't *require* that the exception is
-                        -- thrown. Sigh.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
     describe "subSelectList" $ do
         itDb "is safe on empty databases as well as good databases" $ do
@@ -405,7 +381,7 @@ testSelectFrom = do
                             , (p2e, p2e)
                             ]
 
-        itDb "works for a self-join via sub_select" $ do
+        itDb "works for a self-join via subSelect" $ do
             p1k <- insert p1
             p2k <- insert p2
             _f1k <- insert (Follow p1k p2k)
@@ -416,7 +392,7 @@ testSelectFrom = do
                          from $ \followB -> do
                          where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
                          return $ followB ^. FollowFollower
-                   where_ $ followA ^. FollowFollowed ==. sub_select subquery
+                   where_ $ just (followA ^. FollowFollowed) ==. subSelect subquery
                    return followA
             asserting $ length ret `shouldBe` 2
 
@@ -1135,12 +1111,12 @@ testSelectOrderBy = describe "select/orderBy" $ do
                return p
         asserting $ ret `shouldBe` [ p1e, p3e, p2e ]
 
-    itDb "works with a sub_select" $ do
+    itDb "works with a subSelect" $ do
         [p1k, p2k, p3k, p4k] <- mapM insert [p1, p2, p3, p4]
         [b1k, b2k, b3k, b4k] <- mapM (insert . BlogPost "") [p1k, p2k, p3k, p4k]
         ret <- select $
                from $ \b -> do
-               orderBy [desc $ sub_select $
+               orderBy [desc $ subSelect $
                                from $ \p -> do
                                where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
                                return (p ^. PersonName)
@@ -1245,7 +1221,7 @@ testCoasleceDefault = describe "coalesce/coalesceDefault" $ do
                          from $ \p -> do
                          where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
                          return $ p ^. PersonAge
-                 return $ coalesceDefault [sub_select sub] (val (42 :: Int))
+                 return $ coalesceDefault [subSelect sub] (val (42 :: Int))
         asserting $ ret `shouldBe` [ Value (36 :: Int)
                                 , Value 42
                                 , Value 17
@@ -1288,7 +1264,7 @@ testUpdate = describe "update" $ do
               where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
               return countRows
         ()  <- update $ \p -> do
-               set p [ PersonAge =. just (sub_select (blogPostsBy p)) ]
+               set p [ PersonAge =. subSelect (blogPostsBy p) ]
         ret <- select $
                from $ \p -> do
                orderBy [ asc (p ^. PersonName) ]
@@ -1639,12 +1615,12 @@ testCase = do
                   (exists $ from $ \p -> do
                       where_ (p ^. PersonName ==. val "Mike"))
                 then_
-                  (sub_select $ from $ \v -> do
+                  (subSelect $ from $ \v -> do
                       let sub =
                               from $ \c -> do
                               where_ (c ^. PersonName ==. val "Mike")
                               return (c ^. PersonFavNum)
-                      where_ (v ^. PersonFavNum >. sub_select sub)
+                      where_ (just (v ^. PersonFavNum) >. subSelect sub)
                       return $ count (v ^. PersonName) +. val (1 :: Int)) ]
               (else_ $ val (-1))
 
