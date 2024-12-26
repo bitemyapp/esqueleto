@@ -61,10 +61,12 @@ module Database.Esqueleto.Experimental
     , ToAliasReference(..)
     , ToAliasReferenceT
     , ToSqlSetOperation(..)
+    , SqlSelect
 
     -- * The Normal Stuff
     , where_
     , groupBy
+    , groupBy_
     , orderBy
     , rand
     , asc
@@ -85,6 +87,7 @@ module Database.Esqueleto.Experimental
 
     , val
     , isNothing
+    , isNothing_
     , just
     , nothing
     , joinV
@@ -174,6 +177,7 @@ module Database.Esqueleto.Experimental
     , OrderBy
     , DistinctOn
     , LockingKind(..)
+    , LockableEntity(..)
     , SqlString
 
       -- ** Joins
@@ -184,6 +188,10 @@ module Database.Esqueleto.Experimental
     , FullOuterJoin(..)
     , JoinKind(..)
     , OnClauseWithoutMatchingJoinException(..)
+      -- *** Join Helpers
+    , getTable
+    , getTableMaybe
+    , GetFirstTable(..)
 
       -- ** SQL backend
     , SqlQuery
@@ -334,8 +342,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 -- @
 -- select $
 -- from $ \\(people \`LeftOuterJoin\` blogPosts) -> do
--- on (people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
--- where_ (people ^. PersonAge >. val 18)
+-- on (just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. just (val 18))
 -- pure (people, blogPosts)
 -- @
 --
@@ -349,8 +357,8 @@ import Database.Esqueleto.Experimental.ToMaybe
 --     from $ table \@Person
 --     \`leftJoin\` table \@BlogPost
 --     \`on\` (\\(people :& blogPosts) ->
---             people ^. PersonId ==. blogPosts ?. BlogPostAuthorId)
--- where_ (people ^. PersonAge >. val 18)
+--             just (people ^. PersonId) ==. blogPosts ?. BlogPostAuthorId)
+-- where_ (people ^. PersonAge >. just (val 18))
 -- pure (people, blogPosts)
 -- @
 --

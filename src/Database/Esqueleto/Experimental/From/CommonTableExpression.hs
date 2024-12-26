@@ -33,6 +33,14 @@ import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
 -- always verify that using a CTE will in fact improve your performance
 -- over a regular subquery.
 --
+-- Notably, in PostgreSQL prior to version 12, CTEs are always fully
+-- calculated, which can potentially significantly pessimize queries. As of
+-- PostgreSQL 12, non-recursive and side-effect-free queries may be inlined and
+-- optimized accordingly if not declared @MATERIALIZED@ to get the previous
+-- behaviour. See [the PostgreSQL CTE documentation](https://www.postgresql.org/docs/current/queries-with.html#id-1.5.6.12.7),
+-- section Materialization, for more information. To use a @MATERIALIZED@ query
+-- in Esquelto, see functions 'withMaterialized' and 'withRecursiveMaterialized'.
+--
 -- /Since: 3.4.0.0/
 with :: ( ToAlias a
         , ToAliasReference a
@@ -43,10 +51,14 @@ with query = do
     aliasedValue <- toAlias ret
     let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
     ident <- newIdentFor (DBName "cte")
-    let clause = CommonTableExpressionClause NormalCommonTableExpression ident (\info -> toRawSql SELECT info aliasedQuery)
+    let clause = CommonTableExpressionClause NormalCommonTableExpression (\_ _ -> "")  ident (\info -> toRawSql SELECT info aliasedQuery)
     Q $ W.tell mempty{sdCteClause = [clause]}
     ref <- toAliasReference ident aliasedValue
-    pure $ From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+    pure $ From $ do
+        newIdent <- newIdentFor (DBName "cte")
+        localRef <- toAliasReference newIdent ref
+        let makeLH info = useIdent info ident <> " AS " <> useIdent info newIdent
+        pure (localRef, (\_ info -> (makeLH info, mempty)))
 
 -- | @WITH@ @RECURSIVE@ allows one to make a recursive subquery, which can
 -- reference itself. Like @WITH@, this is supported in most modern SQL engines.
@@ -96,7 +108,8 @@ withRecursive baseCase unionKind recursiveCase = do
     ref <- toAliasReference ident aliasedValue
     let refFrom = From (pure (ref, (\_ info -> (useIdent info ident, mempty))))
     let recursiveQuery = recursiveCase refFrom
-    let clause = CommonTableExpressionClause RecursiveCommonTableExpression ident
+    let noModifier _ _ = ""
+    let clause = CommonTableExpressionClause RecursiveCommonTableExpression noModifier ident
                  (\info -> (toRawSql SELECT info aliasedQuery)
                         <> ("\n" <> (unUnionKind unionKind)  <> "\n", mempty)
                         <> (toRawSql SELECT info recursiveQuery)

@@ -1,10 +1,217 @@
-3.5.3.1
+3.6.0.0
 =======
 - @parsonsmatt
     - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
         - Fix `upsert` and `upsertBy` to produce `INSERT ... ON CONFLICT DO
           NOTHING` code when given an empty list.
 
+3.5.14.0
+========
+- @parsonsmatt
+    - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
+        - Export the `SqlSelect` type from `Database.Esqueleto.Experimental`
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+    - [#416](https://github.com/bitemyapp/esqueleto/pull/416)
+        - Derive `Functor` and `Bifunctor` for `:&`
+- @matthewbauer
+    - [#341](https://github.com/bitemyapp/esqueleto/pull/341/)
+        - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
+          module
+- @JoelMcCracken
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
+      - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
+
+3.5.13.2
+========
+- @blujupiter32
+    - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
+        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&. b`
+- @RikvanToor
+    - [#373](https://github.com/bitemyapp/esqueleto/pull/373), [#410](https://github.com/bitemyapp/esqueleto/pull/410)
+        - Fix name clashes when using CTEs multiple times
+- @TeofilC
+    - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+        - Use TH quotes to eliminate some CPP.
+- @parsonsmatt, @jappeace
+    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), [#411](https://github.com/bitemyapp/esqueleto/pull/411)
+        - Add docs for more SQL operators
+
+3.5.13.1
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+      - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors
+
+3.5.13.0
+========
+- @ac251
+    - [#402](https://github.com/bitemyapp/esqueleto/pull/402)
+      - Add `forNoKeyUpdate` and `forKeyShare` locking kinds for postgres
+
+3.5.12.0
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+        - `ToMaybe` instances are now derived for Maybe records.
+          See [Issue #401](https://github.com/bitemyapp/esqueleto/issues/401).
+
+3.5.11.2
+========
+- @arguri
+    - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
+        - Fix build for ghc 9.8.1 / template-haskell 2.18
+
+3.5.11.0
+========
+- @9999years, @halogenandtoast
+    - [#378](https://github.com/bitemyapp/esqueleto/pull/378)
+        - `ToMaybe` instances are now derived for records so you can now left
+          join them in queries
+
+3.5.10.3
+========
+- @ttuegel
+    - [#377](https://github.com/bitemyapp/esqueleto/pull/377)
+        - Fix Postgres syntax for `noWait`
+
+3.5.10.2
+========
+- @parsonsmatt
+    - [#376](https://github.com/bitemyapp/esqueleto/pull/376)
+        - When using Postgres 15, `LIMIT`, and the `locking` functions, you
+          could accidentally construct SQL code like:
+
+          > ... LIMIT 1FOR UPDATE ...
+
+          This parsed on Postgres <15, but the new Postgres parser is more
+          strict, and fails to parse. This PR introduces newlines between each
+          query chunk, which fixes the issue.
+
+3.5.10.1
+========
+- @9999years
+    - [#369](https://github.com/bitemyapp/esqueleto/pull/369)
+        - Fix `myAge` type in `deriveEsqueletoRecord` documentation
+
+3.5.10.0
+========
+- @ivanbakel
+    - [#328](https://github.com/bitemyapp/esqueleto/pull/328)
+        - Add `ToAlias` instances for 9- to 16-tuples
+        - Add `ToAliasReference` instances for 9- to 16-tuples
+- @parsonsmatt
+    - [#365](https://github.com/bitemyapp/esqueleto/pull/365)
+        - Add `isNothing_` and `groupBy_` to avoid name conflicts with
+          `Data.List` and `Data.Maybe`.
+
+3.5.9.1
+=======
+- @duplode
+    - [#363](https://github.com/bitemyapp/esqueleto/pull/363)
+      - Add missing `just` to left join examples in the Haddocks
+
+
+3.5.9.0
+=======
+- @9999years
+    - [#350](https://github.com/bitemyapp/esqueleto/pull/350)
+      - Add `GetFirstTable`, `getTable`, `getTableMaybe` helpers for selecting
+        tables from `:&` chains
+- @josephsumabat
+    - [#339](https://github.com/bitemyapp/esqueleto/pull/333)
+      - Add `forUpdateOf`, `forShareOf` locking kinds for postgres
+- @parsonsmatt
+    - [#342](https://github.com/bitemyapp/esqueleto/pull/342)
+        - Create a `TypeError` instance for `Functor SqlExpr`, adding
+          documentation and work arounds for the need.
+- @9999years
+    - [#327](https://github.com/bitemyapp/esqueleto/pull/327)
+        - Fixed a Haddock typo causing documentation to render incorrectly
+
+3.5.8.1
+=======
+- @belevy
+    - [#336](https://github.com/bitemyapp/esqueleto/pull/336)
+        - Fix bug with multiple nested subqueries introduced in 3.5.7.1
+        - Set operations will now only reuse variable names within the context of the set operation.
+            a subquery that references the set operation will correctly pick up where the subquery left off
+3.5.8.0
+=======
+- @ivanbakel
+    - [#331](https://github.com/bitemyapp/esqueleto/pull/331)
+        - Add `deriveEsqueletoRecordWith` to derive Esqueleto instances for
+          records using custom deriving settings.
+        - Add `DeriveEsqueletoRecordSettings` to control how Esqueleto record
+          instances are derived.
+        - Add `sqlNameModifier` to control how Esqueleto record instance
+          deriving generates the SQL record type name.
+        - Add `sqlFieldModifier` to control how Esqueleto record instance
+          deriving generates the SQL record fields.
+
+3.5.7.1
+=======
+- @belevy
+    - [#334](https://github.com/bitemyapp/esqueleto/pull/334)
+        - Fix alias name bug with union and subselect
+
+3.5.7.0
+=======
+- @ivanbakel
+    - [#329](https://github.com/bitemyapp/esqueleto/pull/329)
+        - Add `ToAlias` and `ToAliasReference` instances to the type produced
+          by `deriveEsqueletoRecord`, allowing in-SQL records to be used in
+          CTEs
+
+- @9999years
+    - [#324](https://github.com/bitemyapp/esqueleto/pull/324)
+        - Add ability to use nested records with `deriveEsqueletoRecord`
+
+3.5.6.0
+=======
+- @9999years
+    - [#323](https://github.com/bitemyapp/esqueleto/pull/323)
+        - Add ability to derive esqueleto instances for records
+
+3.5.5.0
+=======
+- @parsonsmatt
+    - [#317](https://github.com/bitemyapp/esqueleto/pull/317)
+        - Add `Eq` and `Show` instances to `:&`
+
+3.5.4.2
+=======
+- @parsonsmatt
+    - [#318](https://github.com/bitemyapp/esqueleto/pull/318)
+        - Remove use of `SqlReadT` and `SqlWriteT` type alias so that Simplified
+          Subsumption doesn't bite end users
+
+3.5.4.1
+=======
+- @parsonsmatt
+    - [#312](https://github.com/bitemyapp/esqueleto/pull/312/)
+        - Support `persistent-2.14.0.0`
+
+3.5.4.0
+=======
+- @parsonsmatt
+    - [#310](https://github.com/bitemyapp/esqueleto/pull/310)
+        - Add instances of `HasField` for `SqlExpr (Entity rec)` and `SqlExpr
+          (Maybe (Entity rec))`. These instances allow you to use the
+          `OverloadedRecordDot` language extension in GHC 9.2 with SQL
+          representations of database entities.
+
+3.5.3.2
+=======
+- @parsonsmatt
+    - [#309](https://github.com/bitemyapp/esqueleto/pull/309)
+        - Bump `time` version bound
+
+3.5.3.1
+=======
+- @jappeace
+  - [#303](https://github.com/bitemyapp/esqueleto/pull/303)
+      - Added docs for delete function for new experimental API.
 
 3.5.3.0
 =======
