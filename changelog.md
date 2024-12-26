@@ -1,8 +1,11 @@
-3.5.13.1
+3.5.13.2
 ========
 - @TeofilC
   - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
     - Use TH quotes to eliminate some CPP.
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+      - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors
 
 3.5.13.0
 ========

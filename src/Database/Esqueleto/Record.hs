@@ -864,10 +864,8 @@ sqlMaybeSelectProcessRowDec RecordInfo {..} = do
       ]
   where
     wrapJust x = case x of
-      AppT (ConT ((==) ''Entity -> True)) _innerType -> id
       ((ConT ((==) ''Maybe -> True)) `AppT` _inner) -> AppE (ConE 'Just)
-      (ConT _) -> id
-      _ -> error $ show x
+      _ -> id
 
 -- | Generates the `sqlSelectColCount` declaration for an `SqlSelect` instance.
 sqlMaybeSelectColCountDec :: RecordInfo -> Q [Dec]
