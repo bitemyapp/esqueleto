@@ -1316,7 +1316,9 @@ testPostgresqlLocking = do
                     p <- Experimental.from $ table @Person
                     EP.forUpdateOf p EP.skipLocked
                     EP.forUpdateOf p EP.skipLocked
+                    EP.forNoKeyUpdateOf p EP.skipLocked
                     EP.forShareOf p EP.skipLocked
+                    EP.forKeyShareOf p EP.skipLocked
             conn <- ask
             let res1 = toText conn multipleLockingQuery
                 resExpected =
@@ -1326,7 +1328,9 @@ testPostgresqlLocking = do
                     ,"FROM \"Person\""
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR NO KEY UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                    ,"FOR KEY SHARE OF \"Person\" SKIP LOCKED"
                     ]
 
             asserting $ res1 `shouldBe` resExpected
@@ -1416,7 +1420,6 @@ testPostgresqlLocking = do
                                             EP.forUpdateOf p EP.skipLocked
                                             return p
 
-                                liftIO $ print nonLockedRowsSpecifiedTable
                                 pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
 
                     withAsync sideThread $ \sideThreadAsync -> do
@@ -1440,7 +1443,6 @@ testPostgresqlLocking = do
                                                     EP.forUpdateOf p EP.skipLocked
                                                     return p
 
-                            liftIO $ print nonLockedRowsAfterUpdate
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
@@ -1617,6 +1619,54 @@ testSubselectAliasingBehavior = do
                     pure (str, val @Int 1)
             asserting noExceptions
 
+testPostgresqlNullsOrdering :: SpecDb
+testPostgresqlNullsOrdering = do
+  describe "Postgresql NULLS orderings work" $ do
+      itDb "ASC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.ascNullsFirst (p ^. PersonAge), EP.ascNullsFirst (p ^. PersonFavNum)]
+               return p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p3e, p4e, p1e ]
+      itDb "ASC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.ascNullsLast (p ^. PersonAge), EP.ascNullsLast (p ^. PersonFavNum)]
+               return p
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p3e, p4e, p1e, p2e ]
+      itDb "DESC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
+               return p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
+      itDb "DESC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.descNullsLast (p ^. PersonAge), EP.descNullsLast (p ^. PersonFavNum)]
+               return p
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+
 
 type JSONValue = Maybe (JSONB A.Value)
 
@@ -1713,6 +1763,7 @@ spec = beforeAll mkConnectionPool $ do
         testValuesExpression
         testSubselectAliasingBehavior
         testPostgresqlLocking
+        testPostgresqlNullsOrdering
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do

@@ -91,6 +91,7 @@ import qualified UnliftIO.Resource as R
 
 import Common.Record (testDeriveEsqueletoRecord)
 import Common.Test.Select
+import qualified Common.Test.CTE as CTESpec
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -878,16 +879,6 @@ testSelectWhere = describe "select where_" $ do
                return p
         asserting $ ret `shouldBe` [ p1e ]
 
-    itDb "works for a simple example with (>.) and not_ [uses just . val]" $ do
-        _   <- insert' p1
-        _   <- insert' p2
-        p3e <- insert' p3
-        ret <- select $
-               from $ \p -> do
-               where_ (not_ $ p ^. PersonAge >. just (val 17))
-               return p
-        asserting $ ret `shouldBe` [ p3e ]
-
     describe "when using between" $ do
         itDb "works for a simple example with [uses just . val]" $ do
             p1e  <- insert' p1
@@ -920,6 +911,51 @@ testSelectWhere = describe "select where_" $ do
                         ( val $ PointKey 1 2
                         , val $ PointKey 5 6 )
                 asserting $ ret `shouldBe` [()]
+
+    describe "when using not_" $ do
+        itDb "works for a single expression" $ do
+            ret <-
+                select $
+                pure $ not_ $ val True
+            asserting $ do
+                ret `shouldBe` [Value False]
+
+        itDb "works for a simple example with (>.) [uses just . val]" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ p ^. PersonAge >. just (val 17))
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
+        itDb "works with (==.) and (||.)" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ p ^. PersonName ==. val "John" ||. p ^. PersonName ==. val "Rachel")
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
+        itDb "works with (>.), (<.) and (&&.) [uses just . val]" $ do
+            p1e <- insert' p1
+            _   <- insert' p2
+            _   <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ (p ^. PersonAge >. just (val 10)) &&. (p ^. PersonAge <. just (val 30)))
+                   return p
+            asserting $ ret `shouldBe` [ p1e ]
+        itDb "works with between [uses just . val]" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ (p ^. PersonAge) `between` (just $ val 20, just $ val 40))
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
 
     itDb "works with avg_" $ do
         _ <- insert' p1
@@ -2391,6 +2427,7 @@ tests =
         testLocking
         testOverloadedRecordDot
         testDeriveEsqueletoRecord
+        CTESpec.testCTE
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
