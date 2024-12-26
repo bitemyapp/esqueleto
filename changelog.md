@@ -1,3 +1,11 @@
+3.6.0.0
+=======
+- @parsonsmatt
+    - []()
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`.
+
+
 3.5.13.2
 ========
 - @blujupiter32

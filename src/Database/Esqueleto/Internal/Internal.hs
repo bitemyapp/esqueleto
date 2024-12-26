@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
@@ -123,7 +124,7 @@ fromStartMaybe = maybelize <$> fromStart
     maybelize
         :: PreprocessedFrom (SqlExpr (Entity a))
         -> PreprocessedFrom (SqlExpr (Maybe (Entity a)))
-    maybelize (PreprocessedFrom e f') = PreprocessedFrom (coerce e) f'
+    maybelize (PreprocessedFrom e f') = PreprocessedFrom (veryUnsafeCoerceSqlExpr e) f'
 
 -- | (Internal) Do a @JOIN@.
 fromJoin
@@ -364,7 +365,7 @@ distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --
 -- @since 2.2.4
 don :: SqlExpr (Value a) -> SqlExpr DistinctOn
-don = coerce
+don = veryUnsafeCoerceSqlExpr
 
 -- | A convenience function that calls both 'distinctOn' and
 -- 'orderBy'.  In other words,
@@ -2332,12 +2333,12 @@ hasCompositeKeyMeta = Maybe.isJust . sqlExprMetaCompositeFields
 entityAsValue
     :: SqlExpr (Entity val)
     -> SqlExpr (Value (Entity val))
-entityAsValue = coerce
+entityAsValue = veryUnsafeCoerceSqlExpr
 
 entityAsValueMaybe
     :: SqlExpr (Maybe (Entity val))
     -> SqlExpr (Value (Maybe (Entity val)))
-entityAsValueMaybe = coerce
+entityAsValueMaybe = veryUnsafeCoerceSqlExpr
 
 -- | An expression on the SQL backend.
 --
@@ -2350,6 +2351,27 @@ entityAsValueMaybe = coerce
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
 type role SqlExpr nominal
+
+-- | The type @'SqlExpr' a@ represents a SQL expression that evaluates to
+-- a value that can be parsed in Haskell to an @a@. There are often many
+-- underlying SQL values that can parse exactly. The function
+-- 'veryUnsafeCoerceSqlExpr' allows you to change this type.
+--
+-- There is no guarantee that the result works! To be safe, you want to provide
+-- a local helper function that calls this at a tested type.
+--
+-- As an example, you may want to assert that a SQL expression is never @NULL@,
+-- even though it is introduced in a way that may allow it to be @NULL@. You can
+-- remove the 'Maybe' with this:
+--
+-- @
+--  unsafeRemoveMaybe :: SqlExpr (Value (Maybe a)) -> SqlExpr (Value a)
+--  unsafeRemoveMaybe = veryUnsafeCoerceSqlExpr
+-- @
+--
+-- @since 3.6.0.0
+veryUnsafeCoerceSqlExpr :: SqlExpr a -> SqlExpr b
+veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
 
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
@@ -2820,14 +2842,20 @@ instance ( UnsafeSqlFunctionArgument a
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
+--
+-- This is an alias for 'veryUnsafeCoerceSqlExpr' with the type fixed to
+-- 'Value'.
 veryUnsafeCoerceSqlExprValue :: SqlExpr (Value a) -> SqlExpr (Value b)
-veryUnsafeCoerceSqlExprValue = coerce
+veryUnsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
 
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
+--
+-- This is an alias for 'veryUnsafeCoerceSqlExpr', with the type fixed to
+-- 'ValueList' and 'Value'.
 veryUnsafeCoerceSqlExprValueList :: SqlExpr (ValueList a) -> SqlExpr (Value a)
-veryUnsafeCoerceSqlExprValueList = coerce
+veryUnsafeCoerceSqlExprValueList = veryUnsafeCoerceSqlExpr
 
 
 ----------------------------------------------------------------------
@@ -3250,7 +3278,7 @@ makeSelect info mode_ distinctClause ret = process mode_
                 first (("SELECT DISTINCT ON (" <>) . (<> ") "))
                 $ uncommas' (processExpr <$> exprs)
       where
-        processExpr e = materializeExpr info (coerce e :: SqlExpr (Value a))
+        processExpr e = materializeExpr info (veryUnsafeCoerceSqlExpr e :: SqlExpr (Value a))
     withCols v = v <> sqlSelectCols info ret
     plain    v = (v, [])
 
@@ -3506,7 +3534,7 @@ getEntityVal = const Proxy
 
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr (Maybe (Entity a))) (Maybe (Entity a)) where
-    sqlSelectCols info e = sqlSelectCols info (coerce e :: SqlExpr (Entity a))
+    sqlSelectCols info e = sqlSelectCols info (veryUnsafeCoerceSqlExpr e :: SqlExpr (Entity a))
     sqlSelectColCount = sqlSelectColCount . fromEMaybe
       where
         fromEMaybe :: Proxy (SqlExpr (Maybe e)) -> Proxy (SqlExpr e)
