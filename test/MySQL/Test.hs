@@ -23,9 +23,9 @@ import Database.Persist.MySQL
        , connectPassword
        , connectPort
        , connectUser
+       , createMySQLPool
        , defaultConnectInfo
        , withMySQLConn
-       , createMySQLPool
        )
 
 import Test.Hspec
