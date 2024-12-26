@@ -4,12 +4,21 @@ packages:
   - '.'
   - 'examples'
 
+allow-newer: true
+
 extra-deps:
-  - git: https://github.com/yesodweb/persistent
-    commit: 0b8f9f3305c9b60c947565de882abfbfd8cb5702
-    subdirs:
-      - persistent
-      - persistent-template
-      - persistent-mysql
-      - persistent-postgresql
-      - persistent-sqlite
+  - persistent-2.14.0.1
+  - persistent-postgresql-2.13.5.0
+  - persistent-mysql-2.13.0.0
+  - persistent-sqlite-2.13.0.0
+  - postgresql-simple-0.6.4
+  - postgresql-libpq-0.9.4.3
+  - time-compat-1.9.6.1
+  - base-orphans-0.8.6
+  - hashable-1.2.7.0
+  - lift-type-0.1.0.1
+  - th-lift-instances-0.1.19
+  - th-lift-0.8.2
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

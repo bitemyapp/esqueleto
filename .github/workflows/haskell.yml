@@ -32,13 +32,23 @@ jobs:
           --health-retries=3
     strategy:
       matrix:
-        cabal: ["3.4"]
-        ghc: ["8.6.5", "8.8.4", "8.10.4", "9.0.1"]
+        cabal: ["3.10.2.1"]
+        ghc: 
+          - "8.6"
+          - "8.8"
+          - "8.10"
+          - "9.0"
+          - "9.2"
+          - "9.4"
+          - "9.6"
+          - "9.8"
+          - "9.10"
+            # - "9.12"
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
-      - uses: actions/checkout@v2
-      - uses: haskell/actions/setup@v1
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
         id: setup-haskell-cabal
         with:
           ghc-version: ${{ matrix.ghc }}
@@ -61,7 +71,7 @@ jobs:
             #     mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
       - run: cabal v2-update
       - run: cabal v2-freeze $CONFIG
-      - uses: actions/cache@v2
+      - uses: actions/cache@v4
         with:
           path: |
             ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
@@ -72,5 +82,6 @@ jobs:
             ${{ runner.os }}-${{ matrix.ghc }}-
       - run: cabal v2-build --disable-optimization -j $CONFIG
       - run: cabal v2-test --disable-optimization -j $CONFIG --test-options "--fail-on-focus"
-      - run: cabal v2-haddock -j $CONFIG
+      - if: ${{ matrix.ghc != '8.6' }}
+        run: cabal v2-haddock -j $CONFIG
       - run: cabal v2-sdist

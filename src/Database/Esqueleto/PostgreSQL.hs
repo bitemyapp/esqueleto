@@ -9,7 +9,7 @@
 
 -- | This module contain PostgreSQL-specific functions.
 --
--- @since: 2.2.8
+-- @since 2.2.8
 module Database.Esqueleto.PostgreSQL
     ( AggMode(..)
     , arrayAggDistinct
@@ -27,10 +27,23 @@ module Database.Esqueleto.PostgreSQL
     , upsertBy
     , insertSelectWithConflict
     , insertSelectWithConflictCount
+    , noWait
+    , wait
+    , skipLocked
+    , forUpdateOf
+    , forNoKeyUpdateOf
+    , forShareOf
+    , forKeyShareOf
     , filterWhere
     , values
     , distinctOn
     , distinctOnOrderBy
+    , withMaterialized
+    , withNotMaterialized
+    , ascNullsFirst
+    , ascNullsLast
+    , descNullsFirst
+    , descNullsLast
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -50,13 +63,18 @@ import Data.Maybe
 import Data.Proxy (Proxy(..))
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import Data.Time.Clock (UTCTime)
-import Database.Esqueleto.Internal.Internal hiding
-       (distinctOn, distinctOnOrderBy, random_)
-
 import qualified Database.Esqueleto.Experimental as Ex
 import qualified Database.Esqueleto.Experimental.From as Ex
-import Database.Esqueleto.Internal.PersistentImport hiding (upsert, upsertBy)
+import Database.Esqueleto.Experimental.From.CommonTableExpression
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), distinctOn, distinctOnOrderBy, from, on, random_)
+import Database.Esqueleto.Internal.PersistentImport hiding
+       (uniqueFields, upsert, upsertBy)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
 import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
@@ -343,8 +361,8 @@ upsertBy uniqueKey record updates = do
 --
 -- @since 3.1.3
 insertSelectWithConflict
-    :: forall a m val
-     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
+    :: forall a m val backend
+     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val, SqlBackendCanWrite backend)
     => a
     -- ^ Unique constructor or a unique, this is used just to get the name of
     -- the postgres constraint, the value(s) is(are) never used, so if you have
@@ -355,7 +373,7 @@ insertSelectWithConflict
     -- ^ A list of updates to be applied in case of the constraint being
     -- violated. The expression takes the current and excluded value to produce
     -- the updates.
-    -> SqlWriteT m ()
+    -> R.ReaderT backend m ()
 insertSelectWithConflict unique query a =
     void $ insertSelectWithConflictCount unique query a
 
@@ -363,12 +381,13 @@ insertSelectWithConflict unique query a =
 --
 -- @since 3.1.3
 insertSelectWithConflictCount
-    :: forall a val m
-     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val)
+    :: forall a val m backend
+     . (FinalResult a, KnowResult a ~ Unique val, MonadIO m, PersistEntity val,
+     SqlBackendCanWrite backend)
     => a
     -> SqlQuery (SqlExpr (Insertion val))
     -> (SqlExpr (Entity val) -> SqlExpr (Entity val) -> [SqlExpr (Entity val) -> SqlExpr Update])
-    -> SqlWriteT m Int64
+    -> R.ReaderT backend m Int64
 insertSelectWithConflictCount unique query conflictQuery = do
     conn <- R.ask
     uncurry rawExecuteCount $
@@ -394,9 +413,9 @@ insertSelectWithConflictCount unique query conflictQuery = do
       ] ++ if null updates then [TLB.fromText "NOTHING"] else [
         TLB.fromText "UPDATE SET ",
         updatesTLB
-      ]),values)
+      ]),values')
       where
-        (updatesTLB,values) = renderedUpdates conn
+        (updatesTLB,values') = renderedUpdates conn
 
 -- | Allow aggregate functions to take a filter clause.
 --
@@ -503,3 +522,157 @@ values exprs = Ex.From $ do
             <> "(" <> TLB.fromLazyText colsAliases <> ")"
             , params
             )
+
+-- | `NOWAIT` syntax for postgres locking
+-- error will be thrown if locked rows are attempted to be selected
+--
+-- @since 3.5.9.0
+noWait :: OnLockedBehavior
+noWait = NoWait
+
+-- | `SKIP LOCKED` syntax for postgres locking
+-- locked rows will be skipped
+--
+-- @since 3.5.9.0
+skipLocked :: OnLockedBehavior
+skipLocked = SkipLocked
+
+-- | default behaviour of postgres locks. will attempt to wait for locks to expire
+--
+-- @since 3.5.9.0
+wait :: OnLockedBehavior
+wait = Wait
+
+-- | `FOR UPDATE OF` syntax for postgres locking
+-- allows locking of specific tables with an update lock in a view or join
+--
+-- @since 3.5.9.0
+forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forUpdateOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | `FOR NO KEY UPDATE OF` syntax for postgres locking
+-- allows locking of specific tables with a no key update lock in a view or join
+--
+-- @since 3.5.13.0
+forNoKeyUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forNoKeyUpdateOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForNoKeyUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | `FOR SHARE OF` syntax for postgres locking
+-- allows locking of specific tables with a share lock in a view or join
+--
+-- @since 3.5.9.0
+forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forShareOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | `FOR KEY SHARE OF` syntax for postgres locking
+-- allows locking of specific tables with a key share lock in a view or join
+--
+-- @since 3.5.13.0
+forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forKeyShareOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @WITH@ @MATERIALIZED@ clause is used to introduce a
+-- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)
+-- with the MATERIALIZED keyword. The MATERIALIZED keyword is only supported in PostgreSQL >= version 12.
+-- In Esqueleto, CTEs should be used as a subquery memoization tactic. PostgreSQL treats a materialized CTE as an optimization fence.
+-- A materialized CTE is always fully calculated, and is not "inlined" with other table joins.
+-- Without the MATERIALIZED keyword, PostgreSQL >= 12 may "inline" the CTE as though it was any other join.
+-- You should always verify that using a materialized CTE will in fact improve your performance
+-- over a regular subquery.
+--
+-- @
+-- select $ do
+-- cte <- withMaterialized subQuery
+-- cteResult <- from cte
+-- where_ $ cteResult ...
+-- pure cteResult
+-- @
+--
+--
+-- For more information on materialized CTEs, see the PostgreSQL manual documentation on
+-- [Common Table Expression Materialization](https://www.postgresql.org/docs/14/queries-with.html#id-1.5.6.12.7).
+--
+-- @since 3.5.14.0
+withMaterialized :: ( ToAlias a
+                    , ToAliasReference a
+                    , SqlSelect a r
+                    ) => SqlQuery a -> SqlQuery (Ex.From a)
+withMaterialized query = do
+    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+    aliasedValue <- toAlias ret
+    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+    ident <- newIdentFor (DBName "cte")
+    let clause = CommonTableExpressionClause NormalCommonTableExpression (\_ _ -> "MATERIALIZED ") ident (\info -> toRawSql SELECT info aliasedQuery)
+    Q $ W.tell mempty{sdCteClause = [clause]}
+    ref <- toAliasReference ident aliasedValue
+    pure $ Ex.From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+
+-- | @WITH@ @NOT@ @MATERIALIZED@ clause is used to introduce a
+-- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)
+-- with the NOT MATERIALIZED keywords. These are only supported in PostgreSQL >=
+-- version 12. In Esqueleto, CTEs should be used as a subquery memoization
+-- tactic. PostgreSQL treats a materialized CTE as an optimization fence. A
+-- MATERIALIZED CTE is always fully calculated, and is not "inlined" with other
+-- table joins. Sometimes, this is undesirable, so postgres provides the NOT
+-- MATERIALIZED modifier to prevent this behavior, thus enabling it to possibly
+-- decide to treat the CTE as any other join.
+--
+-- Given the above, it is unlikely that this function will be useful, as a
+-- normal join should be used instead, but is provided for completeness.
+--
+-- @
+-- select $ do
+-- cte <- withNotMaterialized subQuery
+-- cteResult <- from cte
+-- where_ $ cteResult ...
+-- pure cteResult
+-- @
+--
+--
+-- For more information on materialized CTEs, see the PostgreSQL manual documentation on
+-- [Common Table Expression Materialization](https://www.postgresql.org/docs/14/queries-with.html#id-1.5.6.12.7).
+--
+-- @since 3.5.14.0
+withNotMaterialized :: ( ToAlias a
+                    , ToAliasReference a
+                    , SqlSelect a r
+                    ) => SqlQuery a -> SqlQuery (Ex.From a)
+withNotMaterialized query = do
+    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+    aliasedValue <- toAlias ret
+    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+    ident <- newIdentFor (DBName "cte")
+    let clause = CommonTableExpressionClause NormalCommonTableExpression (\_ _ -> "NOT MATERIALIZED ") ident (\info -> toRawSql SELECT info aliasedQuery)
+    Q $ W.tell mempty{sdCteClause = [clause]}
+    ref <- toAliasReference ident aliasedValue
+    pure $ Ex.From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+
+-- | Ascending order of this field or SqlExpression with nulls coming first.
+--
+-- @since 3.5.14.0
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Ascending order of this field or SqlExpression with nulls coming last.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsLast = orderByExpr " ASC NULLS LAST"
+
+-- | Descending order of this field or SqlExpression with nulls coming first.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsFirst = orderByExpr " DESC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming last.
+--
+-- @since 3.5.14.0
+descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsLast = orderByExpr " DESC NULLS LAST"

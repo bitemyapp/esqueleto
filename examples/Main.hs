@@ -10,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-top-binds #-}
@@ -19,19 +20,22 @@ module Main
     ) where
 
 import Blog
-import Control.Monad (forM_, void)
+import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger (MonadLogger, MonadLoggerIO)
 import Control.Monad.Reader (MonadReader(..), runReaderT)
 import Control.Monad.Trans.Control (MonadBaseControl)
-import Data.Monoid ((<>))
-import Database.Esqueleto.Legacy
+import Database.Esqueleto.Experimental
 import Database.Persist.Postgresql (ConnectionString, withPostgresqlConn)
 import qualified Database.Persist.Sql as Persistent
 import Database.Persist.TH
-       (mkMigrate, mkPersist, persistLowerCase, share, sqlSettings)
-
+       ( mkMigrate
+       , mkPersist
+       , persistLowerCase
+       , share
+       , sqlSettings
+       )
 
 share [ mkPersist sqlSettings
       , mkMigrate "migrateAll"] [persistLowerCase|
@@ -41,11 +45,11 @@ share [ mkPersist sqlSettings
     deriving Eq Show
   BlogPost
     title String
-    authorId PersonId
+    authorId PersonId OnDeleteCascade
     deriving Eq Show
   Follow
-    follower PersonId
-    followed PersonId
+    follower PersonId OnDeleteCascade
+    followed PersonId OnDeleteCascade
     deriving Eq Show
 |]
 
@@ -53,9 +57,7 @@ putPersons :: (MonadIO m, MonadLogger m)
            => SqlPersistT m ()
 putPersons = do
   -- | Select all values from the `person` table
-  people <- select $
-              from $ \person -> do
-              return person
+  people <- select $ from $ table @Person
 
   -- | entityVal extracts the Person value, which we then extract
   -- | the person name from the record and print it
@@ -66,31 +68,34 @@ getJohns :: (MonadIO m, MonadLogger m)
          => SqlReadT m [Entity Person]
 getJohns =
   -- | Select all persons where their name is equal to "John"
-  select $
-  from $ \p -> do
-    where_ (p ^. PersonName ==. val "John")
-    return p
+  select $ do
+  people <- from $ table @Person
+  where_ (people ^. PersonName ==. val "John")
+  return people
 
 
 getAdults :: (MonadIO m, MonadLogger m)
           => SqlReadT m [Entity Person]
 getAdults =
   -- | Select any Person where their age is >= 18 and NOT NULL
-  select $
-  from $ \p -> do
-    where_ (p ^. PersonAge >=. just (val 18))
-    return p
+  select $ do
+  people <- from $ table @Person
+  where_ (people ^. PersonAge >=. just (val 18))
+  return people
 
 
 getBlogPostsByAuthors :: (MonadIO m, MonadLogger m)
                       => SqlReadT m [(Entity BlogPost, Entity Person)]
 getBlogPostsByAuthors =
   -- | Select all persons and their blogposts, ordering by title
-  select $
-  from $ \(b, p) -> do
-    where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
-    orderBy [asc (b ^. BlogPostTitle)]
-    return (b, p)
+  select $ do
+  (people :& blogPosts) <-
+      from $ table @Person
+      `innerJoin` table @BlogPost
+      `on` (\(people :& blogPosts) ->
+              people ^. PersonId ==. blogPosts ^. BlogPostAuthorId)
+  orderBy [asc (blogPosts ^. BlogPostTitle)]
+  pure (blogPosts, people)
 
 
 getAuthorMaybePosts :: (MonadIO m, MonadLogger m)
@@ -99,9 +104,13 @@ getAuthorMaybePosts =
   -- | Select all persons doing a left outer join on blogposts
   -- | Since a person may not have any blogposts the BlogPost Entity is wrapped
   -- | in a Maybe
-  select $
-  from $ \(p `LeftOuterJoin` mb) -> do
-    on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
+  select $ do
+    p :& mb <- from $
+      table @Person
+      `leftJoin`
+      table @BlogPost
+      `on` (do
+        \(p :& mb) -> just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
     orderBy [asc (p ^. PersonName), asc (mb ?. BlogPostTitle)]
     return (p, mb)
 
@@ -113,11 +122,21 @@ followers =
   -- | Note carefully that the order of the ON clauses is reversed!
   -- | You're required to write your ons in reverse order because that helps composability
   -- | (see the documentation of on for more details).
-  select $
-  from $ \(p1 `InnerJoin` f `InnerJoin` p2) -> do
-    on (p2 ^. PersonId ==. f ^. FollowFollowed)
-    on (p1 ^. PersonId ==. f ^. FollowFollower)
-    return (p1, f, p2)
+  select $ do
+    p1 :& f :& p2 <- from $
+      table @Person
+      `innerJoin`
+      table @Follow
+      `on` (\(p1 :& f) -> p1 ^. PersonId ==. f ^. FollowFollowed)
+      `innerJoin`
+      table @Person
+      `on` (\(_ :& f :& p2) -> f ^. FollowFollower ==. p2 ^. PersonId)
+    pure (p1, f, p2)
+
+  -- from $ \(p1 `InnerJoin` f `InnerJoin` p2) -> do
+    -- on (p2 ^. PersonId ==. f ^. FollowFollowed)
+    -- on (p1 ^. PersonId ==. f ^. FollowFollower)
+    -- return (p1, f, p2)
 
 
 updateJoao :: (MonadIO m, MonadLogger m)
@@ -133,22 +152,17 @@ deleteYoungsters :: (MonadIO m, MonadLogger m)
                  => SqlPersistT m ()
 deleteYoungsters = do
   -- | Delete any persons under the age of 14
-
-  -- | In this case where `ON DELETE CASCADE` is not generated by migration
-  -- | we select all the entities we want to delete and then for each one
-  -- | one we extract the key and use Persistent's `deleteCascade`
-  youngsters <- select $
-    from $ \p -> do
+  delete $ do
+    p <- from $ table @Person
     where_ (p ^. PersonAge <. just (val 14))
-    pure p
-  forM_ youngsters (Persistent.delete . entityKey)
 
 
 insertBlogPosts :: (MonadIO m, MonadLogger m)
                 => SqlWriteT m ()
 insertBlogPosts =
   -- | Insert a new blogpost for every person
-  insertSelect $ from $ \p ->
+  insertSelect $ do
+    p <- from $ table @Person
     return $ BlogPost <# (val "Group Blog Post") <&> (p ^. PersonId)
 
 

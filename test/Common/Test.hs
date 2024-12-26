@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -21,6 +20,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ViewPatterns #-}
+
+#if __GLASGOW_HASKELL__ >= 902
+{-# LANGUAGE OverloadedRecordDot #-}
+#endif
 
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
 {-# OPTIONS_GHC -fno-warn-deprecations #-}
@@ -66,10 +70,9 @@ module Common.Test
 import Common.Test.Import hiding (from, on)
 
 import Control.Monad (forM_, replicateM, replicateM_, void)
-import Data.Either
 import qualified Data.Attoparsec.Text as AP
 import Data.Char (toLower, toUpper)
-import Data.Monoid ((<>))
+import Data.Either
 import Database.Esqueleto
 import qualified Database.Esqueleto.Experimental as Experimental
 
@@ -82,9 +85,13 @@ import qualified Data.Text.Internal.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Database.Esqueleto.Internal.ExprParser as P
 import qualified Database.Esqueleto.Internal.Internal as EI
+import Database.Esqueleto.PostgreSQL as EP
+import Database.Persist.Class.PersistEntity
 import qualified UnliftIO.Resource as R
 
+import Common.Record (testDeriveEsqueletoRecord)
 import Common.Test.Select
+import qualified Common.Test.CTE as CTESpec
 
 -- Test schema
 -- | this could be achieved with S.fromList, but not all lists
@@ -872,16 +879,6 @@ testSelectWhere = describe "select where_" $ do
                return p
         asserting $ ret `shouldBe` [ p1e ]
 
-    itDb "works for a simple example with (>.) and not_ [uses just . val]" $ do
-        _   <- insert' p1
-        _   <- insert' p2
-        p3e <- insert' p3
-        ret <- select $
-               from $ \p -> do
-               where_ (not_ $ p ^. PersonAge >. just (val 17))
-               return p
-        asserting $ ret `shouldBe` [ p3e ]
-
     describe "when using between" $ do
         itDb "works for a simple example with [uses just . val]" $ do
             p1e  <- insert' p1
@@ -914,6 +911,51 @@ testSelectWhere = describe "select where_" $ do
                         ( val $ PointKey 1 2
                         , val $ PointKey 5 6 )
                 asserting $ ret `shouldBe` [()]
+
+    describe "when using not_" $ do
+        itDb "works for a single expression" $ do
+            ret <-
+                select $
+                pure $ not_ $ val True
+            asserting $ do
+                ret `shouldBe` [Value False]
+
+        itDb "works for a simple example with (>.) [uses just . val]" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ p ^. PersonAge >. just (val 17))
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
+        itDb "works with (==.) and (||.)" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ p ^. PersonName ==. val "John" ||. p ^. PersonName ==. val "Rachel")
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
+        itDb "works with (>.), (<.) and (&&.) [uses just . val]" $ do
+            p1e <- insert' p1
+            _   <- insert' p2
+            _   <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ (p ^. PersonAge >. just (val 10)) &&. (p ^. PersonAge <. just (val 30)))
+                   return p
+            asserting $ ret `shouldBe` [ p1e ]
+        itDb "works with between [uses just . val]" $ do
+            _   <- insert' p1
+            _   <- insert' p2
+            p3e <- insert' p3
+            ret <- select $
+                   from $ \p -> do
+                   where_ (not_ $ (p ^. PersonAge) `between` (just $ val 20, just $ val 40))
+                   return p
+            asserting $ ret `shouldBe` [ p3e ]
 
     itDb "works with avg_" $ do
         _ <- insert' p1
@@ -1608,32 +1650,31 @@ testCase = do
 
         asserting $ ret `shouldBe` [ Value (3) ]
 
-
-
-
-
 testLocking :: SpecDb
 testLocking = do
+  let toText conn q =
+        let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
+         in TLB.toLazyText tlb
+      complexQuery =
+        from $ \(p1' `InnerJoin` p2') -> do
+        on (p1' ^. PersonName ==. p2' ^. PersonName)
+        where_ (p1' ^. PersonFavNum >. val 2)
+        orderBy [desc (p2' ^. PersonAge)]
+        limit 3
+        offset 9
+        groupBy (p1' ^. PersonId)
+        having (countRows <. val (0 :: Int))
+        return (p1', p2')
   describe "locking" $ do
     -- The locking clause is the last one, so try to use many
     -- others to test if it's at the right position.  We don't
     -- care about the text of the rest, nor with the RDBMS'
     -- reaction to the clause.
     let sanityCheck kind syntax = do
-          let complexQuery =
-                from $ \(p1' `InnerJoin` p2') -> do
-                on (p1' ^. PersonName ==. p2' ^. PersonName)
-                where_ (p1' ^. PersonFavNum >. val 2)
-                orderBy [desc (p2' ^. PersonAge)]
-                limit 3
-                offset 9
-                groupBy (p1' ^. PersonId)
-                having (countRows <. val (0 :: Int))
-                return (p1', p2')
-              queryWithClause1 = do
-                r <- complexQuery
-                locking kind
-                return r
+          let queryWithClause1 = do
+                 r <- complexQuery
+                 locking kind
+                 return r
               queryWithClause2 = do
                 locking ForUpdate
                 r <- complexQuery
@@ -1643,25 +1684,61 @@ testLocking = do
               queryWithClause3 = do
                 locking kind
                 complexQuery
-              toText conn q =
-                let (tlb, _) = EI.toRawSql EI.SELECT (conn, EI.initialIdentState) q
-                in TLB.toLazyText tlb
           conn <- ask
           [complex, with1, with2, with3] <-
             return $
               map (toText conn) [complexQuery, queryWithClause1, queryWithClause2, queryWithClause3]
-          let expected = complex <> "\n" <> syntax
-          asserting $
-              (with1, with2, with3) `shouldBe` (expected, expected, expected)
-
+          let expected = complex <> syntax <> "\n"
+          asserting $ do
+            with1 `shouldBe` expected
+            with2 `shouldBe` expected
+            with3 `shouldBe` expected
     itDb "looks sane for ForUpdate"           $ sanityCheck ForUpdate           "FOR UPDATE"
     itDb "looks sane for ForUpdateSkipLocked" $ sanityCheck ForUpdateSkipLocked "FOR UPDATE SKIP LOCKED"
     itDb "looks sane for ForShare"            $ sanityCheck ForShare            "FOR SHARE"
     itDb "looks sane for LockInShareMode"     $ sanityCheck LockInShareMode     "LOCK IN SHARE MODE"
 
+  describe "Monoid instance" $ do
+    let
+        multiplePostgresLockingClauses p = do
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
 
+        multipleLegacyLockingClauses = do
+            locking ForShare
+            locking ForUpdate
 
+        multipleLockingQueryPostgresLast = do
+            p <- Experimental.from $ table @Person
+            multipleLegacyLockingClauses
+            multiplePostgresLockingClauses p
 
+        multipleLockingQueryLegacyLast = do
+            p <- Experimental.from $ table @Person
+            multiplePostgresLockingClauses p
+            multipleLegacyLockingClauses
+
+        expectedPostgresQuery = do
+            p <- Experimental.from $ table @Person
+            EP.forUpdateOf p EP.skipLocked
+            EP.forUpdateOf p EP.skipLocked
+            EP.forShareOf p EP.skipLocked
+
+        expectedLegacyQuery = do
+            p <- Experimental.from $ table @Person
+            locking ForUpdate
+
+    itDb "prioritizes last grouping of locks when mixing legacy and postgres specific locks" $ do
+
+        conn <- ask
+        let resPostgresLast = toText conn multipleLockingQueryPostgresLast
+            resLegacyLast = toText conn multipleLockingQueryLegacyLast
+            resExpectedPostgres = toText conn expectedPostgresQuery
+            resExpectedLegacy = toText conn expectedLegacyQuery
+
+        asserting $ resPostgresLast `shouldBe` resExpectedPostgres
+        asserting $ resLegacyLast `shouldBe` resExpectedLegacy
 
 testCountingRows :: SpecDb
 testCountingRows = do
@@ -2325,6 +2402,7 @@ tests :: SpecDb
 tests =
     describe "Esqueleto" $ do
         testSelect
+        testGetTable
         testSubSelect
         testSelectOne
         testSelectSource
@@ -2347,11 +2425,17 @@ tests =
         testOnClauseOrder
         testExperimentalFrom
         testLocking
+        testOverloadedRecordDot
+        testDeriveEsqueletoRecord
+        CTESpec.testCTE
 
 insert' :: ( Functor m
            , BaseBackend backend ~ PersistEntityBackend val
            , PersistStore backend
            , MonadIO m
+#if MIN_VERSION_persistent(2,14,0)
+           , SafeToInsert val
+#endif
            , PersistEntity val )
         => val -> ReaderT backend m (Entity val)
 insert' v = flip Entity v <$> insert v
@@ -2441,3 +2525,51 @@ shouldBeOnClauseWithoutMatchingJoinException ea =
             pure ()
         _ ->
             expectationFailure $ "Expected OnClauseWithMatchingJoinException, got: " <> show ea
+
+testOverloadedRecordDot :: SpecDb
+testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
+#if __GLASGOW_HASKELL__ >= 902
+    describe "with SqlExpr (Entity rec)" $ do
+        itDb "lets you project from a record" $ do
+            select $ do
+                bp <- Experimental.from $ table @BlogPost
+                pure bp.title
+    describe "with SqlExpr (Maybe (Entity rec))" $ do
+        itDb "lets you project from a Maybe record" $ do
+            select $ do
+                p :& mbp <- Experimental.from $
+                    table @Person
+                    `leftJoin` table @BlogPost
+                        `Experimental.on` do
+                            \(p :& mbp) ->
+                                just p.id ==. mbp.authorId
+                pure (p.id, mbp.title)
+
+#else
+    it "is only supported in GHC 9.2 or above" $ \_ -> do
+        pending
+#endif
+
+testGetTable :: SpecDb
+testGetTable =
+    describe "GetFirstTable" $ do
+        itDb "works to make long join chains easier" $ do
+            select $ do
+                (person :& blogPost :& profile :& reply) <-
+                    Experimental.from $
+                        table @Person
+                        `leftJoin` table @BlogPost
+                            `Experimental.on` do
+                                \(p :& bp) ->
+                                    just (p ^. PersonId) ==. bp ?. BlogPostAuthorId
+                        `leftJoin` table @Profile
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& profile) ->
+                                    just (p ^. PersonId) ==. profile ?. ProfilePerson
+                        `leftJoin` table @Reply
+                            `Experimental.on` do
+                                \((getTable @Person -> p) :& reply) ->
+                                    just (p ^. PersonId) ==. reply ?. ReplyGuy
+                pure (person, blogPost, profile, reply)
+            asserting noExceptions
+
