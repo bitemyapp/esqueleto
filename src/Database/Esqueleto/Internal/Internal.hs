@@ -1558,6 +1558,9 @@ data (:&) a b = a :& b
     deriving (Eq, Show, Functor)
 infixl 2 :&
 
+-- |
+--
+-- @since 3.5.14.0
 instance Bifunctor (:&) where
     bimap f g (a :& b) = f a :& g b
 
