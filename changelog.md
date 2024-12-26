@@ -1,4 +1,4 @@
-3.5.13.2 (unreleased)
+3.5.13.2
 ========
 - @blujupiter32
     - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
