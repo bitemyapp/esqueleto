@@ -36,6 +36,10 @@ module Database.Esqueleto.PostgreSQL
     , forKeyShareOf
     , filterWhere
     , values
+    , ascNullsFirst
+    , ascNullsLast
+    , descNullsFirst
+    , descNullsLast
     -- * Internal
     , unsafeSqlAggregateFunction
     ) where
@@ -486,7 +490,7 @@ forNoKeyUpdateOf lockableEntities onLockedBehavior =
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
-
+  
 -- | `FOR KEY SHARE OF` syntax for postgres locking
 -- allows locking of specific tables with a key share lock in a view or join
 --
@@ -494,3 +498,29 @@ forShareOf lockableEntities onLockedBehavior =
 forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forKeyShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | Ascending order of this field or SqlExpression with nulls coming first.
+--
+-- @since 3.5.14.0
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Ascending order of this field or SqlExpression with nulls coming last.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsLast = orderByExpr " ASC NULLS LAST"
+
+-- | Descending order of this field or SqlExpression with nulls coming first.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsFirst = orderByExpr " DESC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming last.
+--
+-- @since 3.5.14.0
+descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsLast = orderByExpr " DESC NULLS LAST"
