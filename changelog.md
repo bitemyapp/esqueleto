@@ -3,6 +3,10 @@
 - @parsonsmatt
     - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
         - Derive `Foldable` and `Traversable` for `Value`.
+- @matthewbauer
+    - [#341](https://github.com/bitemyapp/esqueleto/pull/341/)
+        - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
+          module
 
 3.5.13.2
 ========
