@@ -1,3 +1,56 @@
+3.5.14.0 (unreleased)
+========
+- @parsonsmatt
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+
+3.5.13.2
+========
+- @blujupiter32
+    - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
+        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&. b`
+- @RikvanToor
+    - [#373](https://github.com/bitemyapp/esqueleto/pull/373), [#410](https://github.com/bitemyapp/esqueleto/pull/410)
+        - Fix name clashes when using CTEs multiple times
+- @TeofilC
+    - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+        - Use TH quotes to eliminate some CPP.
+- @parsonsmatt, @jappeace
+    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), [#411](https://github.com/bitemyapp/esqueleto/pull/411)
+        - Add docs for more SQL operators
+
+3.5.13.1
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+      - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors
+
+3.5.13.0
+========
+- @ac251
+    - [#402](https://github.com/bitemyapp/esqueleto/pull/402)
+      - Add `forNoKeyUpdate` and `forKeyShare` locking kinds for postgres
+
+3.5.12.0
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+        - `ToMaybe` instances are now derived for Maybe records.
+          See [Issue #401](https://github.com/bitemyapp/esqueleto/issues/401).
+
+3.5.11.2
+========
+- @arguri
+    - [#387](https://github.com/bitemyapp/esqueleto/pull/387)
+        - Fix build for ghc 9.8.1 / template-haskell 2.18
+
+3.5.11.0
+========
+- @9999years, @halogenandtoast
+    - [#378](https://github.com/bitemyapp/esqueleto/pull/378)
+        - `ToMaybe` instances are now derived for records so you can now left
+          join them in queries
+
 3.5.10.3
 ========
 - @ttuegel

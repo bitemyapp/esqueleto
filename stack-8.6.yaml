@@ -19,3 +19,6 @@ extra-deps:
   - lift-type-0.1.0.1
   - th-lift-instances-0.1.19
   - th-lift-0.8.2
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

@@ -1243,7 +1243,9 @@ testPostgresqlLocking = do
                     p <- Experimental.from $ table @Person
                     EP.forUpdateOf p EP.skipLocked
                     EP.forUpdateOf p EP.skipLocked
+                    EP.forNoKeyUpdateOf p EP.skipLocked
                     EP.forShareOf p EP.skipLocked
+                    EP.forKeyShareOf p EP.skipLocked
             conn <- ask
             let res1 = toText conn multipleLockingQuery
                 resExpected =
@@ -1253,7 +1255,9 @@ testPostgresqlLocking = do
                     ,"FROM \"Person\""
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR NO KEY UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                    ,"FOR KEY SHARE OF \"Person\" SKIP LOCKED"
                     ]
 
             asserting $ res1 `shouldBe` resExpected
@@ -1343,7 +1347,6 @@ testPostgresqlLocking = do
                                             EP.forUpdateOf p EP.skipLocked
                                             return p
 
-                                liftIO $ print nonLockedRowsSpecifiedTable
                                 pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
 
                     withAsync sideThread $ \sideThreadAsync -> do
@@ -1367,7 +1370,6 @@ testPostgresqlLocking = do
                                                     EP.forUpdateOf p EP.skipLocked
                                                     return p
 
-                            liftIO $ print nonLockedRowsAfterUpdate
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 

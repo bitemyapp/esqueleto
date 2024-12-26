@@ -31,7 +31,9 @@ module Database.Esqueleto.PostgreSQL
     , wait
     , skipLocked
     , forUpdateOf
+    , forNoKeyUpdateOf
     , forShareOf
+    , forKeyShareOf
     , filterWhere
     , values
     , ascNullsFirst
@@ -473,29 +475,52 @@ forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forUpdateOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
+-- | `FOR NO KEY UPDATE OF` syntax for postgres locking
+-- allows locking of specific tables with a no key update lock in a view or join
+--
+-- @since 3.5.13.0
+forNoKeyUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forNoKeyUpdateOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForNoKeyUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
 -- | `FOR SHARE OF` syntax for postgres locking
 -- allows locking of specific tables with a share lock in a view or join
 --
 -- @since 3.5.9.0
-
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+  
+-- | `FOR KEY SHARE OF` syntax for postgres locking
+-- allows locking of specific tables with a key share lock in a view or join
+--
+-- @since 3.5.13.0
+forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forKeyShareOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
 -- | Ascending order of this field or SqlExpression with nulls coming first.
+--
+-- @since 3.5.14.0
 ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
 ascNullsFirst = orderByExpr " ASC NULLS FIRST"
 
 -- | Ascending order of this field or SqlExpression with nulls coming last.
 -- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
 ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
 ascNullsLast = orderByExpr " ASC NULLS LAST"
 
 -- | Descending order of this field or SqlExpression with nulls coming first.
 -- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
 descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
 descNullsFirst = orderByExpr " DESC NULLS FIRST"
 
 -- | Descending order of this field or SqlExpression with nulls coming last.
+--
+-- @since 3.5.14.0
 descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
 descNullsLast = orderByExpr " DESC NULLS LAST"
