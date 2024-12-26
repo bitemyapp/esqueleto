@@ -912,6 +912,13 @@ testSelectWhere = describe "select where_" $ do
                 asserting $ ret `shouldBe` [()]
 
     describe "when using not_" $ do
+        itDb "works for a single expression" $ do
+            ret <-
+                select $
+                pure $ not_ $ val True
+            asserting $ do
+                ret `shouldBe` [Value False]
+
         itDb "works for a simple example with (>.) [uses just . val]" $ do
             _   <- insert' p1
             _   <- insert' p2
