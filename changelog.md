@@ -1,3 +1,9 @@
+3.5.14.0 (unreleased)
+========
+- @parsonsmatt
+    - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
+        - Export the `SqlSelect` type from `Database.Esqueleto.Experimental`
+
 3.5.13.2
 ========
 - @blujupiter32
