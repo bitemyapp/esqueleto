@@ -1,4 +1,4 @@
-3.5.14.0 (unreleased)
+3.5.14.0
 ========
 - @parsonsmatt
     - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
