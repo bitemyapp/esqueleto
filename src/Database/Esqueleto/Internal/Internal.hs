@@ -2349,6 +2349,8 @@ entityAsValueMaybe = coerce
 -- interpolated by the SQL backend.
 data SqlExpr a = ERaw SqlExprMeta (NeedParens -> IdentInfo -> (TLB.Builder, [PersistValue]))
 
+type role SqlExpr nominal
+
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
 -- Unfortunately, this is impossible. We cannot send *functions* to the
