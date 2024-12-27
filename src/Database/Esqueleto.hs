@@ -101,7 +101,6 @@ module Database.Esqueleto
     , where_
     , groupBy
     , orderBy
-    , rand
     , asc
     , desc
     , limit
