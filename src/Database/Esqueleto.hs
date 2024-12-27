@@ -83,6 +83,8 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , OrderBy
   , DistinctOn
   , LockingKind(..)
+  , forUpdate
+  , forUpdateSkipLocked
   , LockableEntity(..)
   , SqlString
     -- ** Joins

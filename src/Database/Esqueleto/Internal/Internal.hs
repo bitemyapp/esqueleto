@@ -1569,6 +1569,32 @@ data LockingKind
       --
       -- @since 2.2.7
 
+{-# DEPRECATED ForUpdate, ForUpdateSkipLocked "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructors 'forUpdate' and 'forUpdateSkipLocked'." #-}
+{-# DEPRECATED ForShare "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructor 'forShare' exported from Database.Esqueleto.PostgreSQL." #-}
+{-# DEPRECATED LockInShareMode "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructors 'lockInShareMode' exported from Database.Esqueleto.MySQL." #-}
+
+-- | @FOR UPDATE@ syntax.
+--
+-- Usage:
+--
+-- @
+--  'locking' 'forUpdate'
+-- @
+--
+-- @since 3.6.0.0
+forUpdate :: LockingKind
+forUpdate = ForUpdate
+
+-- | @FOR UPDATE SKIP LOCKED@ syntax.
+--
+-- @
+--  'locking' 'forUpdateSkipLocked'
+-- @
+--
+-- @since 3.6.0.0
+forUpdateSkipLocked :: LockingKind
+forUpdateSkipLocked = ForUpdateSkipLocked
+
 -- | Postgres specific locking, used only internally
 --
 -- @since 3.5.9.0

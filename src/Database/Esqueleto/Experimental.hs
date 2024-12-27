@@ -71,6 +71,8 @@ module Database.Esqueleto.Experimental
     , distinctOnOrderBy
     , having
     , locking
+    , forUpdate
+    , forUpdateSkipLocked
 
     , (^.)
     , (?.)
