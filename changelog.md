@@ -6,6 +6,23 @@
           `veryUnsafeCoerceSqlExpr`. See the documentation on
           `veryUnsafeCoerceSqlExpr` for safe use example.
 
+3.5.14.0
+========
+- @parsonsmatt
+    - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
+        - Export the `SqlSelect` type from `Database.Esqueleto.Experimental`
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+    - [#416](https://github.com/bitemyapp/esqueleto/pull/416)
+        - Derive `Functor` and `Bifunctor` for `:&`
+- @matthewbauer
+    - [#341](https://github.com/bitemyapp/esqueleto/pull/341/)
+        - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
+          module
+- @JoelMcCracken
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
+      - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
+
 3.5.13.2
 ========
 - @blujupiter32
