@@ -74,11 +74,6 @@ mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
-{-# DEPRECATED Union "/Since: 3.4.0.0/ - Use the 'union_' function instead of the 'Union' data constructor" #-}
-data Union a b = a `Union` b
-instance ToSqlSetOperation a a' => ToSqlSetOperation (Union a a) a' where
-    toSqlSetOperation (Union a b) = union_ a b
-
 -- | Overloaded @union_@ function to support use in both 'SqlSetOperation'
 -- and 'withRecursive'
 --
@@ -102,30 +97,10 @@ instance (ToSqlSetOperation a c, ToSqlSetOperation b c, res ~ SqlSetOperation c)
   => UnionAll_ (a -> b -> res) where
     unionAll_ = mkSetOperation " UNION ALL "
 
-{-# DEPRECATED UnionAll "/Since: 3.4.0.0/ - Use the 'unionAll_' function instead of the 'UnionAll' data constructor" #-}
-data UnionAll a b = a `UnionAll` b
-instance ToSqlSetOperation a a' => ToSqlSetOperation (UnionAll a a) a' where
-    toSqlSetOperation (UnionAll a b) = unionAll_ a b
-
-{-# DEPRECATED Except "/Since: 3.4.0.0/ - Use the 'except_' function instead of the 'Except' data constructor" #-}
-data Except a b = a `Except` b
-instance ToSqlSetOperation a a' => ToSqlSetOperation (Except a a) a' where
-    toSqlSetOperation (Except a b) = except_ a b
-
 -- | @EXCEPT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 except_ :: (ToSqlSetOperation a a', ToSqlSetOperation b a') => a -> b -> SqlSetOperation a'
 except_ = mkSetOperation " EXCEPT "
 
-{-# DEPRECATED Intersect "/Since: 3.4.0.0/ - Use the 'intersect_' function instead of the 'Intersect' data constructor" #-}
-data Intersect a b = a `Intersect` b
-instance ToSqlSetOperation a a' => ToSqlSetOperation (Intersect a a) a' where
-    toSqlSetOperation (Intersect a b) = intersect_ a b
-
 -- | @INTERSECT@ SQL set operation. Can be used as an infix function between 'SqlQuery' values.
 intersect_ :: (ToSqlSetOperation a a', ToSqlSetOperation b a') => a -> b -> SqlSetOperation a'
 intersect_ = mkSetOperation " INTERSECT "
-
-{-# DEPRECATED SelectQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SelectQuery@" #-}
-pattern SelectQuery :: p -> p
-pattern SelectQuery a = a
-

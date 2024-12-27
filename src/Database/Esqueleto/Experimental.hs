@@ -22,7 +22,6 @@ module Database.Esqueleto.Experimental
       from
     , table
     , Table(..)
-    , SubQuery(..)
     , selectQuery
 
     -- ** Joins
@@ -40,14 +39,9 @@ module Database.Esqueleto.Experimental
       -- ** Set Operations
       -- $sql-set-operations
     , union_
-    , Union(..)
     , unionAll_
-    , UnionAll(..)
     , except_
-    , Except(..)
     , intersect_
-    , Intersect(..)
-    , pattern SelectQuery
 
       -- ** Common Table Expressions
     , with
@@ -57,9 +51,7 @@ module Database.Esqueleto.Experimental
     , From(..)
     , ToMaybe(..)
     , ToAlias(..)
-    , ToAliasT
     , ToAliasReference(..)
-    , ToAliasReferenceT
     , ToSqlSetOperation(..)
     , SqlSelect
 
@@ -68,7 +60,6 @@ module Database.Esqueleto.Experimental
     , groupBy
     , groupBy_
     , orderBy
-    , rand
     , asc
     , desc
     , limit
@@ -80,8 +71,9 @@ module Database.Esqueleto.Experimental
     , distinctOnOrderBy
     , having
     , locking
+    , forUpdate
+    , forUpdateSkipLocked
 
-    , sub_select
     , (^.)
     , (?.)
 
@@ -113,7 +105,6 @@ module Database.Esqueleto.Experimental
     , (/.)
     , (*.)
 
-    , random_
     , round_
     , ceiling_
     , floor_
