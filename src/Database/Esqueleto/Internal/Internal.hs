@@ -1249,7 +1249,7 @@ toBaseId = veryUnsafeCoerceSqlExprValue
 {-# DEPRECATED rand "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 
 -- Fixity declarations
-infixl 9 ^.
+infixl 9 ^., ?.
 infixl 7 *., /.
 infixl 6 +., -.
 infixr 5 ++.
