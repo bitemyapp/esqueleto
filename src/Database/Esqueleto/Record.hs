@@ -378,27 +378,24 @@ makeSqlRecord RecordInfo {..} = do
 -- @Sql@-prefixed variant.
 makeSqlSelectInstance :: RecordInfo -> Q [Dec]
 makeSqlSelectInstance info@RecordInfo {..} = do
-  sqlSelectColsDec' <- sqlSelectColsDec info
-  sqlSelectColCountDec' <- sqlSelectColCountDec info
-  sqlSelectProcessRowDec' <- sqlSelectProcessRowDec info
-  let overlap = Nothing
-      instanceConstraints = []
--- <<<<<<< HEAD
---       sqlSelectColsType =
---           AppT (ConT ''SqlSelectCols) (ConT sqlName)
---       instanceType =
---         (ConT ''SqlSelect)
---           `AppT` (ConT sqlName)
---           `AppT` (ConT name)
---
---   pure [ InstanceD overlap instanceConstraints sqlSelectColsType [ sqlSelectColsDec', sqlSelectColCountDec']
---        , InstanceD overlap instanceConstraints instanceType [ sqlSelectProcessRowDec']
---        ]
--- =======
-  instanceType <- [t| SqlSelect $(conT sqlName) $(conT name) |]
+    sqlSelectColsDec' <- sqlSelectColsDec info
+    sqlSelectColCountDec' <- sqlSelectColCountDec info
+    sqlSelectProcessRowDec' <- sqlSelectProcessRowDec info
+    let overlap = Nothing
+        instanceConstraints = []
+        sqlSelectColsType =
+            AppT (ConT ''SqlSelectCols) (ConT sqlName)
+        sqlSelectType =
+            (ConT ''SqlSelect)
+                `AppT` (ConT sqlName)
+                `AppT` (ConT name)
 
-  pure $ pure $ InstanceD overlap instanceConstraints instanceType (sqlSelectColsDec' ++ sqlSelectColCountDec' ++ [ sqlSelectProcessRowDec'])
--- >>>>>>> master
+    pure
+        [ InstanceD overlap instanceConstraints sqlSelectColsType
+            (concat [ sqlSelectColsDec', sqlSelectColCountDec'])
+        , InstanceD overlap instanceConstraints sqlSelectType
+            [ sqlSelectProcessRowDec']
+        ]
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlSelectColsDec :: RecordInfo -> Q [Dec]
@@ -469,59 +466,62 @@ sqlSelectColCountDec RecordInfo {..} = do
 -- instance.
 sqlSelectProcessRowDec :: RecordInfo -> Q Dec
 sqlSelectProcessRowDec RecordInfo {..} = do
-  -- Binding statements and field expressions (used in record construction) to
-  -- fill out the body of the main generated `do` expression.
-  --
-  -- Each statement is like:
-  --     Value fooName' <- takeColumns @(SqlExpr (Value Text))
-  -- A corresponding field expression would be:
-  --     fooName = fooName'
-  --
-  -- See `sqlSelectProcessRowPat` for the left-hand side of the patterns.
-  (statements, fieldExps) <-
-    unzip <$> forM (zip fields sqlFields) (\((fieldName', fieldType), (_, sqlType')) -> do
-      valueName <- newName (nameBase fieldName')
-      pattern <- sqlSelectProcessRowPat fieldType valueName
-      pure
-        ( BindS
-            pattern
-            (AppTypeE (VarE 'takeColumns) sqlType')
-        , (mkName $ nameBase fieldName', VarE valueName)
-        ))
+    -- Binding statements and field expressions (used in record construction) to
+    -- fill out the body of the main generated `do` expression.
+    --
+    -- Each statement is like:
+    --     Value fooName' <- takeColumns @(SqlExpr (Value Text))
+    -- A corresponding field expression would be:
+    --     fooName = fooName'
+    --
+    -- See `sqlSelectProcessRowPat` for the left-hand side of the patterns.
+    (statements, fieldExps) <-
+      unzip <$> forM (zip fields sqlFields) (\((fieldName', fieldType), (_, sqlType')) -> do
+        valueName <- newName (nameBase fieldName')
+        pattern <- sqlSelectProcessRowPat fieldType valueName
+        pure
+          ( BindS
+              pattern
+              (AppTypeE (VarE 'takeColumns) sqlType')
+          , (mkName $ nameBase fieldName', VarE valueName)
+          ))
 
-  colsName <- newName "columns"
-  processName <- newName "process"
+    colsName <- newName "columns"
+    processName <- newName "process"
 
-  -- Roughly:
-  -- sqlSelectProcessRow $colsName =
-  --   first ((fromString "Failed to parse $name: ") <>)
-  --         (evalStateT $processName $colsName)
-  --   where $processName = do $statements
-  --                           pure $name {$fieldExps}
-  bodyExp <- [e|
-    first (fromString ("Failed to parse " ++ $(lift $ nameBase name) ++ ": ") <>)
-          (evalStateT $(varE processName) $(varE colsName))
-    |]
+    -- Roughly:
+    -- sqlSelectProcessRow $proxy $colsName =
+    --   first ((fromString "Failed to parse $name: ") <>)
+    --         (evalStateT $processName $colsName)
+    --   where $processName = do $statements
+    --                           pure $name {$fieldExps}
+    bodyExp <- [e|
+      first (fromString ("Failed to parse " ++ $(lift $ nameBase name) ++ ": ") <>)
+            (evalStateT $(varE processName) $(varE colsName))
+      |]
+    processType <-
+        [t| StateT [PersistValue] (Either Text) $(conT name) |]
 
-  pure $
-    FunD
-      'sqlSelectProcessRow
-      [ Clause
-          [WildP, VarP colsName]
-          (NormalB bodyExp)
-          -- `where` clause
-          [ ValD
-              (VarP processName)
-              ( NormalB $
-                  DoE
+    pure $
+      FunD
+        'sqlSelectProcessRow
+        [ Clause
+            [WildP, VarP colsName]
+            (NormalB bodyExp)
+            -- `where` clause
+            [ SigD processName processType
+            , ValD
+                (VarP processName)
+                ( NormalB $
+                    DoE
 #if MIN_VERSION_template_haskell(2,17,0)
-                    Nothing
+                      Nothing
 #endif
-                    (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE constructorName fieldExps)])
-              )
-              []
-          ]
-      ]
+                      (statements ++ [NoBindS $ AppE (VarE 'pure) (RecConE constructorName fieldExps)])
+                )
+                []
+            ]
+        ]
 
 -- | Get the left-hand side pattern of a statement in a @do@ block for binding
 -- to the result of `sqlSelectProcessRow`.
@@ -844,35 +844,28 @@ toMaybeDec RecordInfo {..} = do
 -- @Sql@-prefixed variant.
 makeSqlMaybeRecordSelectInstance :: RecordInfo -> Q [Dec]
 makeSqlMaybeRecordSelectInstance info@RecordInfo {..} = do
-  sqlSelectColsDec' <- sqlMaybeSelectColsDec info
-  sqlSelectColCountDec' <- sqlMaybeSelectColCountDec info
-  sqlSelectProcessRowDec' <- sqlMaybeSelectProcessRowDec info
-  let overlap = Nothing
-      instanceConstraints = []
--- <<<<<<< HEAD
---       instanceType =
---         (ConT ''SqlSelect)
---           `AppT` (ConT sqlMaybeName)
---           `AppT` (AppT (ConT ''Maybe) (ConT name))
---
---   pure
---     [ InstanceD overlap instanceConstraints instanceType [sqlSelectProcessRowDec']
---     , InstanceD overlap instanceConstraints (ConT ''SqlSelectCols `AppT` ConT sqlMaybeName)
---         [ sqlSelectColsDec'
---         , sqlSelectColCountDec'
---         ]
---
---     ]
---
--- -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
--- sqlMaybeSelectColsDec :: RecordInfo -> Q Dec
--- =======
-  instanceType <- [t| SqlSelect $(conT sqlMaybeName) (Maybe $(conT name)) |]
-  pure $ pure $ InstanceD overlap instanceConstraints instanceType (sqlSelectColsDec' ++ sqlSelectColCountDec' ++ [sqlSelectProcessRowDec'])
+    sqlSelectColsDec' <- sqlMaybeSelectColsDec info
+    sqlSelectColCountDec' <- sqlMaybeSelectColCountDec info
+    sqlSelectProcessRowDec' <- sqlMaybeSelectProcessRowDec info
+    let overlap = Nothing
+        instanceConstraints = []
+    instanceType <- [t| SqlSelect $(conT sqlMaybeName) (Maybe $(conT name)) |]
+    pure
+        [ InstanceD overlap instanceConstraints instanceType
+            [ sqlSelectProcessRowDec'
+            ]
+        , InstanceD overlap instanceConstraints
+            (ConT ''SqlSelectCols `AppT` ConT sqlMaybeName)
+            (concat
+                [ sqlSelectColsDec'
+                , sqlSelectColCountDec'
+                ]
+           )
+
+        ]
 
 -- | Generates the `sqlSelectCols` declaration for an `SqlSelect` instance.
 sqlMaybeSelectColsDec :: RecordInfo -> Q [Dec]
--- >>>>>>> master
 sqlMaybeSelectColsDec RecordInfo {..} = do
   -- Pairs of record field names and local variable names.
   fieldNames <- forM sqlMaybeFields (\(name', _type) -> do
@@ -1042,7 +1035,7 @@ sqlMaybeSelectProcessRowDec RecordInfo {..} = do
     FunD
       'sqlSelectProcessRow
       [ Clause
-          [VarP colsName]
+          [WildP, VarP colsName]
           (NormalB bodyExp)
           -- `where`
           [ ValD

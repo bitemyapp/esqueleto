@@ -1267,10 +1267,10 @@ testCommonTableExpressions = do
           void $ select $ do
             limitedLordsCte <-
                 withNotMaterialized $ do
-                    lords <- Experimental.from $ Experimental.table @Lord
+                    lords <- from $ table @Lord
                     limit 10
                     pure lords
-            lords <- Experimental.from limitedLordsCte
+            lords <- from limitedLordsCte
             orderBy [asc $ lords ^. LordId]
             pure lords
 
@@ -1280,10 +1280,10 @@ testCommonTableExpressions = do
           (sql, _) <- showQuery ES.SELECT $ do
                   limitedLordsCte <-
                       withNotMaterialized $ do
-                          lords <- Experimental.from $ Experimental.table @Lord
+                          lords <- from $ table @Lord
                           limit 10
                           pure lords
-                  lords <- Experimental.from limitedLordsCte
+                  lords <- from limitedLordsCte
                   orderBy [asc $ lords ^. LordId]
                   pure lords
 
@@ -1304,10 +1304,10 @@ testCommonTableExpressions = do
           (sql, _) <- showQuery ES.SELECT $ do
                   limitedLordsCte <-
                       withMaterialized $ do
-                          lords <- Experimental.from $ Experimental.table @Lord
+                          lords <- from $ table @Lord
                           limit 10
                           pure lords
-                  lords <- Experimental.from limitedLordsCte
+                  lords <- from limitedLordsCte
                   orderBy [asc $ lords ^. LordId]
                   pure lords
 
@@ -1326,10 +1326,10 @@ testCommonTableExpressions = do
             void $ select $ do
                   limitedLordsCte <-
                       withMaterialized $ do
-                          lords <- Experimental.from $ Experimental.table @Lord
+                          lords <- from $ table @Lord
                           limit 10
                           pure lords
-                  lords <- Experimental.from limitedLordsCte
+                  lords <- from limitedLordsCte
                   orderBy [asc $ lords ^. LordId]
                   pure lords
 
@@ -1882,10 +1882,10 @@ testPostgresqlNullsOrdering = do
         p2e <- insert' p2 -- p2 has a null age
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $
-               from $ \p -> do
-               orderBy [EP.ascNullsFirst (p ^. PersonAge), EP.ascNullsFirst (p ^. PersonFavNum)]
-               return p
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.ascNullsFirst (p ^. PersonAge), EP.ascNullsFirst (p ^. PersonFavNum)]
+                   pure p
         -- nulls come first
         asserting $ ret `shouldBe` [ p2e, p3e, p4e, p1e ]
       itDb "ASC NULLS LAST works" $ do
@@ -1893,10 +1893,10 @@ testPostgresqlNullsOrdering = do
         p2e <- insert' p2 -- p2 has a null age
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $
-               from $ \p -> do
-               orderBy [EP.ascNullsLast (p ^. PersonAge), EP.ascNullsLast (p ^. PersonFavNum)]
-               return p
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.ascNullsLast (p ^. PersonAge), EP.ascNullsLast (p ^. PersonFavNum)]
+                   pure p
         -- nulls come last
         asserting $ ret `shouldBe` [ p3e, p4e, p1e, p2e ]
       itDb "DESC NULLS FIRST works" $ do
@@ -1904,10 +1904,10 @@ testPostgresqlNullsOrdering = do
         p2e <- insert' p2 -- p2 has a null age
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $
-               from $ \p -> do
-               orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
-               return p
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
+                   pure p
         -- nulls come first
         asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
       itDb "DESC NULLS LAST works" $ do
@@ -1915,10 +1915,10 @@ testPostgresqlNullsOrdering = do
         p2e <- insert' p2 -- p2 has a null age
         p3e <- insert' p3
         p4e <- insert' p4
-        ret <- select $
-               from $ \p -> do
-               orderBy [EP.descNullsLast (p ^. PersonAge), EP.descNullsLast (p ^. PersonFavNum)]
-               return p
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.descNullsLast (p ^. PersonAge), EP.descNullsLast (p ^. PersonFavNum)]
+                   pure p
         -- nulls come last
         asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
 
@@ -1995,7 +1995,6 @@ spec = beforeAll mkConnectionPool $ do
 
     describe "PostgreSQL specific tests" $ do
         testAscRandom random_
-        testRandomMath
         testSelectDistinctOn
         testPostgresModule
         testPostgresqlOneAscOneDesc

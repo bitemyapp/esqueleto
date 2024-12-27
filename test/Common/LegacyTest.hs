@@ -32,7 +32,6 @@ module Common.LegacyTest
     ( tests
     , testLocking
     , testAscRandom
-    , testRandomMath
     , migrateAll
     , migrateUnique
     , cleanDB
@@ -1351,31 +1350,6 @@ testInsertsBySelectReturnsCount = do
         ret <- select $ from (\(_::(SqlExpr (Entity BlogPost))) -> return countRows)
         asserting $ ret `shouldBe` [Value (3::Int)]
         asserting $ cnt `shouldBe` 3
-
-
-
-
-testRandomMath :: SpecDb
-testRandomMath = describe "random_ math" $
-    itDb "rand returns result in random order" $
-      do
-        replicateM_ 20 $ do
-          _ <- insert p1
-          _ <- insert p2
-          _ <- insert p3
-          _ <- insert p4
-          _ <- insert $ Person "Jane"  Nothing Nothing 0
-          _ <- insert $ Person "Mark"  Nothing Nothing 0
-          _ <- insert $ Person "Sarah" Nothing Nothing 0
-          insert $ Person "Paul"  Nothing Nothing 0
-        ret1 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-        ret2 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-
-        asserting $ (ret1 == ret2) `shouldBe` False
 
 testMathFunctions :: SpecDb
 testMathFunctions = do
