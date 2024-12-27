@@ -20,6 +20,10 @@
           to tag subqueries to use them in `from` clauses.
         - The `SelectQuery` type (deprecated in 3.4) was removed. You do not
           need to tag `SqlQuery` values with `SelectQuery`.
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
 
 3.5.14.0
 ========
@@ -37,7 +41,6 @@
 - @JoelMcCracken
     - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
       - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
->>>>>>> 6ea947ae2b88288c491b1bef3528643283090ed2
 
 3.5.13.2
 ========
