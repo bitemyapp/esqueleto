@@ -3,6 +3,25 @@
 - @parsonsmatt
     - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
         - Add a fixity declaration to `?.`
+    - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
+        - The `random_` and `rand` functions (deprecated in 2.6.0) have been
+          removed. Please refer to the database specific ones (ie
+          `Database.Esqueleto.PostgreSQL` etc)
+        - The `sub_select` function (deprecated in 3.2.0) has been removed.
+          Please use the safer variants like `subSelect`, `subSelectMaybe`, etc.
+        - The `ToAliasT` and `ToAliasReferenceT` types has been removed after having been deprecated in 3.4.0.1.
+        - The `Union` type (deprecated in 3.4) was removed. Please use `union_`
+          instead.
+        - The `UnionAll` type (deprecated in 3.4) was removed. Please use
+          `unionAll_` instead.
+        - The `Except` type  (deprecated in 3.4) was removed. Please use
+          `except_` instead.
+        - The `Intersect` type  (deprecated in 3.4) was removed. Please use
+          `intersect_` instead.
+        - The `SubQuery` type (deprecated in 3.4) was removed. You do not need
+          to tag subqueries to use them in `from` clauses.
+        - The `SelectQuery` type (deprecated in 3.4) was removed. You do not
+          need to tag `SqlQuery` values with `SelectQuery`.
     - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
         - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
           defined in `PostgreSQL` module instead. The signature has changed, but

@@ -406,12 +406,6 @@ distinctOnOrderBy exprs act =
 
 {-# DEPRECATED distinctOnOrderBy "This function is deprecated, as it is only supported in Postgresql. Please use the function defined in `Database.Esqueleto.PostgreSQL` instead." #-}
 
--- | @ORDER BY random()@ clause.
---
--- @since 1.3.10
-rand :: SqlExpr OrderBy
-rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
-
 -- | @HAVING@.
 --
 -- @since 1.2.2
@@ -434,29 +428,6 @@ locking kind = putLocking $ LegacyLockingClause kind
 -- @since 3.5.9.0
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
-
-{-#
-  DEPRECATED
-    sub_select
-    "sub_select \n \
-sub_select is an unsafe function to use. If used with a SqlQuery that \n \
-returns 0 results, then it may return NULL despite not mentioning Maybe \n \
-in the return type. If it returns more than 1 result, then it will throw a \n \
-SQL error.\n\n Instead, consider using one of the following alternatives: \n \
-- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
-- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
-  has a Maybe in the return type. \n \
-- subSelectCount: Performs a count of the query - this is always safe. \n \
-- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
-  countRows and friends."
-  #-}
--- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
--- simple value so should be used only when the @SELECT@ query
--- is guaranteed to return just one row.
---
--- Deprecated in 3.2.0.
-sub_select :: PersistField a => SqlQuery (SqlExpr (Value a)) -> SqlExpr (Value a)
-sub_select         = sub SELECT
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
 -- function will only return a single result - it has a @LIMIT 1@ passed in to
@@ -891,9 +862,6 @@ not_ v = ERaw noMeta (const $ first ("NOT " <>) . x)
 between :: PersistField a => SqlExpr (Value a) -> (SqlExpr (Value a), SqlExpr (Value a)) -> SqlExpr (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
 
-random_  :: (PersistField a, Num a) => SqlExpr (Value a)
-random_  = unsafeSqlValue "RANDOM()"
-
 round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr (Value a) -> SqlExpr (Value b)
 round_   = unsafeSqlFunction "ROUND"
 
@@ -1001,11 +969,14 @@ like    = unsafeSqlBinOp    " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
 --
--- Supported by PostgreSQL only.
+-- Supported by PostgreSQL only. Deprecated in version 3.6.0 in favor of the
+-- version available from "Database.Esqueleto.PostgreSQL".
 --
 -- @since 2.2.3
 ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
 ilike   = unsafeSqlBinOp    " ILIKE "
+
+{-# DEPRECATED ilike "Since 3.6.0: `ilike` is only supported on Postgres. Please import it from 'Database.Esqueleto.PostgreSQL." #-}
 
 -- | The string @'%'@.  May be useful while using 'like' and
 -- concatenation ('concat_' or '++.', depending on your
@@ -1019,13 +990,19 @@ ilike   = unsafeSqlBinOp    " ILIKE "
 (%)     = unsafeSqlValue    "'%'"
 
 -- | The @CONCAT@ function with a variable number of
--- parameters.  Supported by MySQL and PostgreSQL.
+-- parameters.  Supported by MySQL and PostgreSQL. SQLite supports this in
+-- versions after 3.44.0, and @persistent-sqlite@ supports this in versions
+-- @2.13.3.0@ and after.
 concat_ :: SqlString s => [SqlExpr (Value s)] -> SqlExpr (Value s)
 concat_ = unsafeSqlFunction "CONCAT"
 
 -- | The @||@ string concatenation operator (named after
 -- Haskell's '++' in order to avoid naming clash with '||.').
+--
 -- Supported by SQLite and PostgreSQL.
+--
+-- MySQL support requires setting the SQL mode to @PIPES_AS_CONCAT@ or @ANSI@
+-- - see <https://stackoverflow.com/a/24777235 this StackOverflow answer>.
 (++.) :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value s)
 (++.)   = unsafeSqlBinOp    " || "
 
@@ -1172,13 +1149,13 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --        'from' $ \\p -> do
 --        'where_' (p '^.' PersonName '==.' 'val' \"Mike\"))
 --      'then_'
---        ('sub_select' $
+--        ('subSelect' $
 --        'from' $ \\v -> do
 --        let sub =
 --                'from' $ \\c -> do
 --                'where_' (c '^.' PersonName '==.' 'val' \"Mike\")
 --                return (c '^.' PersonFavNum)
---        'where_' (v '^.' PersonFavNum >. 'sub_select' sub)
+--        'where_' ('just' (v '^.' PersonFavNum) >. 'subSelect' sub)
 --        return $ 'count' (v '^.' PersonName) +. 'val' (1 :: Int)) ]
 --    ('else_' $ 'val' (-1))
 -- @
@@ -1243,10 +1220,6 @@ case_ = unsafeSqlCase
 -- @since 2.4.3
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
-
-{-# DEPRECATED random_ "Since 2.6.0: `random_` is not uniform across all databases! Please use a specific one such as 'Database.Esqueleto.PostgreSQL.random_', 'Database.Esqueleto.MySQL.random_', or 'Database.Esqueleto.SQLite.random_'" #-}
-
-{-# DEPRECATED rand "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
 
 -- Fixity declarations
 infixl 9 ^., ?.

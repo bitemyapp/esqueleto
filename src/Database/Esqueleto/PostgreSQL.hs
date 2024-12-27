@@ -38,6 +38,7 @@ module Database.Esqueleto.PostgreSQL
     , forKeyShareOf
     , filterWhere
     , values
+    , ilike
     , distinctOn
     , distinctOnOrderBy
     , withMaterialized
@@ -72,7 +73,7 @@ import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding
-       (From(..), distinctOn, distinctOnOrderBy, from, on, random_)
+       (From(..), ilike, distinctOn, distinctOnOrderBy, from, on, random_)
 import Database.Esqueleto.Internal.PersistentImport hiding
        (uniqueFields, upsert, upsertBy)
 import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
@@ -660,6 +661,12 @@ forShareOf lockableEntities onLockedBehavior =
 forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forKeyShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @ILIKE@ operator (case-insensitive @LIKE@).
+--
+-- @since 2.2.3
+ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
+ilike   = unsafeSqlBinOp    " ILIKE "
 
 -- | @WITH@ @MATERIALIZED@ clause is used to introduce a
 -- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)

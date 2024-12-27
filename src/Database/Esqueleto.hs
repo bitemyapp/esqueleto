@@ -51,14 +51,14 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
     -- $gettingstarted
 
     -- * @esqueleto@'s Language
-    where_, on, groupBy, orderBy, rand, asc, desc, limit, offset
+    where_, on, groupBy, orderBy, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
-             , sub_select, (^.), (?.)
+             , (^.), (?.)
              , val, isNothing, just, nothing, joinV, withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , between, (+.), (-.), (/.), (*.)
-             , random_, round_, ceiling_, floor_
+             , round_, ceiling_, floor_
              , min_, max_, sum_, avg_, castNum, castNumM
              , coalesce, coalesceDefault
              , lower_, upper_, trim_, ltrim_, rtrim_, length_, left_, right_
