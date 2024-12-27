@@ -91,6 +91,7 @@ test-suite specs
     other-modules:
         Common.Test
         Common.LegacyTest
+        Common.Test.CTE
         Common.Test.Models
         Common.Test.Import
         Common.Test.Select

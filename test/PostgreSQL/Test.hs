@@ -38,7 +38,8 @@ import Data.Time
 import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Internal as ES
-import Database.Esqueleto.PostgreSQL (random_, (%.))
+import Database.Esqueleto.PostgreSQL
+       (random_, withMaterialized, withNotMaterialized, (%.))
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
@@ -1260,6 +1261,80 @@ testCommonTableExpressions = do
             pure res
         asserting $ vals `shouldBe` fmap Value [2..11]
 
+    describe "MATERIALIZED CTEs" $ do
+      describe "withNotMaterialized" $ do
+        itDb "successfully executes query" $ do
+          void $ select $ do
+            limitedLordsCte <-
+                withNotMaterialized $ do
+                    lords <- Experimental.from $ Experimental.table @Lord
+                    limit 10
+                    pure lords
+            lords <- Experimental.from limitedLordsCte
+            orderBy [asc $ lords ^. LordId]
+            pure lords
+
+          asserting noExceptions
+
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withNotMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+
+      describe "withMaterialized" $ do
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+        itDb "successfully executes query" $ do
+            void $ select $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- Experimental.from $ Experimental.table @Lord
+                          limit 10
+                          pure lords
+                  lords <- Experimental.from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+            asserting noExceptions
+
 testPostgresqlLocking :: SpecDb
 testPostgresqlLocking = do
     describe "Monoid instance" $ do
@@ -1271,7 +1346,9 @@ testPostgresqlLocking = do
                     p <- from $ table @Person
                     EP.forUpdateOf p EP.skipLocked
                     EP.forUpdateOf p EP.skipLocked
+                    EP.forNoKeyUpdateOf p EP.skipLocked
                     EP.forShareOf p EP.skipLocked
+                    EP.forKeyShareOf p EP.skipLocked
             conn <- ask
             let res1 = toText conn multipleLockingQuery
                 resExpected =
@@ -1281,7 +1358,9 @@ testPostgresqlLocking = do
                     ,"FROM \"Person\""
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR NO KEY UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                    ,"FOR KEY SHARE OF \"Person\" SKIP LOCKED"
                     ]
 
             asserting $ res1 `shouldBe` resExpected
@@ -1374,7 +1453,6 @@ testPostgresqlLocking = do
                                         EP.forUpdateOf p EP.skipLocked
                                         return p
 
-                                liftIO $ print nonLockedRowsSpecifiedTable
                                 pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
 
                     withAsync sideThread $ \sideThreadAsync -> do
@@ -1396,7 +1474,6 @@ testPostgresqlLocking = do
                                     EP.forUpdateOf p EP.skipLocked
                                     return p
 
-                            liftIO $ print nonLockedRowsAfterUpdate
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
@@ -1797,6 +1874,54 @@ testSubselectAliasingBehavior = do
                     pure (str, val @Int 1)
             asserting noExceptions
 
+testPostgresqlNullsOrdering :: SpecDb
+testPostgresqlNullsOrdering = do
+  describe "Postgresql NULLS orderings work" $ do
+      itDb "ASC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.ascNullsFirst (p ^. PersonAge), EP.ascNullsFirst (p ^. PersonFavNum)]
+               return p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p3e, p4e, p1e ]
+      itDb "ASC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.ascNullsLast (p ^. PersonAge), EP.ascNullsLast (p ^. PersonFavNum)]
+               return p
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p3e, p4e, p1e, p2e ]
+      itDb "DESC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
+               return p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
+      itDb "DESC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $
+               from $ \p -> do
+               orderBy [EP.descNullsLast (p ^. PersonAge), EP.descNullsLast (p ^. PersonFavNum)]
+               return p
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1894,6 +2019,7 @@ spec = beforeAll mkConnectionPool $ do
         testWindowFunctions
         testSubselectAliasingBehavior
         testPostgresqlLocking
+        testPostgresqlNullsOrdering
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do

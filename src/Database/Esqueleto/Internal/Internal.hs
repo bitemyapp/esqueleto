@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RoleAnnotations #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
@@ -7,6 +8,7 @@
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -54,6 +56,7 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Bifunctor (Bifunctor, bimap)
 import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
@@ -398,12 +401,6 @@ distinctOnOrderBy exprs act =
               $ TLB.toLazyText b
             , vals )
 
--- | @ORDER BY random()@ clause.
---
--- @since 1.3.10
-rand :: SqlExpr OrderBy
-rand = ERaw noMeta $ \_ _ -> ("RANDOM()", [])
-
 -- | @HAVING@.
 --
 -- @since 1.2.2
@@ -722,90 +719,167 @@ countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
-not_ v = ERaw noMeta $ \p info -> first ("NOT " <>) $ x p info
+not_ v = ERaw noMeta (const $ first ("NOT " <>) . x)
   where
-    x p info =
+    x info =
         case v of
             ERaw m f ->
                 if hasCompositeKeyMeta m then
                     throw (CompositeKeyErr NotError)
                 else
-                    let (b, vals) = f Never info
-                    in (parensM p b, vals)
+                    f Parens info
 
-(==.)  :: (PersistField a)
-       => SqlExpr_ ctx (Value a)
-       -> SqlExpr_ ctx (Value a)
-       -> SqlExpr_ ctx (Value Bool)
+-- | This operator produces the SQL operator @=@, which is used to compare
+-- values for equality.
+--
+-- Example:
+--
+-- @
+--  query :: UserId -> SqlPersistT IO [Entity User]
+--  query userId = select $ do
+--      user <- from $ table \@User
+--      where_ (user ^. UserId ==. val userId)
+--      pure user
+-- @
+--
+-- This would generate the following SQL:
+--
+-- @
+--  SELECT user.*
+--  FROM user
+--  WHERE user.id = ?
+-- @
+(==.) :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
 (==.) = unsafeSqlBinOpComposite " = " " AND "
 
-(>=.)  :: PersistField a
-       => SqlExpr_ ctx (Value a)
-       -> SqlExpr_ ctx (Value a)
-       -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @>=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserAge >=. val 21
+-- @
+(>=.) :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
 (>=.) = unsafeSqlBinOp " >= "
 
-(>.)  :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @>@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserAge >. val 20
+-- @
+(>.)  :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
 (>.)  = unsafeSqlBinOp " > "
 
-(<=.) :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @<=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ val 21 <=. user ^. UserAge
+-- @
+(<=.) :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
 (<=.) = unsafeSqlBinOp " <= "
 
-(<.) :: PersistField a
-     => SqlExpr_ ctx (Value a)
-     -> SqlExpr_ ctx (Value a)
-     -> SqlExpr_ ctx (Value Bool)
-(<.) = unsafeSqlBinOp " < "
+-- | This operator translates to the SQL operator @<@.
+--
+-- Example:
+--
+-- @
+--  where_ $ val 20 <. user ^. UserAge
+-- @
+(<.)  :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
+(<.)  = unsafeSqlBinOp " < "
 
-(!=.) :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @!=@.
+--
+-- Example:
+--
+-- @
+--  where_ $ user ^. UserName !=. val "Bob"
+-- @
+(!=.) :: PersistField typ => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value Bool)
 (!=.) = unsafeSqlBinOpComposite " != " " OR "
 
-(&&.) :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @AND@.
+--
+-- Example:
+--
+-- @
+--  where_ $
+--          user ^. UserName ==. val "Matt"
+--      &&. user ^. UserAge >=. val 21
+-- @
+(&&.) :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
-(||.) :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value Bool)
+-- | This operator translates to the SQL operator @AND@.
+--
+-- Example:
+--
+-- @
+--  where_ $
+--          user ^. UserName ==. val "Matt"
+--      ||. user ^. UserName ==. val "John"
+-- @
+(||.) :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
 (||.) = unsafeSqlBinOp " OR "
 
-(+.)  :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
+-- | This operator translates to the SQL operator @+@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @+.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge +. val 10
+-- @
+(+.)  :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 (+.)  = unsafeSqlBinOp " + "
 
-(-.)  :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
+-- | This operator translates to the SQL operator @-@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @-.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge -. val 10
+-- @
+(-.)  :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 (-.)  = unsafeSqlBinOp " - "
 
-(/.)  :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
+-- | This operator translates to the SQL operator @/@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @/.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge /. val 10
+-- @
+(/.)  :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 (/.)  = unsafeSqlBinOp " / "
 
-(*.)  :: PersistField a
-      => SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
-      -> SqlExpr_ ctx (Value a)
+-- | This operator translates to the SQL operator @*@.
+--
+-- This does not require or assume anything about the SQL values. Interpreting
+-- what @*.@ means for a given type is left to the database engine.
+--
+-- Example:
+--
+-- @
+--  user ^. UserAge *. val 10
+-- @
+(*.)  :: PersistField a => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value a)
 (*.)  = unsafeSqlBinOp " * "
 
--- | @BETWEEN@.
+-- | @a `between` (b, c)@ translates to the SQL expression @a >= b AND a <= c@.
+-- It does not use a SQL @BETWEEN@ operator.
 --
 -- @since: 3.1.0
 between :: PersistField a
@@ -813,9 +887,6 @@ between :: PersistField a
         -> (SqlExpr_ ctx (Value a), SqlExpr_ ctx (Value a))
         -> SqlExpr_ ctx (Value Bool)
 a `between` (b, c) = a >=. b &&. a <=. c
-
-random_  :: (PersistField a, Num a) => SqlExpr (Value a)
-random_  = unsafeSqlValue "RANDOM()"
 
 round_   :: (PersistField a, Num a, PersistField b, Num b) => SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 round_   = unsafeSqlFunction "ROUND"
@@ -1176,10 +1247,6 @@ case_ = unsafeSqlCase
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
-{-# DEPRECATED random_ "Since 2.6.0: `random_` is not uniform across all databases! Please use a specific one such as 'Database.Esqueleto.PostgreSQL.random_', 'Database.Esqueleto.MySQL.random_', or 'Database.Esqueleto.SQLite.random_'" #-}
-
-{-# DEPRECATED rand "Since 2.6.0: `rand` ordering function is not uniform across all databases! To avoid accidental partiality it will be removed in the next major version." #-}
-
 -- Fixity declarations
 infixl 9 ^.
 infixl 7 *., /.
@@ -1210,11 +1277,8 @@ else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
-newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
-
--- | @since 1.4.4
-instance Functor Value where
-    fmap f (Value a) = Value (f a)
+newtype Value a = Value { unValue :: a }
+    deriving (Eq, Ord, Show, Typeable, Functor, Foldable, Traversable)
 
 instance Applicative Value where
   (<*>) (Value f) (Value a) = Value (f a)
@@ -1493,8 +1557,14 @@ data Insertion a
 -- See the examples at the beginning of this module to see how this
 -- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
-    deriving (Eq, Show)
+    deriving (Eq, Show, Functor)
 infixl 2 :&
+
+-- |
+--
+-- @since 3.5.14.0
+instance Bifunctor (:&) where
+    bimap f g (a :& b) = f a :& g b
 
 -- | Different kinds of locking clauses supported by 'locking'.
 --
@@ -1539,7 +1609,9 @@ data PostgresLockingKind =
 -- Arranged in order of lock strength
 data PostgresRowLevelLockStrength =
     PostgresForUpdate
+    | PostgresForNoKeyUpdate
     | PostgresForShare
+    | PostgresForKeyShare
   deriving (Ord, Eq)
 
 data LockingOfClause where
@@ -1939,8 +2011,10 @@ data CommonTableExpressionKind
     | NormalCommonTableExpression
     deriving Eq
 
-data CommonTableExpressionClause =
-    CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+type CommonTableExpressionModifierAfterAs = CommonTableExpressionClause -> IdentInfo -> TLB.Builder
+
+data CommonTableExpressionClause
+  = CommonTableExpressionClause CommonTableExpressionKind CommonTableExpressionModifierAfterAs Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data SubQueryType
     = NormalSubQuery
@@ -3177,14 +3251,15 @@ makeCte info cteClauses =
         | hasRecursive = "WITH RECURSIVE "
         | otherwise = "WITH "
       where
+
         hasRecursive =
             elem RecursiveCommonTableExpression
-            $ fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind)
+            $ fmap (\(CommonTableExpressionClause cteKind _ _ _) -> cteKind)
             $ cteClauses
 
-    cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
+    cteClauseToText clause@(CommonTableExpressionClause _ cteModifier cteIdent cteFn) =
         first
-            (\tlb -> useIdent info cteIdent <> " AS " <> parens tlb)
+            (\tlb -> useIdent info cteIdent <> " AS " <> cteModifier clause info <> parens tlb)
             (cteFn info)
 
     cteBody =
@@ -3341,7 +3416,9 @@ makeLocking info (PostgresLockingClauses clauses) =
                     <> makeLockingBehavior (postgresOnLockedBehavior l)
             makeLockingStrength :: PostgresRowLevelLockStrength -> (TLB.Builder, [PersistValue])
             makeLockingStrength PostgresForUpdate = plain "FOR UPDATE"
+            makeLockingStrength PostgresForNoKeyUpdate = plain "FOR NO KEY UPDATE"
             makeLockingStrength PostgresForShare = plain "FOR SHARE"
+            makeLockingStrength PostgresForKeyShare = plain "FOR KEY SHARE"
 
             makeLockingBehavior :: OnLockedBehavior -> (TLB.Builder, [PersistValue])
             makeLockingBehavior NoWait = plain "NOWAIT"
@@ -3857,6 +3934,16 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc k
       ]
   sqlSelectColCount   = sqlSelectColCount . from11P
+  -- sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
+
+from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11P = const Proxy
+
+from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a,b),(c,d),(e,f),(g,h),(i,j),k)
+
+to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
+to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3871,15 +3958,6 @@ instance ( SqlSelect a ra
          , SqlSelect k rk
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk) where
   sqlSelectProcessRow p = fmap to11 . sqlSelectProcessRow (from11P p)
-
-from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
-from11P = const Proxy
-
-from11 :: (a,b,c,d,e,f,g,h,i,j,k) -> ((a,b),(c,d),(e,f),(g,h),(i,j),k)
-from11 (a,b,c,d,e,f,g,h,i,j,k) = ((a, b), (c, d), (e, f), (g, h), (i, j), k)
-
-to11 :: ((a,b),(c,d),(e,f),(g,h),(i,j),k) -> (a,b,c,d,e,f,g,h,i,j,k)
-to11 ((a,b),(c,d),(e,f),(g,h),(i,j),k) = (a,b,c,d,e,f,g,h,i,j,k)
 
 instance ( SqlSelectCols a
          , SqlSelectCols b
@@ -3910,6 +3988,16 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc l
       ]
   sqlSelectColCount   = sqlSelectColCount . from12P
+  -- sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
+
+from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12P = const Proxy
+
+from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
+
+to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
+to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3925,15 +4013,6 @@ instance ( SqlSelect a ra
          , SqlSelect l rl
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl) where
   sqlSelectProcessRow p = fmap to12 . sqlSelectProcessRow (from12P p)
-
-from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
-from12P = const Proxy
-
-from12 :: (a,b,c,d,e,f,g,h,i,j,k,l) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
-from12 (a,b,c,d,e,f,g,h,i,j,k,l) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
-
-to12 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) -> (a,b,c,d,e,f,g,h,i,j,k,l)
-to12 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l)) = (a,b,c,d,e,f,g,h,i,j,k,l)
 
 instance ( SqlSelectCols a
          , SqlSelectCols b
@@ -3966,6 +4045,16 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc m
       ]
   sqlSelectColCount   = sqlSelectColCount . from13P
+  -- sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
+
+from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13P = const Proxy
+
+from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
+
+to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
+to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -3982,15 +4071,6 @@ instance ( SqlSelect a ra
          , SqlSelect m rm
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm) where
   sqlSelectProcessRow p = fmap to13 . sqlSelectProcessRow (from13P p)
-
-from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
-from13P = const Proxy
-
-to13 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) -> (a,b,c,d,e,f,g,h,i,j,k,l,m)
-to13 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m) = (a,b,c,d,e,f,g,h,i,j,k,l,m)
-
-from13 :: (a,b,c,d,e,f,g,h,i,j,k,l,m) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
-from13 (a,b,c,d,e,f,g,h,i,j,k,l,m) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 
 instance ( SqlSelectCols a
          , SqlSelectCols b
@@ -4025,6 +4105,10 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc n
       ]
   sqlSelectColCount   = sqlSelectColCount . from14P
+  -- sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
+
+from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14P = const Proxy
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -4042,9 +4126,6 @@ instance ( SqlSelect a ra
          , SqlSelect n rn
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn) where
   sqlSelectProcessRow p = fmap to14 . sqlSelectProcessRow (from14P p)
-
-from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
-from14P = const Proxy
 
 from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
@@ -4087,6 +4168,13 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc o
       ]
   sqlSelectColCount   = sqlSelectColCount . from15P
+  -- sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
+
+from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15P = const Proxy
+
+from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
+from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 
 instance ( SqlSelect a ra
          , SqlSelect b rb
@@ -4105,12 +4193,6 @@ instance ( SqlSelect a ra
          , SqlSelect o ro
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn, ro) where
   sqlSelectProcessRow p = fmap to15 . sqlSelectProcessRow (from15P p)
-
-from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
-from15P = const Proxy
-
-from15 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
-from15 (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 
 to15 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)
 to15 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n,o)

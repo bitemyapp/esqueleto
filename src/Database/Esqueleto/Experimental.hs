@@ -61,13 +61,13 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
     , ToAliasReference(..)
     , ToAliasReferenceT
     , ToSqlSetOperation(..)
+    , SqlSelect
 
     -- * The Normal Stuff
     , where_
     , groupBy
     , groupBy_
     , orderBy
-    , rand
     , asc
     , desc
     , limit
