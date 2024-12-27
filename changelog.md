@@ -1,9 +1,13 @@
-3.6.0.0 (unreleased)
+3.6.0.0
 =======
 - @parsonsmatt
     - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
         - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
           defined in `PostgreSQL` module instead.
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
 
 3.5.14.0
 ========
