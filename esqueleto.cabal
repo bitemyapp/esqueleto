@@ -52,7 +52,7 @@ library
     hs-source-dirs:
         src/
     build-depends:
-        base >=4.8 && <5.0
+        base >=4.12 && <5.0
       , aeson >=1.0
       , attoparsec >= 0.13 && < 0.15
       , blaze-html
