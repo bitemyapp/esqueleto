@@ -2360,14 +2360,19 @@ type role SqlExpr nominal
 -- There is no guarantee that the result works! To be safe, you want to provide
 -- a local helper function that calls this at a tested type.
 --
--- As an example, you may want to assert that a SQL expression is never @NULL@,
--- even though it is introduced in a way that may allow it to be @NULL@. You can
--- remove the 'Maybe' with this:
+-- As an example, you may know that two types share an identical SQL
+-- representation, and can be parsed exactly the same way. Perhaps you have
+-- a @data SomeEnum@ which you represent as a @TEXT@ in Postgres, and you
+-- want to treat it as a @TEXT@. You could define a top-level
+-- type-restricted alias to this which allows this to be done safely:
 --
 -- @
---  unsafeRemoveMaybe :: SqlExpr (Value (Maybe a)) -> SqlExpr (Value a)
---  unsafeRemoveMaybe = veryUnsafeCoerceSqlExpr
+--  enumToText :: SqlExpr (Value SomeEnum) -> SqlExpr (Value Text)
+--  enumToText = veryUnsafeCoerceSqlExpr
 -- @
+--
+-- Note that this is fragile: if you change the encoding of 'SomeEnum' to
+-- be anything other than 'Text', then your code will fail at runtime.
 --
 -- @since 3.6.0.0
 veryUnsafeCoerceSqlExpr :: SqlExpr a -> SqlExpr b
