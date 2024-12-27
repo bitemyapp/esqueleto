@@ -1222,7 +1222,7 @@ toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (Ba
 toBaseId = veryUnsafeCoerceSqlExprValue
 
 -- Fixity declarations
-infixl 9 ^.
+infixl 9 ^., ?.
 infixl 7 *., /.
 infixl 6 +., -.
 infixr 5 ++.

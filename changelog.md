@@ -1,6 +1,8 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
+        - Add a fixity declaration to `?.`
     - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
         - The `random_` and `rand` functions (deprecated in 2.6.0) have been
           removed. Please refer to the database specific ones (ie
