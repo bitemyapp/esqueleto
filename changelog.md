@@ -1,3 +1,11 @@
+3.6.0.0
+=======
+- @parsonsmatt
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
+
 3.5.14.0
 ========
 - @parsonsmatt
