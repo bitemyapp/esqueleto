@@ -1,6 +1,16 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#422](https://github.com/bitemyapp/esqueleto/pull/422)
+        - The instance of `HasField` for `SqlExpr (Maybe (Entity a))` joins
+          `Maybe` values together. This means that if you `leftJoin` a table
+          with a `Maybe` column, the result will be a `SqlExpr (Value (Maybe
+          typ))`, instead of `SqlExpr (Value (Maybe (Maybe typ)))`.
+        - To make this a less breaking change, `joinV` has been given a similar
+          behavior. If the input type to `joinV` is `Maybe (Maybe typ)`, then
+          the result becomes `Maybe typ`. If the input type is `Maybe typ`, then
+          the output is also `Maybe typ`.
+        - The `just` function is also modified to avoid nesting `Maybe`.
     - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
         - Add a fixity declaration to `?.`
     - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
