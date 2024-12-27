@@ -64,6 +64,7 @@ module Common.Test
     , DateTruncTest(..)
     , DateTruncTestId
     , Key(..)
+    , assertJust
     ) where
 
 import Common.Test.Import hiding (from, on)
@@ -2523,3 +2524,5 @@ testGetTable =
                 pure (person, blogPost, profile, reply)
             asserting noExceptions
 
+assertJust :: HasCallStack => Maybe a -> IO a
+assertJust = maybe (expectationFailure "Expected Just, got Nothing" >> error "asdf") pure
