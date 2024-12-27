@@ -1,3 +1,65 @@
+<<<<<<< HEAD
+=======
+3.6.0.0
+=======
+- @parsonsmatt
+    - [#422](https://github.com/bitemyapp/esqueleto/pull/422)
+        - The instance of `HasField` for `SqlExpr (Maybe (Entity a))` joins
+          `Maybe` values together. This means that if you `leftJoin` a table
+          with a `Maybe` column, the result will be a `SqlExpr (Value (Maybe
+          typ))`, instead of `SqlExpr (Value (Maybe (Maybe typ)))`.
+        - To make this a less breaking change, `joinV` has been given a similar
+          behavior. If the input type to `joinV` is `Maybe (Maybe typ)`, then
+          the result becomes `Maybe typ`. If the input type is `Maybe typ`, then
+          the output is also `Maybe typ`.
+        - The `just` function is also modified to avoid nesting `Maybe`.
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
+        - Add a fixity declaration to `?.`
+    - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
+        - The `random_` and `rand` functions (deprecated in 2.6.0) have been
+          removed. Please refer to the database specific ones (ie
+          `Database.Esqueleto.PostgreSQL` etc)
+        - The `sub_select` function (deprecated in 3.2.0) has been removed.
+          Please use the safer variants like `subSelect`, `subSelectMaybe`, etc.
+        - The `ToAliasT` and `ToAliasReferenceT` types has been removed after having been deprecated in 3.4.0.1.
+        - The `Union` type (deprecated in 3.4) was removed. Please use `union_`
+          instead.
+        - The `UnionAll` type (deprecated in 3.4) was removed. Please use
+          `unionAll_` instead.
+        - The `Except` type  (deprecated in 3.4) was removed. Please use
+          `except_` instead.
+        - The `Intersect` type  (deprecated in 3.4) was removed. Please use
+          `intersect_` instead.
+        - The `SubQuery` type (deprecated in 3.4) was removed. You do not need
+          to tag subqueries to use them in `from` clauses.
+        - The `SelectQuery` type (deprecated in 3.4) was removed. You do not
+          need to tag `SqlQuery` values with `SelectQuery`.
+    - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
+        - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
+          defined in `PostgreSQL` module instead. The signature has changed, but
+          the refactor is straightforward:
+          ```
+              -- old:
+              p <- from $ table
+              distinctOn [don x] $ do
+                  pure p
+
+              -- new:
+              p <- from $ table
+              distinctOn [don x]
+              pure p
+          ```
+    - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
+        - Postgresql `upsert` and `upsertBy` now require a `NonEmpty` list of
+          updates. If you want to provide an empty list of updates, you'll need
+          to use `upsertMaybe` and `upsertMaybeBe` instead. Postgres does not
+          return rows from the database if no updates are performed.
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
+
+>>>>>>> cfa86bb (hmmm that works kinda nicely)
 3.5.14.0
 ========
 - @parsonsmatt

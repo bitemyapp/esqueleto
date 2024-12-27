@@ -680,7 +680,12 @@ isNothing_ = isNothing
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
-just :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
+--
+-- This function will not produce a nested 'Maybe'. This is in accord with
+-- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
+just
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ'))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -2472,11 +2477,41 @@ instance
 --
 -- @since 3.5.4.0
 instance
-    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+    (PersistEntity rec, PersistField typ, PersistField typ', SymbolToField sym rec typ
+    , NullableFieldProjection typ typ'
+    , HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
+    )
   =>
-    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ)))
+    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
-    getField expr = expr ?. symbolToField @sym
+    getField expr = veryUnsafeCoerceSqlExprValue (expr ?. symbolToField @sym)
+
+-- | The 'NullableFieldProjection' type is used to determine whether
+-- a 'Maybe' should be stripped off or not. This is used in the 'HasField'
+-- for @'SqlExpr' ('Maybe' ('Entity' a))@ to allow you to only have
+-- a single level of 'Maybe'.
+--
+-- @
+-- MyTable
+--   column         Int Maybe
+--   someTableId    SomeTableId
+--
+--  select $ do
+--      (_ :& maybeMyTable) <-
+--          from $ table @SomeTable
+--              `leftJoin` table @MyTable
+--                  `on` do
+--                      \(someTable :& maybeMyTable) ->
+--                          just someTable.id ==. maybeMyTable.someTableId
+--        where_ $ maybeMyTable.column ==. just (val 10)
+--        pure maybeMyTable
+-- @
+--
+-- Without this class, projecting a field with type @'Maybe' typ@ would
+-- have resulted in a @'SqlExpr' ('Value' ('Maybe' ('Maybe' typ)))@.
+class NullableFieldProjection typ typ'
+instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
+instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause

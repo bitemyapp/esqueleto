@@ -2545,6 +2545,20 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                                 just p.id ==. mbp.authorId
                 pure (p.id, mbp.title)
 
+    itDb "joins Maybe together" $ do
+        void $ select $ do
+            deed :& lord <-
+                Experimental.from $
+                    table @Deed
+                    `leftJoin` table @Lord
+                        `Experimental.on` do
+                            \(deed :& lord) ->
+                                lord.id ==. just deed.ownerId
+            where_ $ lord.dogs >=. just (val 10)
+            where_ $ joinV lord.dogs >=. just (just (val 10))
+            where_ $ lord.dogs >=. just (val (Just 10))
+            pure lord
+
 #else
     it "is only supported in GHC 9.2 or above" $ \_ -> do
         pending
