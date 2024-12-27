@@ -6,6 +6,10 @@
           updates. If you want to provide an empty list of updates, you'll need
           to use `upsertMaybe` and `upsertMaybeBe` instead. Postgres does not
           return rows from the database if no updates are performed.
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
 
 3.5.14.0
 ========
