@@ -2505,7 +2505,9 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                         `Experimental.on` do
                             \(deed :& lord) ->
                                 lord.id ==. just deed.ownerId
-            where_ $ joinV lord.dogs >=. just (val 10)
+            where_ $ lord.dogs >=. just (val 10)
+            where_ $ joinV lord.dogs >=. just (just (val 10))
+            where_ $ lord.dogs >=. just (val (Just 10))
             pure lord
 
 
