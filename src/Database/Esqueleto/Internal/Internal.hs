@@ -665,7 +665,10 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
+joinV
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr (Value (Maybe typ))
+    -> SqlExpr (Value (Maybe typ'))
 joinV = veryUnsafeCoerceSqlExprValue
 
 
@@ -2478,11 +2481,18 @@ instance
 --
 -- @since 3.5.4.0
 instance
-    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+    (PersistEntity rec, PersistField typ, PersistField typ', SymbolToField sym rec typ
+    , NullableFieldProjection typ typ'
+    , HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
+    )
   =>
-    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ)))
+    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
-    getField expr = expr ?. symbolToField @sym
+    getField expr = veryUnsafeCoerceSqlExpr (expr ?. symbolToField @sym)
+
+class NullableFieldProjection typ typ'
+instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
+instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause
@@ -4263,3 +4273,7 @@ associateJoin = foldr f start
             (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
             (entityKey one)
             (entityVal one, [many])
+
+type family Nullable a where
+    Nullable (Maybe a) = a
+    Nullable a =  a
