@@ -1,6 +1,11 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
+        - Postgresql `upsert` and `upsertBy` now require a `NonEmpty` list of
+          updates. If you want to provide an empty list of updates, you'll need
+          to use `upsertMaybe` and `upsertMaybeBe` instead. Postgres does not
+          return rows from the database if no updates are performed.
     - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
         - The ability to `coerce` `SqlExpr` was removed. Instead, use
           `veryUnsafeCoerceSqlExpr`. See the documentation on

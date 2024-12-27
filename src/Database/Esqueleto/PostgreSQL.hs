@@ -24,7 +24,9 @@ module Database.Esqueleto.PostgreSQL
     , now_
     , random_
     , upsert
+    , upsertMaybe
     , upsertBy
+    , upsertMaybeBy
     , insertSelectWithConflict
     , insertSelectWithConflictCount
     , noWait
@@ -46,9 +48,6 @@ module Database.Esqueleto.PostgreSQL
     , unsafeSqlAggregateFunction
     ) where
 
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
 import Control.Arrow (first)
 import Control.Exception (throw)
 import Control.Monad (void)
@@ -59,6 +58,7 @@ import Data.Int (Int64)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe
 import Data.Proxy (Proxy(..))
+import qualified Data.Text as Text
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
@@ -73,6 +73,7 @@ import Database.Esqueleto.Internal.Internal hiding (From(..), from, on, random_)
 import Database.Esqueleto.Internal.PersistentImport hiding
        (uniqueFields, upsert, upsertBy)
 import Database.Persist.SqlBackend
+import GHC.Stack
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -198,7 +199,49 @@ chr = unsafeSqlFunction "chr"
 now_ :: SqlExpr (Value UTCTime)
 now_ = unsafeSqlFunction "NOW" ()
 
+-- | Perform an @upsert@ operation on the given record.
+--
+-- If the record exists in the database already, then the updates will be
+-- performed on that record. If the record does not exist, then the
+-- provided record will be inserted.
+--
+-- If you wish to provide an empty list of updates (ie "if the record
+-- exists, do nothing"), then you will need to call 'upsertMaybe'. Postgres
+-- will not return anything if there are no modifications or inserts made.
 upsert
+    ::
+    ( MonadIO m
+    , PersistEntity record
+    , OnlyOneUniqueKey record
+    , PersistRecordBackend record SqlBackend
+    , IsPersistBackend (PersistEntityBackend record)
+    )
+    => record
+    -- ^ new record to insert
+    -> NE.NonEmpty (SqlExpr (Entity record) -> SqlExpr Update)
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT SqlBackend m (Entity record)
+    -- ^ the record in the database after the operation
+upsert record =
+    upsertBy (onlyUniqueP record) record
+
+-- | Like 'upsert', but permits an empty list of updates to be performed.
+--
+-- If no updates are provided and the record already was present in the
+-- database, then this will return 'Nothing'. If you want to fetch the
+-- record out of the database, you can write:
+--
+-- @
+--  mresult <- upsertMaybe record []
+--  case mresult of
+--      Nothing ->
+--          'getBy' ('onlyUniqueP' record)
+--      Just res ->
+--          pure (Just res)
+-- @
+--
+-- @since 3.6.0.0
+upsertMaybe
     ::
     ( MonadIO m
     , PersistEntity record
@@ -210,15 +253,22 @@ upsert
     -- ^ new record to insert
     -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
-    -> R.ReaderT SqlBackend m (Entity record)
+    -> R.ReaderT SqlBackend m (Maybe (Entity record))
     -- ^ the record in the database after the operation
-upsert record updates = do
-    uniqueKey <- onlyUnique record
-    upsertBy uniqueKey record updates
+upsertMaybe rec upds = do
+    upsertMaybeBy (onlyUniqueP rec) rec upds
 
-upsertBy
+-- | Attempt to insert a @record@ into the database. If the @record@
+-- already exists for the given @'Unique' record@, then a list of updates
+-- will be performed.
+--
+-- If you provide an empty list of updates, then this function will return
+-- 'Nothing' if the record already exists in the database.
+--
+-- @since 3.6.0.0
+upsertMaybeBy
     ::
-    (MonadIO m
+    ( MonadIO m
     , PersistEntity record
     , IsPersistBackend (PersistEntityBackend record)
     )
@@ -228,9 +278,9 @@ upsertBy
     -- ^ new record to insert
     -> [SqlExpr (Entity record) -> SqlExpr Update]
     -- ^ updates to perform if the record already exists
-    -> R.ReaderT SqlBackend m (Entity record)
+    -> R.ReaderT SqlBackend m (Maybe (Entity record))
     -- ^ the record in the database after the operation
-upsertBy uniqueKey record updates = do
+upsertMaybeBy uniqueKey record updates = do
     sqlB <- R.ask
     case getConnUpsertSql sqlB of
         Nothing ->
@@ -240,25 +290,62 @@ upsertBy uniqueKey record updates = do
         Just upsertSql ->
             handler sqlB upsertSql
   where
-    addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
-    entDef = entityDef (Just record)
-    updatesText conn = first builderToText $ renderUpdates conn updates
-#if MIN_VERSION_persistent(2,11,0)
+    addVals l =
+        map toPersistValue (toPersistFields record) ++ l ++ case updates of
+            [] ->
+                []
+            _ ->
+                persistUniqueToValues uniqueKey
+    entDef =
+        entityDef (Just record)
+    updatesText conn =
+        first builderToText $ renderUpdates conn updates
     uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
         let (updateText, updateVals) =
                 updatesText sqlB
-            queryText =
+            queryTextUnmodified =
                 upsertSql entDef uniqueFields updateText
+            queryText =
+                case updates of
+                    [] ->
+                        let
+                            (okay, _bad) =
+                                Text.breakOn "DO UPDATE" queryTextUnmodified
+                            good =
+                                okay <> "DO NOTHING RETURNING ??"
+                        in
+                            good
+                    _ ->
+                        queryTextUnmodified
+
             queryVals =
                 addVals updateVals
         xs <- rawSql queryText queryVals
-        pure (head xs)
-#else
-    uDef = toUniqueDef uniqueKey
-    handler conn f = fmap head $ uncurry rawSql $
-        (***) (f entDef (uDef :| [])) addVals $ updatesText conn
-#endif
+        pure (listToMaybe xs)
+
+upsertBy
+    ::
+    ( MonadIO m
+    , PersistEntity record
+    , IsPersistBackend (PersistEntityBackend record)
+    , HasCallStack
+    )
+    => Unique record
+    -- ^ uniqueness constraint to find by
+    -> record
+    -- ^ new record to insert
+    -> NE.NonEmpty (SqlExpr (Entity record) -> SqlExpr Update)
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT SqlBackend m (Entity record)
+    -- ^ the record in the database after the operation
+upsertBy uniqueKey record updates = do
+    mrec <- upsertMaybeBy uniqueKey record (NE.toList updates)
+    case mrec of
+        Nothing ->
+            error "non-empty list of updates should have resulted in a row being returned"
+        Just rec ->
+            pure rec
 
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
@@ -266,10 +353,7 @@ upsertBy uniqueKey record updates = do
 -- Example of usage:
 --
 -- @
--- share [ mkPersist sqlSettings
---       , mkDeleteCascade sqlSettings
---       , mkMigrate "migrate"
---       ] [persistLowerCase|
+-- 'mkPersist' 'sqlSettings' ['persistLowerCase'|
 --   Bar
 --     num Int
 --     deriving Eq Show
@@ -279,17 +363,19 @@ upsertBy uniqueKey record updates = do
 --     deriving Eq Show
 -- |]
 --
--- insertSelectWithConflict
---   UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
---   (from $ \b ->
---     return $ Foo <# (b ^. BarNum)
---   )
---   (\current excluded ->
---     [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
---   )
+-- action = do
+--     'insertSelectWithConflict'
+--         UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
+--         (do
+--             b <- from $ table \@Bar
+--             return $ Foo <# (b ^. BarNum)
+--         )
+--         (\\current excluded ->
+--             [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
+--         )
 -- @
 --
--- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique,
+-- Inserts to table @Foo@ all @Bar.num@ values and in case of conflict @SomeFooUnique@,
 -- the conflicting value is updated to the current plus the excluded.
 --
 -- @since 3.1.3
