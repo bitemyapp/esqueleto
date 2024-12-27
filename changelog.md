@@ -46,6 +46,11 @@
         - The ability to `coerce` `SqlExpr` was removed. Instead, use
           `veryUnsafeCoerceSqlExpr`. See the documentation on
           `veryUnsafeCoerceSqlExpr` for safe use example.
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/421)
+        - The `LockingKind` constructors are deprecated, and will be removed
+          from non-Internal modules in a future release. Smart constructors
+          replace them, and you may need to import them from a different
+          database-specific module.
 
 3.5.14.0
 ========
