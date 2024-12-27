@@ -8,9 +8,6 @@ module Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-{-# DEPRECATED ToAliasT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
-type ToAliasT a = a
-
 -- Tedious tuple magic
 class ToAlias a where
     toAlias :: a -> SqlQuery a

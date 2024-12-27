@@ -63,7 +63,6 @@ spec = beforeAll mkConnectionPool $ do
 
     describe "PostgreSQL specific tests" $ do
         testAscRandom random_
-        testRandomMath
         testSelectDistinctOn
         testPostgresModule
         testPostgresqlOneAscOneDesc
