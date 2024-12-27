@@ -1,6 +1,21 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
+        - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
+          defined in `PostgreSQL` module instead. The signature has changed, but
+          the refactor is straightforward:
+          ```
+              -- old:
+              p <- from $ table
+              distinctOn [don x] $ do
+                  pure p
+
+              -- new:
+              p <- from $ table
+              distinctOn [don x]
+              pure p
+          ```
     - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
         - Postgresql `upsert` and `upsertBy` now require a `NonEmpty` list of
           updates. If you want to provide an empty list of updates, you'll need
