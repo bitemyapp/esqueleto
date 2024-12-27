@@ -53,6 +53,7 @@ module Database.Esqueleto.Experimental
     , ToAlias(..)
     , ToAliasReference(..)
     , ToSqlSetOperation(..)
+    , SqlSelect
 
     -- * The Normal Stuff
     , where_

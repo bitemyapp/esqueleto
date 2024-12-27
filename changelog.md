@@ -1,7 +1,7 @@
-3.6.0.0 (unreleased)
+3.6.0.0
 =======
 - @parsonsmatt
-    - []()
+    - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
         - The `random_` and `rand` functions (deprecated in 2.6.0) have been
           removed. Please refer to the database specific ones (ie
           `Database.Esqueleto.PostgreSQL` etc)
@@ -20,6 +20,24 @@
           to tag subqueries to use them in `from` clauses.
         - The `SelectQuery` type (deprecated in 3.4) was removed. You do not
           need to tag `SqlQuery` values with `SelectQuery`.
+
+3.5.14.0
+========
+- @parsonsmatt
+    - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
+        - Export the `SqlSelect` type from `Database.Esqueleto.Experimental`
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+    - [#416](https://github.com/bitemyapp/esqueleto/pull/416)
+        - Derive `Functor` and `Bifunctor` for `:&`
+- @matthewbauer
+    - [#341](https://github.com/bitemyapp/esqueleto/pull/341/)
+        - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
+          module
+- @JoelMcCracken
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
+      - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
+>>>>>>> 6ea947ae2b88288c491b1bef3528643283090ed2
 
 3.5.13.2
 ========
