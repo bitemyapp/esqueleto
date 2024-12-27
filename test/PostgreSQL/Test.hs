@@ -1076,7 +1076,7 @@ testInsertUniqueViolation =
       sqlErrorHint = ""}
 
 testUpsert :: SpecDb
-testUpsert = focus $ describe "Upsert test" $ do
+testUpsert = describe "Upsert test" $ do
     itDb "Upsert can insert like normal" $  do
         u1e <- EP.upsert u1 (pure (OneUniqueName =. val "fifth"))
         liftIO $ entityVal u1e `shouldBe` u1
@@ -1092,9 +1092,11 @@ testUpsert = focus $ describe "Upsert test" $ do
             _ <- EP.upsertMaybe u1 []
             pure ()
         itDb "Works with no updates, twice" $ do
-            Just (Entity u1Key u1') <- EP.upsertMaybe u1 []
-            Just (Entity u1Key_ u1'') <- EP.upsertMaybe u1 { oneUniqueName = "Something Else" } []
-            pure ()
+            mu1  <- EP.upsertMaybe u1 []
+            Entity u1Key u1' <- liftIO $ assertJust mu1
+            mu2 <- EP.upsertMaybe u1 { oneUniqueName = "Something Else" } []
+            asserting $ do
+                mu2 `shouldBe` Nothing
             -- liftIO $ do
             --     u1 `shouldBe` u1'
 

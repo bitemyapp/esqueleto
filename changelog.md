@@ -2,8 +2,10 @@
 =======
 - @parsonsmatt
     - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
-        - Fix `upsert` and `upsertBy` to produce `INSERT ... ON CONFLICT DO
-          NOTHING` code when given an empty list.
+        - Postgresql `upsert` and `upsertBy` now require a `NonEmpty` list of
+          updates. If you want to provide an empty list of updates, you'll need
+          to use `upsertMaybe` and `upsertMaybeBe` instead. Postgres does not
+          return rows from the database if no updates are performed.
 
 3.5.14.0
 ========
