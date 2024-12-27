@@ -70,7 +70,8 @@ import Database.Esqueleto.Experimental.From.CommonTableExpression
 import Database.Esqueleto.Experimental.From.SqlSetOperation
 import Database.Esqueleto.Experimental.ToAlias
 import Database.Esqueleto.Experimental.ToAliasReference
-import Database.Esqueleto.Internal.Internal hiding (From(..), from, on, random_)
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), from, ilike, on, random_)
 import Database.Esqueleto.Internal.PersistentImport hiding
        (uniqueFields, upsert, upsertBy)
 import Database.Persist.SqlBackend
