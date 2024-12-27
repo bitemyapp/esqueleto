@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RoleAnnotations #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeApplications #-}
@@ -7,6 +8,7 @@
 
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE EmptyDataDecls #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -54,6 +56,7 @@ import qualified Control.Monad.Trans.Reader as R
 import qualified Control.Monad.Trans.State as S
 import qualified Control.Monad.Trans.Writer as W
 import qualified Data.ByteString as B
+import Data.Bifunctor (Bifunctor, bimap)
 import Data.Coerce (coerce)
 import qualified Data.Conduit as C
 import qualified Data.Conduit.List as CL
@@ -1271,11 +1274,8 @@ else_ = id
 
 -- | A single value (as opposed to a whole entity).  You may use
 -- @('^.')@ or @('?.')@ to get a 'Value' from an 'Entity'.
-newtype Value a = Value { unValue :: a } deriving (Eq, Ord, Show, Typeable)
-
--- | @since 1.4.4
-instance Functor Value where
-    fmap f (Value a) = Value (f a)
+newtype Value a = Value { unValue :: a }
+    deriving (Eq, Ord, Show, Typeable, Functor, Foldable, Traversable)
 
 instance Applicative Value where
   (<*>) (Value f) (Value a) = Value (f a)
@@ -1554,8 +1554,14 @@ data Insertion a
 -- See the examples at the beginning of this module to see how this
 -- operator is used in 'JOIN' operations.
 data (:&) a b = a :& b
-    deriving (Eq, Show)
+    deriving (Eq, Show, Functor)
 infixl 2 :&
+
+-- |
+--
+-- @since 3.5.14.0
+instance Bifunctor (:&) where
+    bimap f g (a :& b) = f a :& g b
 
 -- | Different kinds of locking clauses supported by 'locking'.
 --
@@ -1993,8 +1999,10 @@ data CommonTableExpressionKind
     | NormalCommonTableExpression
     deriving Eq
 
-data CommonTableExpressionClause =
-    CommonTableExpressionClause CommonTableExpressionKind Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
+type CommonTableExpressionModifierAfterAs = CommonTableExpressionClause -> IdentInfo -> TLB.Builder
+
+data CommonTableExpressionClause
+  = CommonTableExpressionClause CommonTableExpressionKind CommonTableExpressionModifierAfterAs Ident (IdentInfo -> (TLB.Builder, [PersistValue]))
 
 data SubQueryType
     = NormalSubQuery
@@ -3236,14 +3244,15 @@ makeCte info cteClauses =
         | hasRecursive = "WITH RECURSIVE "
         | otherwise = "WITH "
       where
+
         hasRecursive =
             elem RecursiveCommonTableExpression
-            $ fmap (\(CommonTableExpressionClause cteKind _ _) -> cteKind)
+            $ fmap (\(CommonTableExpressionClause cteKind _ _ _) -> cteKind)
             $ cteClauses
 
-    cteClauseToText (CommonTableExpressionClause _ cteIdent cteFn) =
+    cteClauseToText clause@(CommonTableExpressionClause _ cteModifier cteIdent cteFn) =
         first
-            (\tlb -> useIdent info cteIdent <> " AS " <> parens tlb)
+            (\tlb -> useIdent info cteIdent <> " AS " <> cteModifier clause info <> parens tlb)
             (cteFn info)
 
     cteBody =
