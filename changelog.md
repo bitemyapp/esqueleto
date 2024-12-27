@@ -1,6 +1,8 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
+        - Add a fixity declaration to `?.`
     - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
         - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
           defined in `PostgreSQL` module instead. The signature has changed, but
