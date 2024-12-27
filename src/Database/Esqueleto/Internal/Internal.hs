@@ -3934,7 +3934,6 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc k
       ]
   sqlSelectColCount   = sqlSelectColCount . from11P
-  -- sqlSelectProcessRow = fmap to11 . sqlSelectProcessRow
 
 from11P :: Proxy (a,b,c,d,e,f,g,h,i,j,k) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),k)
 from11P = const Proxy
@@ -3988,7 +3987,6 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc l
       ]
   sqlSelectColCount   = sqlSelectColCount . from12P
-  -- sqlSelectProcessRow = fmap to12 . sqlSelectProcessRow
 
 from12P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l))
 from12P = const Proxy
@@ -4045,7 +4043,6 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc m
       ]
   sqlSelectColCount   = sqlSelectColCount . from13P
-  -- sqlSelectProcessRow = fmap to13 . sqlSelectProcessRow
 
 from13P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),m)
 from13P = const Proxy
@@ -4105,7 +4102,6 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc n
       ]
   sqlSelectColCount   = sqlSelectColCount . from14P
-  -- sqlSelectProcessRow = fmap to14 . sqlSelectProcessRow
 
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
@@ -4168,7 +4164,6 @@ instance ( SqlSelectCols a
       , sqlSelectCols esc o
       ]
   sqlSelectColCount   = sqlSelectColCount . from15P
-  -- sqlSelectProcessRow = fmap to15 . sqlSelectProcessRow
 
 from15P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n, o) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n),o)
 from15P = const Proxy
