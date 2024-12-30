@@ -472,7 +472,7 @@ sub_select         = sub SELECT
 subSelect
   :: PersistField a
   => SqlQuery (SqlExpr (Value a))
-  -> SqlExpr (Value (Maybe (Nullable a)))
+  -> SqlExpr (Value (Maybe a))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
@@ -486,7 +486,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 subSelectMaybe
     :: PersistField a
     => SqlQuery (SqlExpr (Value (Maybe a)))
-    -> SqlExpr (Value (Maybe (Nullable a)))
+    -> SqlExpr (Value (Maybe a))
 subSelectMaybe = joinV . subSelect
 
 -- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
@@ -687,8 +687,11 @@ isNothing_ = isNothing
 -- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
 just
     :: SqlExpr (Value typ)
-    -> SqlExpr (Value (Maybe (Nullable typ)))
+    -> SqlExpr (Value (Maybe typ))
 just = veryUnsafeCoerceSqlExprValue
+
+justNullable :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe (Nullable typ)))
+justNullable = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
@@ -958,7 +961,7 @@ coalesce              = unsafeSqlFunctionParens "COALESCE"
 -- a non-NULL result.
 --
 -- @since 1.4.3
-coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe (Nullable a)))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
 -- | @LOWER@ function.
