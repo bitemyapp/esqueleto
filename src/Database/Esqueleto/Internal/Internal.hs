@@ -624,11 +624,13 @@ withNonNull field f = do
     f $ veryUnsafeCoerceSqlExprValue field
 
 -- | Project a field of an entity that may be null.
-(?.) :: ( PersistEntity val , PersistField typ)
+--
+-- This will not produce a nested 'Maybe'.
+(?.) :: (PersistEntity val , PersistField typ, NullableFieldProjection typ typ')
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
-    -> SqlExpr (Value (Maybe typ))
-ERaw m f ?. field = just (ERaw m f ^. field)
+    -> SqlExpr (Value (Maybe typ'))
+ERaw m f ?. field = veryUnsafeCoerceSqlExprValue (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -680,7 +682,12 @@ isNothing_ = isNothing
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
-just :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
+--
+-- This function will not produce a nested 'Maybe'. This is in accord with
+-- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
+just
+    :: SqlExpr (Value typ)
+    -> SqlExpr (Value (Maybe typ))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -689,7 +696,9 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr (Value (Maybe (Maybe typ))) -> SqlExpr (Value (Maybe typ))
+joinV
+    :: SqlExpr (Value (Maybe (Maybe typ)))
+    -> SqlExpr (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
 
@@ -900,9 +909,10 @@ floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+
+min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe (Nullable a)))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe (Nullable a)))
 max_     = unsafeSqlFunction "MAX"
 avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
@@ -2472,11 +2482,45 @@ instance
 --
 -- @since 3.5.4.0
 instance
-    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+    (PersistEntity rec, PersistField typ, PersistField typ', SymbolToField sym rec typ
+    , NullableFieldProjection typ typ'
+    , HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
+    )
   =>
-    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ)))
+    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
     getField expr = expr ?. symbolToField @sym
+
+-- | The 'NullableFieldProjection' type is used to determine whether
+-- a 'Maybe' should be stripped off or not. This is used in the 'HasField'
+-- for @'SqlExpr' ('Maybe' ('Entity' a))@ to allow you to only have
+-- a single level of 'Maybe'.
+--
+-- @
+-- MyTable
+--   column         Int Maybe
+--   someTableId    SomeTableId
+--
+--  select $ do
+--      (_ :& maybeMyTable) <-
+--          from $ table @SomeTable
+--              `leftJoin` table @MyTable
+--                  `on` do
+--                      \(someTable :& maybeMyTable) ->
+--                          just someTable.id ==. maybeMyTable.someTableId
+--        where_ $ maybeMyTable.column ==. just (val 10)
+--        pure maybeMyTable
+-- @
+--
+-- Without this class, projecting a field with type @'Maybe' typ@ would
+-- have resulted in a @'SqlExpr' ('Value' ('Maybe' ('Maybe' typ)))@.
+class NullableFieldProjection typ typ'
+instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
+instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
+
+type family Nullable a where
+    Nullable (Maybe a) = a
+    Nullable a =  a
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause
