@@ -690,9 +690,6 @@ just
     -> SqlExpr (Value (Maybe typ))
 just = veryUnsafeCoerceSqlExprValue
 
-justNullable :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe (Nullable typ)))
-justNullable = veryUnsafeCoerceSqlExprValue
-
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
 nothing = unsafeSqlValue "NULL"
@@ -700,8 +697,8 @@ nothing = unsafeSqlValue "NULL"
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
 joinV
-    :: SqlExpr (Value (Maybe typ))
-    -> SqlExpr (Value (Maybe (Nullable typ)))
+    :: SqlExpr (Value (Maybe (Maybe typ)))
+    -> SqlExpr (Value (Maybe typ))
 joinV = veryUnsafeCoerceSqlExprValue
 
 

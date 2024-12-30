@@ -980,7 +980,7 @@ testSelectWhere = describe "select where_" $ do
         _ <- insert' p4
         ret <- select $
                from $ \p->
-               return $ joinV $ min_ (p ^. PersonAge)
+               return $ min_ (p ^. PersonAge)
         asserting $ ret `shouldBe` [ Value $ Just (17 :: Int) ]
 
     itDb "works with max_" $ do
@@ -990,7 +990,7 @@ testSelectWhere = describe "select where_" $ do
         _ <- insert' p4
         ret <- select $
                from $ \p->
-               return $ joinV $ max_ (p ^. PersonAge)
+               return $ max_ (p ^. PersonAge)
         asserting $ ret `shouldBe` [ Value $ Just (36 :: Int) ]
 
     itDb "works with lower_" $ do
@@ -2587,3 +2587,5 @@ testGetTable =
                 pure (person, blogPost, profile, reply)
             asserting noExceptions
 
+joinTypeTests :: IO ()
+joinTypeTests = pure ()

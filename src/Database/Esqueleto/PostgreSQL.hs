@@ -173,7 +173,7 @@ stringAggWith ::
   -> SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
   -> [OrderByClause] -- ^ ORDER BY clauses
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe (Nullable s))) -- ^ Concatenation.
 stringAggWith mode expr delim os =
   unsafeSqlAggregateFunction "string_agg" mode (expr, delim) os
 
@@ -185,7 +185,7 @@ stringAgg ::
      SqlString s
   => SqlExpr (Value s) -- ^ Input values.
   -> SqlExpr (Value s) -- ^ Delimiter.
-  -> SqlExpr (Value (Maybe s)) -- ^ Concatenation.
+  -> SqlExpr (Value (Maybe (Nullable s))) -- ^ Concatenation.
 stringAgg expr delim = stringAggWith AggModeAll expr delim []
 
 -- | (@chr@) Translate the given integer to a character. (Note the result will
