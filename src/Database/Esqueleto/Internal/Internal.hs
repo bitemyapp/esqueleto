@@ -624,10 +624,12 @@ withNonNull field f = do
     f $ veryUnsafeCoerceSqlExprValue field
 
 -- | Project a field of an entity that may be null.
-(?.) :: ( PersistEntity val , PersistField typ)
+--
+-- This will not produce a nested 'Maybe'.
+(?.) :: (PersistEntity val , PersistField typ, NullableFieldProjection typ typ')
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
-    -> SqlExpr (Value (Maybe typ))
+    -> SqlExpr (Value (Maybe typ'))
 ERaw m f ?. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
@@ -685,7 +687,8 @@ isNothing_ = isNothing
 -- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
 just
     :: (NullableFieldProjection typ typ')
-    => SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ'))
+    => SqlExpr (Value typ)
+    -> SqlExpr (Value (Maybe typ'))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -2487,7 +2490,7 @@ instance
   =>
     HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
-    getField expr = veryUnsafeCoerceSqlExprValue (expr ?. symbolToField @sym)
+    getField expr = expr ?. symbolToField @sym
 
 -- | The 'NullableFieldProjection' type is used to determine whether
 -- a 'Maybe' should be stripped off or not. This is used in the 'HasField'
