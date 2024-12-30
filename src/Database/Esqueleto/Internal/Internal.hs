@@ -472,7 +472,7 @@ sub_select         = sub SELECT
 subSelect
   :: PersistField a
   => SqlQuery (SqlExpr (Value a))
-  -> SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value (Maybe (Nullable a)))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
@@ -486,7 +486,7 @@ subSelect query = just (subSelectUnsafe (query <* limit 1))
 subSelectMaybe
     :: PersistField a
     => SqlQuery (SqlExpr (Value (Maybe a)))
-    -> SqlExpr (Value (Maybe a))
+    -> SqlExpr (Value (Maybe (Nullable a)))
 subSelectMaybe = joinV . subSelect
 
 -- | Performs a @COUNT@ of the given query in a @subSelect@ manner. This is
@@ -630,7 +630,7 @@ withNonNull field f = do
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
     -> SqlExpr (Value (Maybe typ'))
-ERaw m f ?. field = just (ERaw m f ^. field)
+ERaw m f ?. field = veryUnsafeCoerceSqlExprValue (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -686,9 +686,8 @@ isNothing_ = isNothing
 -- This function will not produce a nested 'Maybe'. This is in accord with
 -- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
 just
-    :: (NullableFieldProjection typ typ')
-    => SqlExpr (Value typ)
-    -> SqlExpr (Value (Maybe typ'))
+    :: SqlExpr (Value typ)
+    -> SqlExpr (Value (Maybe (Nullable typ)))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -698,9 +697,8 @@ nothing = unsafeSqlValue "NULL"
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
 joinV
-    :: NullableFieldProjection typ typ'
-    => SqlExpr (Value (Maybe typ))
-    -> SqlExpr (Value (Maybe typ'))
+    :: SqlExpr (Value (Maybe typ))
+    -> SqlExpr (Value (Maybe (Nullable typ)))
 joinV = veryUnsafeCoerceSqlExprValue
 
 
@@ -911,9 +909,10 @@ floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+
+min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe (Nullable a)))
 min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
+max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe (Nullable a)))
 max_     = unsafeSqlFunction "MAX"
 avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 avg_     = unsafeSqlFunction "AVG"
@@ -959,7 +958,7 @@ coalesce              = unsafeSqlFunctionParens "COALESCE"
 -- a non-NULL result.
 --
 -- @since 1.4.3
-coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value a) -> SqlExpr (Value a)
+coalesceDefault :: PersistField a => [SqlExpr (Value (Maybe (Nullable a)))] -> SqlExpr (Value a) -> SqlExpr (Value a)
 coalesceDefault exprs = unsafeSqlFunctionParens "COALESCE" . (exprs ++) . return . just
 
 -- | @LOWER@ function.
@@ -2518,6 +2517,10 @@ instance
 class NullableFieldProjection typ typ'
 instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
 instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
+
+type family Nullable a where
+    Nullable (Maybe a) = a
+    Nullable a =  a
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause
