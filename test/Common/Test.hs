@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -2508,7 +2509,19 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
             where_ $ lord.dogs >=. just (val 10)
             where_ $ joinV lord.dogs >=. just (just (val 10))
             where_ $ lord.dogs >=. just (val (Just 10))
-            pure lord
+
+    itDb "i didn't bork ?." $ do
+        weights <- select $ do
+            (pro :& per) <- Experimental.from $
+                table @Profile
+                    `leftJoin` table @Person
+                        `Experimental.on` do
+                            \(pro :& per) ->
+                                just (pro ^. #person) ==. per ?. #id
+                                &&. just pro.person ==. per ?. PersonId
+            pure $ per ?. #weight
+        asserting $ do
+            weights `shouldBe` ([] :: [Value (Maybe Int)])
 
 
 
