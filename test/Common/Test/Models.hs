@@ -61,6 +61,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     deriving Eq Show
   Comment
     body String
+    title String Maybe
     blog BlogPostId
     deriving Eq Show
   CommentReply

@@ -470,9 +470,9 @@ sub_select         = sub SELECT
 --
 -- @since 3.2.0
 subSelect
-  :: PersistField a
+  :: (PersistField a, NullableFieldProjection a a')
   => SqlQuery (SqlExpr (Value a))
-  -> SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value (Maybe a'))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
@@ -626,10 +626,10 @@ withNonNull field f = do
 -- | Project a field of an entity that may be null.
 --
 -- This will not produce a nested 'Maybe'.
-(?.) :: (PersistEntity val , PersistField typ, NullableFieldProjection typ typ')
+(?.) :: (PersistEntity val, PersistField typ)
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
-    -> SqlExpr (Value (Maybe typ'))
+    -> SqlExpr (Value (Maybe (Nullable typ)))
 ERaw m f ?. field = veryUnsafeCoerceSqlExprValue (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
@@ -686,8 +686,9 @@ isNothing_ = isNothing
 -- This function will not produce a nested 'Maybe'. This is in accord with
 -- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
 just
-    :: SqlExpr (Value typ)
-    -> SqlExpr (Value (Maybe typ))
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr (Value typ)
+    -> SqlExpr (Value (Maybe typ'))
 just = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
@@ -697,8 +698,9 @@ nothing = unsafeSqlValue "NULL"
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
 joinV
-    :: SqlExpr (Value (Maybe (Maybe typ)))
-    -> SqlExpr (Value (Maybe typ))
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr (Value (Maybe typ))
+    -> SqlExpr (Value (Maybe typ'))
 joinV = veryUnsafeCoerceSqlExprValue
 
 
@@ -2489,7 +2491,7 @@ instance
   =>
     HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
-    getField expr = expr ?. symbolToField @sym
+    getField expr = veryUnsafeCoerceSqlExprValue (expr ?. symbolToField @sym)
 
 -- | The 'NullableFieldProjection' type is used to determine whether
 -- a 'Maybe' should be stripped off or not. This is used in the 'HasField'
@@ -2516,7 +2518,7 @@ instance
 -- have resulted in a @'SqlExpr' ('Value' ('Maybe' ('Maybe' typ)))@.
 class NullableFieldProjection typ typ'
 instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
-instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
+instance (typ ~ typ') => NullableFieldProjection typ typ'
 
 type family Nullable a where
     Nullable (Maybe a) = a

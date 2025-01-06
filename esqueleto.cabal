@@ -81,6 +81,8 @@ library
         -Wcpp-undef
         -Wcpp-undef
     default-language: Haskell2010
+    default-extensions: 
+        TypeOperators
 
 test-suite specs
     type: exitcode-stdio-1.0

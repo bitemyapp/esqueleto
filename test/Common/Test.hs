@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -543,8 +544,8 @@ testSelectJoin = do
         b31e <- insert' $ BlogPost "c" (entityKey p3e)
         ret <- select $
                from $ \(p `LeftOuterJoin` mb) -> do
-               on (just (p ^. PersonId) ==. mb ?. BlogPostAuthorId)
-               orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
+               on (just (p ^. PersonId) ==. mb ?. #authorId)
+               orderBy [ asc (p ^. PersonName), asc (mb ?. #title) ]
                return (p, mb)
         asserting $ ret `shouldBe` [ (p1e, Just b11e)
                                 , (p1e, Just b12e)
@@ -578,6 +579,20 @@ testSelectJoin = do
            orderBy [ asc (p ^. PersonName), asc (mb ?. BlogPostTitle) ]
            return (p, mb)
       asserting $ shouldBeOnClauseWithoutMatchingJoinException eres
+
+    itDb "i didn't bork ?." $ do
+        weights <- select $ do
+            (pro :& per) <- Experimental.from $
+                table @Profile
+                    `leftJoin` table @Person
+                        `Experimental.on` do
+                            \(pro :& per) ->
+                                just (pro ^. #person) ==. per ?. #id
+                                &&. just pro.person ==. per ?. PersonId
+            pure $ per ?. #weight
+        asserting $ do
+            weights `shouldBe` ([] :: [Value (Maybe Int)])
+
 
     itDb "throws an error for using too many ons" $ do
       eres <- try $ select $
@@ -2527,7 +2542,7 @@ shouldBeOnClauseWithoutMatchingJoinException ea =
             expectationFailure $ "Expected OnClauseWithMatchingJoinException, got: " <> show ea
 
 testOverloadedRecordDot :: SpecDb
-testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
+testOverloadedRecordDot = focus $ describe "OverloadedRecordDot" $ do
 #if __GLASGOW_HASKELL__ >= 902
     describe "with SqlExpr (Entity rec)" $ do
         itDb "lets you project from a record" $ do
@@ -2545,19 +2560,58 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                                 just p.id ==. mbp.authorId
                 pure (p.id, mbp.title)
 
-    itDb "joins Maybe together" $ do
-        void $ select $ do
-            deed :& lord <-
-                Experimental.from $
-                    table @Deed
-                    `leftJoin` table @Lord
+    describe "Type Inference and Maybe" $ do
+        itDb "joins Maybe together" $ do
+            void $ select $ do
+                deed :& lord :& user :& address <-
+                    Experimental.from $
+                        table @Deed
+                        `leftJoin` table @Lord
+                            `Experimental.on` do
+                                \(deed :& lord) ->
+                                    lord.id ==. just deed.ownerId
+                        `leftJoin` table @User
+                            `Experimental.on` do
+                                \(_ :& lord :& user) ->
+                                    lord.county ==. user.name
+                        `leftJoin` table @Address
+                            `Experimental.on` do
+                                \(_ :& user :& address) ->
+                                    user.address ==. address.id
+                where_ $ lord.dogs >=. just (just (val 10))
+                where_ $ joinV lord.dogs >=. just (just (val 10))
+                where_ $ lord.dogs >=. just (val (Just 10))
+                where_ $ lord.dogs >=. just (val 10)
+                -- where_ $ lord.dogs >=. val 10 -- this fails with a type error, as expected
+                pure (lord, user.address, address.address)
+
+        itDb "" $ void $ do
+            select $ do
+                (p :& bp :& c) <- Experimental.from $
+                    table @Person
+                    `leftJoin` table @BlogPost
                         `Experimental.on` do
-                            \(deed :& lord) ->
-                                lord.id ==. just deed.ownerId
-            where_ $ lord.dogs >=. just (val 10)
-            where_ $ joinV lord.dogs >=. just (just (val 10))
-            where_ $ lord.dogs >=. just (val (Just 10))
-            pure lord
+                            \(p :& bp) ->
+                                just p.id ==. bp.authorId
+                                -- this has a bad type error. "can't match
+                                -- `Maybe typ'` with `Key Person`". no good
+                                -- indication that the problem is that
+                                -- `bp.authorId` has type `Maybe _` and
+                                -- that's why.
+                                -- p.id ==. bp.authorId
+                    `leftJoin` table @Comment
+                        `Experimental.on` do
+                            \(_ :& bp :& c) ->
+                                bp.id ==. c.blog
+                                &&. bp ?. #id ==. c ?. #blog
+                where_ $ p.id ==. val undefined
+                where_ $ c.title ==. just (val "hello")
+                where_ $ c.title ==. just (just (val "hello"))
+                where_ $ c ?. #title ==. just (val "hello")
+                -- this gives "no instance IsSTring (Maybe [Char])" which
+                -- is great for type inference
+                -- where_ $ c ?. #title ==. (val "hello")
+                pure (p, bp, c)
 
 #else
     it "is only supported in GHC 9.2 or above" $ \_ -> do
@@ -2583,7 +2637,7 @@ testGetTable =
                         `leftJoin` table @Reply
                             `Experimental.on` do
                                 \((getTable @Person -> p) :& reply) ->
-                                    just (p ^. PersonId) ==. reply ?. ReplyGuy
+                                    just (p ^. PersonId) ==. reply ?. #guy
                 pure (person, blogPost, profile, reply)
             asserting noExceptions
 
