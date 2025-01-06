@@ -446,9 +446,9 @@ putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 --
 -- @since 3.2.0
 subSelect
-  :: PersistField a
+  :: (PersistField a, NullableFieldProjection a a')
   => SqlQuery (SqlExpr (Value a))
-  -> SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value (Maybe a'))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
@@ -599,12 +599,28 @@ withNonNull field f = do
     where_ $ not_ $ isNothing field
     f $ veryUnsafeCoerceSqlExprValue field
 
+-- | Project an 'EntityField' of a nullable entity. The result type will be
+-- 'Nullable', meaning that nested 'Maybe' won't be produced here.
+--
+-- As of v3.6.0.0, this will attempt to combine nested 'Maybe'. If you want to
+-- keep nested 'Maybe', then see '??.'.
+(?.) :: (PersistEntity val , PersistField typ)
+    => SqlExpr (Maybe (Entity val))
+    -> EntityField val typ
+    -> SqlExpr (Value (Maybe (Nullable typ)))
+ent ?. field = veryUnsafeCoerceSqlExprValue (ent ??. field)
+
 -- | Project a field of an entity that may be null.
-(?.) :: ( PersistEntity val , PersistField typ)
+--
+-- This variant will produce a nested 'Maybe' if you select a 'Maybe' column.
+-- If you want to collapse 'Maybe', see '?.'.
+--
+-- @since 3.6.0.0
+(??.) :: ( PersistEntity val , PersistField typ)
     => SqlExpr (Maybe (Entity val))
     -> EntityField val typ
     -> SqlExpr (Value (Maybe typ))
-ERaw m f ?. field = just (ERaw m f ^. field)
+ERaw m f ??. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: PersistField typ => typ -> SqlExpr (Value typ)
@@ -657,12 +673,21 @@ isNothing_ = isNothing
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
 --
--- This function will not produce a nested 'Maybe'. This is in accord with
--- how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
+-- This function will try not to produce a nested 'Maybe'. This is in accord
+-- with how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
+-- This behavior was changed in v3.6.0.0. If you want to produce nested 'Maybe',
+-- see 'just''.
 just
     :: (NullableFieldProjection typ typ')
     => SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ'))
 just = veryUnsafeCoerceSqlExprValue
+
+-- | Like 'just', but this function does not try to collapse nested 'Maybe'.
+-- This may be useful if you have type inference problems with 'just'.
+--
+-- @since 3.6.0.0
+just' :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
+just' = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
@@ -670,11 +695,28 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
+--
+-- As of v3.6.0.0, this function will attempt to work on both @'SqlExpr'
+-- ('Value' ('Maybe' a))@ as well as @'SqlExpr' ('Value' ('Maybe' ('Maybe' a)))@
+-- inputs to make transitioning to 'NullableFieldProjection' easier. This may
+-- make type inference worse in some cases. If you want the monomorphic variant,
+-- see 'joinV''
 joinV
     :: (NullableFieldProjection typ typ')
     => SqlExpr (Value (Maybe typ))
     -> SqlExpr (Value (Maybe typ'))
 joinV = veryUnsafeCoerceSqlExprValue
+
+-- | Like 'joinV', but monomorphic: the input type only works on @'SqlExpr'
+-- ('Value' (Maybe (Maybe a)))@.
+--
+-- This function may be useful if you have type inference issues with 'joinV'.
+--
+-- @since 3.6.0.0
+joinV'
+    :: SqlExpr (Value (Maybe (Maybe typ)))
+    -> SqlExpr (Value (Maybe typ))
+joinV' = veryUnsafeCoerceSqlExprValue
 
 
 countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr (Value typ) -> SqlExpr (Value a)
@@ -881,12 +923,21 @@ floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
-min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr (Value (Maybe a))
-max_     = unsafeSqlFunction "MAX"
-avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
-avg_     = unsafeSqlFunction "AVG"
+
+min_
+    :: (PersistField a)
+    => SqlExpr (Value a)
+    -> SqlExpr (Value (Maybe (Nullable a)))
+min_ = unsafeSqlFunction "MIN"
+
+max_
+    :: (PersistField a)
+    => SqlExpr (Value a)
+    -> SqlExpr (Value (Maybe (Nullable a)))
+max_ = unsafeSqlFunction "MAX"
+
+avg_ :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr (Value (Maybe b))
+avg_ = unsafeSqlFunction "AVG"
 
 -- | Allow a number of one type to be used as one of another
 -- type via an implicit cast.  An explicit cast is not made,
@@ -921,7 +972,10 @@ castNumM = veryUnsafeCoerceSqlExprValue
 -- documentation.
 --
 -- @since 1.4.3
-coalesce :: PersistField a => [SqlExpr (Value (Maybe a))] -> SqlExpr (Value (Maybe a))
+coalesce
+    :: (PersistField a, NullableFieldProjection a a')
+    => [SqlExpr (Value (Maybe a))]
+    -> SqlExpr (Value (Maybe a'))
 coalesce              = unsafeSqlFunctionParens "COALESCE"
 
 -- | Like @coalesce@, but takes a non-nullable SqlExpression
@@ -2518,6 +2572,8 @@ instance
 --
 -- Without this class, projecting a field with type @'Maybe' typ@ would
 -- have resulted in a @'SqlExpr' ('Value' ('Maybe' ('Maybe' typ)))@.
+--
+-- @since 3.6.0.0
 class NullableFieldProjection typ typ'
 instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
 instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
