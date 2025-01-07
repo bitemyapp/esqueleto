@@ -69,6 +69,7 @@ jobs:
             #     mysql database: 'esqutest' # Optional, default value is "test". The specified database which will be create
             #     mysql user: 'travis' # Required if "mysql root password" is empty, default is empty. The superuser for the specified database. Can use secrets, too
             #     mysql password: 'esqutest' # Required if "mysql user" exists. The password for the "mysql user"
+      - run: apt-get update && apt-get install -y pcre
       - run: cabal v2-update
       - run: cabal v2-freeze $CONFIG
       - uses: actions/cache@v4
