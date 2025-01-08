@@ -34,6 +34,7 @@ module Database.Esqueleto.PostgreSQL
     , skipLocked
     , forUpdateOf
     , forNoKeyUpdateOf
+    , forShare
     , forShareOf
     , forKeyShareOf
     , filterWhere
@@ -653,6 +654,18 @@ forNoKeyUpdateOf lockableEntities onLockedBehavior =
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @FOR SHARE@ syntax for Postgres locking.
+--
+-- Example use:
+--
+-- @
+--  'locking' 'forShare'
+-- @
+--
+-- @since 3.6.0.0
+forShare :: LockingKind
+forShare = ForShare
 
 -- | `FOR KEY SHARE OF` syntax for postgres locking
 -- allows locking of specific tables with a key share lock in a view or join

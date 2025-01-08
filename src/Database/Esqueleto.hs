@@ -54,7 +54,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
     where_, on, groupBy, orderBy, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , (^.), (?.)
-             , val, isNothing, just, nothing, joinV, withNonNull
+             , val, isNothing, just, just', nothing, joinV, joinV', withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , between, (+.), (-.), (/.), (*.)
@@ -83,6 +83,8 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
   , OrderBy
   , DistinctOn
   , LockingKind(..)
+  , forUpdate
+  , forUpdateSkipLocked
   , LockableEntity(..)
   , SqlString
     -- ** Joins

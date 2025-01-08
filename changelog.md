@@ -1,6 +1,24 @@
 3.6.0.0
 =======
 - @parsonsmatt
+    - [#422](https://github.com/bitemyapp/esqueleto/pull/422)
+        - The instance of `HasField` for `SqlExpr (Maybe (Entity a))` joins
+          `Maybe` values together. This means that if you `leftJoin` a table
+          with a `Maybe` column, the result will be a `SqlExpr (Value (Maybe
+          typ))`, instead of `SqlExpr (Value (Maybe (Maybe typ)))`.
+        - To make this a less breaking change, `joinV` has been given a similar
+          behavior. If the input type to `joinV` is `Maybe (Maybe typ)`, then
+          the result becomes `Maybe typ`. If the input type is `Maybe typ`, then
+          the output is also `Maybe typ`. The `joinV'` function is given as an
+          alternative with monomorphic behavior.
+        - The `just` function is also modified to avoid nesting `Maybe`.
+          Likewise, `just'` is provided to give monomorphic behavior.
+        - `subSelect`, `max_`, `min_`, and `coalesce` were all
+          given `Nullable` output types as well. This should help to reduce the
+          incidence of nested `Maybe`.
+        - The operator `??.` was introduced which can do nested `Maybe`. You may
+          want this if you have type inference issues with `?.` combining
+          `Maybe`.
     - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
         - Add a fixity declaration to `?.`
     - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
@@ -46,6 +64,11 @@
         - The ability to `coerce` `SqlExpr` was removed. Instead, use
           `veryUnsafeCoerceSqlExpr`. See the documentation on
           `veryUnsafeCoerceSqlExpr` for safe use example.
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/421)
+        - The `LockingKind` constructors are deprecated, and will be removed
+          from non-Internal modules in a future release. Smart constructors
+          replace them, and you may need to import them from a different
+          database-specific module.
 
 3.5.14.0
 ========
