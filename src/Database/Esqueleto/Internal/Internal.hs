@@ -1283,6 +1283,45 @@ case_ = unsafeSqlCase
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
+-- | The inverse of 'toBaseId'. Note that this is somewhat less "safe" than
+-- 'toBaseId'. Calling 'toBaseId' will usually mean that a foreign key
+-- constraint is present that guarantees the presence of the base ID.
+-- 'fromBaseId' has no such guarantee. Consider the code example given in
+-- 'toBaseId':
+--
+-- @
+-- Bar
+--   barNum Int
+-- Foo
+--   bar BarId
+--   fooNum Int
+--   Primary bar
+-- @
+--
+-- @
+-- instance ToBaseId Foo where
+--   type BaseEnt Foo = Bar
+--   toBaseIdWitness barId = FooKey barId
+-- @
+--
+-- The type of 'toBaseId' for @Foo@ would be:
+--
+-- @
+-- toBaseId :: SqlExpr (Value FooId) -> SqlExpr (Value BarId)
+-- @
+--
+-- The foreign key constraint on @Foo@ means that every @FooId@ points to
+-- a @BarId@ in the database. However, 'fromBaseId' will not have this:
+--
+-- @
+-- fromBaseId :: SqlExpr (Value BarId) -> SqlExpr (Value FooId)
+-- @
+--
+--
+--
+-- @since 3.6.0.0
+fromBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
+
 -- Fixity declarations
 infixl 9 ^., ?.
 infixl 7 *., /.

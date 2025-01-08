@@ -54,6 +54,7 @@ module Database.Esqueleto.Experimental
     , ToAliasReference(..)
     , ToSqlSetOperation(..)
     , SqlSelect
+    , Nullable
 
     -- * The Normal Stuff
     , where_
