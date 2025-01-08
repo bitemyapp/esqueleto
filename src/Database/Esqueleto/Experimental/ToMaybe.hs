@@ -2,6 +2,9 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Database.Esqueleto.Experimental.ToMaybe
+    ( module Database.Esqueleto.Experimental.ToMaybe
+    , Nullable
+    )
     where
 
 import Database.Esqueleto.Internal.Internal hiding (From(..), from, on)
