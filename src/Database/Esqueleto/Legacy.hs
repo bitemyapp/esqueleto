@@ -67,7 +67,7 @@ module Database.Esqueleto.Legacy
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId
+             , case_, toBaseId, fromBaseId
   , subSelect
   , subSelectMaybe
   , subSelectCount

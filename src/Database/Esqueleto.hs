@@ -66,7 +66,7 @@ module Database.Esqueleto {-# WARNING "This module will switch over to the Exper
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId
+             , case_, toBaseId, fromBaseId
   , subSelect
   , subSelectMaybe
   , subSelectCount

@@ -154,6 +154,7 @@ module Database.Esqueleto.Experimental
 
     , case_
     , toBaseId
+    , fromBaseId
     , subSelect
     , subSelectMaybe
     , subSelectCount

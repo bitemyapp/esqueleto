@@ -1317,10 +1317,9 @@ toBaseId = veryUnsafeCoerceSqlExprValue
 -- fromBaseId :: SqlExpr (Value BarId) -> SqlExpr (Value FooId)
 -- @
 --
---
---
 -- @since 3.6.0.0
-fromBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
+fromBaseId :: ToBaseId ent => SqlExpr (Value (Key (BaseEnt ent))) -> SqlExpr (Value (Key ent))
+fromBaseId = veryUnsafeCoerceSqlExprValue
 
 -- Fixity declarations
 infixl 9 ^., ?.

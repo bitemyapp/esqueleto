@@ -69,6 +69,8 @@
           from non-Internal modules in a future release. Smart constructors
           replace them, and you may need to import them from a different
           database-specific module.
+    - [#]()
+        - `fromBaseId` is introduced as the inverse of `toBaseId`.
 
 3.5.14.0
 ========
