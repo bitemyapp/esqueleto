@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# language AllowAmbiguousTypes #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
@@ -36,6 +37,8 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Typeable (TypeRep, typeRep)
+import Data.Coerce (Coercible)
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -2509,6 +2512,64 @@ type role SqlExpr nominal
 -- @since 3.6.0.0
 veryUnsafeCoerceSqlExpr :: SqlExpr a -> SqlExpr b
 veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
+
+-- | While 'veryUnsafeCoerceSqlExpr' allows you to coerce anything at all, this
+-- requires that the two types are 'Coercible' in Haskell. This is not truly
+-- safe: after all, the point of @newtype@ is to allow you to provide different
+-- instances of classes like 'PersistFieldSql' and 'SqlSelect'. Using this may
+-- break your code if you change the underlying SQL representation.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExpr :: (Coercible a b) => SqlExpr a -> SqlExpr b
+unsafeCoerceSqlExpr = veryUnsafeCoerceSqlExpr
+
+-- | This type class provides a relation between two types @arg@ and @result@
+-- such that @arg@ can be coerced into @result@ safely.
+--
+-- For this to be generally true, you should ensure that the 'sqlType' method
+-- agrees for each type. See 'testSqlCoerce' for a function which does this.
+--
+-- You will likely want to write bidirectional instances. That is, for two types
+-- @A@ and @B@, you'll likely want to write:
+--
+-- @
+-- instance SqlCoerce A B
+--
+-- instance SqlCoerce B A
+-- @
+--
+-- That way, you can coerce along either way.
+--
+-- @since 3.6.0.0
+class SqlCoerce arg result where
+    -- | A Haskell value-level witness that you can safely
+    --
+    -- @since 3.6.0.0
+    sqlCoerceWitness :: arg -> result
+
+    -- | Included as a class member to make importing the function easier.
+    -- However, this is defaulted to 'veryUnsafeCoerceSqlExpr', so you
+    -- probably don't want to define your own implementations.
+    sqlCoerce :: SqlExpr arg -> SqlExpr result
+    sqlCoerce = veryUnsafeCoerceSqlExpr
+
+-- | This function can be used to test whether or not a 'SqlCoerce' instance is
+-- safe or not. If the two underlying 'sqlType' are equal, then this returns
+-- @'Right' ()@. Otherwise, it returns a 'Left' with the two 'TypeRep's,
+-- allowing you to render failure how you'd like.
+--
+-- @since 3.6.0.0
+testSqlCoerce
+    :: forall arg result
+     . ( Typeable arg, PersistFieldSql arg
+       , Typeable result, PersistFieldSql result
+       , SqlCoerce arg result
+       )
+    => Either (TypeRep, TypeRep) ()
+testSqlCoerce =
+    if sqlType (Proxy @arg) == sqlType (Proxy @result)
+        then pure ()
+        else Left (typeRep (Proxy @arg), typeRep (Proxy @result))
 
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
