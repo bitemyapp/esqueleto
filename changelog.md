@@ -71,6 +71,7 @@
           database-specific module.
     - [#425](https://github.com/bitemyapp/esqueleto/pull/425)
         - `fromBaseId` is introduced as the inverse of `toBaseId`.
+        - `toBaseIdMaybe` and `fromBaseIdMaybe` are introduced.
 
 3.5.14.0
 ========

@@ -1283,6 +1283,15 @@ case_ = unsafeSqlCase
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
+-- | Like 'toBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+toBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key ent)))
+    -> SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+toBaseIdMaybe = veryUnsafeCoerceSqlExprValue
+
 -- | The inverse of 'toBaseId'. Note that this is somewhat less "safe" than
 -- 'toBaseId'. Calling 'toBaseId' will usually mean that a foreign key
 -- constraint is present that guarantees the presence of the base ID.
@@ -1318,8 +1327,20 @@ toBaseId = veryUnsafeCoerceSqlExprValue
 -- @
 --
 -- @since 3.6.0.0
-fromBaseId :: ToBaseId ent => SqlExpr (Value (Key (BaseEnt ent))) -> SqlExpr (Value (Key ent))
+fromBaseId
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Key (BaseEnt ent)))
+    -> SqlExpr (Value (Key ent))
 fromBaseId = veryUnsafeCoerceSqlExprValue
+
+-- |  As 'fromBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+fromBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+    -> SqlExpr (Value (Maybe (Key ent)))
+fromBaseIdMaybe = veryUnsafeCoerceSqlExprValue
 
 -- Fixity declarations
 infixl 9 ^., ?.
