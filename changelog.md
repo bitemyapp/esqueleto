@@ -64,6 +64,9 @@
         - The ability to `coerce` `SqlExpr` was removed. Instead, use
           `veryUnsafeCoerceSqlExpr`. See the documentation on
           `veryUnsafeCoerceSqlExpr` for safe use example.
+        - `unsafeCeorceSqlExpr` is provided as an option when the underlying
+          Haskell types are coercible. This is still unsafe, as different
+          `PersistFieldSql` instances may be at play.
     - [#420](https://github.com/bitemyapp/esqueleto/pull/421)
         - The `LockingKind` constructors are deprecated, and will be removed
           from non-Internal modules in a future release. Smart constructors
