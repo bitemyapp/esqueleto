@@ -137,7 +137,7 @@ distinctOn exprs = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
 --   ...
 -- @
 --
--- @since 3.6.0
+-- @since 3.6.0.0
 distinctOnOrderBy :: [SqlExpr OrderBy] -> SqlQuery ()
 distinctOnOrderBy exprs = do
     distinctOn (toDistinctOn <$> exprs)
@@ -151,6 +151,7 @@ distinctOnOrderBy exprs = do
               $ TL.replace " ASC" ""
               $ TLB.toLazyText b
             , vals )
+
 -- | Empty array literal. (@val []@) does unfortunately not work
 emptyArray :: SqlExpr (Value [a])
 emptyArray = unsafeSqlValue "'{}'"
@@ -680,6 +681,7 @@ forKeyShareOf lockableEntities onLockedBehavior =
 -- @since 2.2.3
 ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
 ilike   = unsafeSqlBinOp    " ILIKE "
+infixr 2 `ilike`
 
 -- | @WITH@ @MATERIALIZED@ clause is used to introduce a
 -- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)

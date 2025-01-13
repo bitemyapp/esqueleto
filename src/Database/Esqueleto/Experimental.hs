@@ -54,6 +54,7 @@ module Database.Esqueleto.Experimental
     , ToAliasReference(..)
     , ToSqlSetOperation(..)
     , SqlSelect
+    , Nullable
 
     -- * The Normal Stuff
     , where_
@@ -153,6 +154,9 @@ module Database.Esqueleto.Experimental
 
     , case_
     , toBaseId
+    , toBaseIdMaybe
+    , fromBaseId
+    , fromBaseIdMaybe
     , subSelect
     , subSelectMaybe
     , subSelectCount

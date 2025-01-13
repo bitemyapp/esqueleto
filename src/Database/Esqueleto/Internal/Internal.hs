@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# language AllowAmbiguousTypes #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
@@ -36,6 +37,8 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Typeable (TypeRep, typeRep)
+import Data.Coerce (Coercible)
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -1283,6 +1286,65 @@ case_ = unsafeSqlCase
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
+-- | Like 'toBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+toBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key ent)))
+    -> SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+toBaseIdMaybe = veryUnsafeCoerceSqlExprValue
+
+-- | The inverse of 'toBaseId'. Note that this is somewhat less "safe" than
+-- 'toBaseId'. Calling 'toBaseId' will usually mean that a foreign key
+-- constraint is present that guarantees the presence of the base ID.
+-- 'fromBaseId' has no such guarantee. Consider the code example given in
+-- 'toBaseId':
+--
+-- @
+-- Bar
+--   barNum Int
+-- Foo
+--   bar BarId
+--   fooNum Int
+--   Primary bar
+-- @
+--
+-- @
+-- instance ToBaseId Foo where
+--   type BaseEnt Foo = Bar
+--   toBaseIdWitness barId = FooKey barId
+-- @
+--
+-- The type of 'toBaseId' for @Foo@ would be:
+--
+-- @
+-- toBaseId :: SqlExpr (Value FooId) -> SqlExpr (Value BarId)
+-- @
+--
+-- The foreign key constraint on @Foo@ means that every @FooId@ points to
+-- a @BarId@ in the database. However, 'fromBaseId' will not have this:
+--
+-- @
+-- fromBaseId :: SqlExpr (Value BarId) -> SqlExpr (Value FooId)
+-- @
+--
+-- @since 3.6.0.0
+fromBaseId
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Key (BaseEnt ent)))
+    -> SqlExpr (Value (Key ent))
+fromBaseId = veryUnsafeCoerceSqlExprValue
+
+-- |  As 'fromBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+fromBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+    -> SqlExpr (Value (Maybe (Key ent)))
+fromBaseIdMaybe = veryUnsafeCoerceSqlExprValue
+
 -- Fixity declarations
 infixl 9 ^., ?.
 infixl 7 *., /.
@@ -2450,6 +2512,23 @@ type role SqlExpr nominal
 -- @since 3.6.0.0
 veryUnsafeCoerceSqlExpr :: SqlExpr a -> SqlExpr b
 veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
+
+-- | While 'veryUnsafeCoerceSqlExpr' allows you to coerce anything at all, this
+-- requires that the two types are 'Coercible' in Haskell. This is not truly
+-- safe: after all, the point of @newtype@ is to allow you to provide different
+-- instances of classes like 'PersistFieldSql' and 'SqlSelect'. Using this may
+-- break your code if you change the underlying SQL representation.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExpr :: (Coercible a b) => SqlExpr a -> SqlExpr b
+unsafeCoerceSqlExpr = veryUnsafeCoerceSqlExpr
+
+-- | Like 'unsafeCoerceSqlExpr' but for the common case where you are
+-- coercing a 'Value'.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExprValue :: (Coercible a b) => SqlExpr (Value a) -> SqlExpr (Value b)
+unsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
 
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
