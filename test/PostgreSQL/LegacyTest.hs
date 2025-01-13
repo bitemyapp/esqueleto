@@ -1045,14 +1045,14 @@ testUpsert :: SpecDb
 testUpsert =
   describe "Upsert test" $ do
     itDb "Upsert can insert like normal" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      u1e <- EP.upsert u1 (pure ( OneUniqueName =. val "fifth" ))
       liftIO $ entityVal u1e `shouldBe` u1
     itDb "Upsert performs update on collision" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
+      u1e <- EP.upsert u1 (pure (OneUniqueName =. val "fifth"))
       liftIO $ entityVal u1e `shouldBe` u1
-      u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
+      u2e <- EP.upsert u2 $ pure (OneUniqueName =. val "fifth")
       liftIO $ entityVal u2e `shouldBe` u2
-      u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
+      u3e <- EP.upsert u3 $ pure (OneUniqueName =. val "fifth")
       liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
 
 
@@ -1060,7 +1060,7 @@ testFilterWhere :: SpecDb
 testFilterWhere =
   describe "filterWhere" $ do
     itDb "adds a filter clause to count aggregation" $  do
-      -- Person "John"   (Just 36) Nothing   1
+      -- Person "John"   [Just 36] Nothing   1
       _ <- insert p1
       -- Person "Rachel" Nothing   (Just 37) 2
       _ <- insert p2

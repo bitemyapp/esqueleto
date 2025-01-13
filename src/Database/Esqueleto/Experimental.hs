@@ -22,7 +22,6 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
       from
     , table
     , Table(..)
-    , SubQuery(..)
     , selectQuery
 
     -- ** Joins
@@ -40,14 +39,9 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
       -- ** Set Operations
       -- $sql-set-operations
     , union_
-    , Union(..)
     , unionAll_
-    , UnionAll(..)
     , except_
-    , Except(..)
     , intersect_
-    , Intersect(..)
-    , pattern SelectQuery
 
       -- ** Common Table Expressions
     , with
@@ -57,11 +51,10 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
     , From(..)
     , ToMaybe(..)
     , ToAlias(..)
-    , ToAliasT
     , ToAliasReference(..)
-    , ToAliasReferenceT
     , ToSqlSetOperation(..)
     , SqlSelect
+    , Nullable
 
     -- * The Normal Stuff
     , where_
@@ -79,8 +72,9 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
     , distinctOnOrderBy
     , having
     , locking
+    , forUpdate
+    , forUpdateSkipLocked
 
-    , sub_select
     , (^.)
     , (?.)
 
@@ -88,8 +82,10 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
     , isNothing
     , isNothing_
     , just
+    , just'
     , nothing
     , joinV
+    , joinV'
     , withNonNull
 
     , countRows
@@ -160,6 +156,9 @@ module Database.Esqueleto.Experimental {-# WARNING "This module will be removed 
 
     , case_
     , toBaseId
+    , toBaseIdMaybe
+    , fromBaseId
+    , fromBaseIdMaybe
     , subSelect
     , subSelectMaybe
     , subSelectCount

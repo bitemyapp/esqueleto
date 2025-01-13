@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# language AllowAmbiguousTypes #-}
 {-# LANGUAGE RoleAnnotations #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DataKinds #-}
@@ -36,6 +37,7 @@
 -- tracker so we can safely support it.
 module Database.Esqueleto.Internal.Internal where
 
+import Data.Coerce (Coercible)
 import Control.Applicative ((<|>))
 import Control.Arrow (first, (***))
 import Control.Exception (Exception, throw, throwIO)
@@ -73,7 +75,6 @@ import qualified Data.Text.Lazy.Builder as TLB
 import Data.Typeable (Typeable)
 import Database.Esqueleto.Internal.ExprParser (TableAccess(..), parseOnExpr)
 import Database.Esqueleto.Internal.PersistentImport
-import Database.Persist (EntityNameDB(..), FieldNameDB(..), SymbolToField(..))
 import qualified Database.Persist
 import Database.Persist.Sql.Util
        ( entityColumnCount
@@ -124,8 +125,8 @@ fromStartMaybe
 fromStartMaybe = maybelize <$> fromStart
   where
     maybelize
-        :: PreprocessedFrom (SqlExpr_ ctx (Entity a))
-        -> PreprocessedFrom (SqlExpr_ ctx (Maybe (Entity a)))
+        :: PreprocessedFrom (SqlExpr (Entity a))
+        -> PreprocessedFrom (SqlExpr (Maybe (Entity a)))
     maybelize (PreprocessedFrom e f') = PreprocessedFrom (veryUnsafeCoerceSqlExpr e) f'
 
 -- | (Internal) Do a @JOIN@.
@@ -362,6 +363,8 @@ distinct act = Q (W.tell mempty { sdDistinctClause = DistinctStandard }) >> act
 distinctOn :: [SqlExpr DistinctOn] -> SqlQuery a -> SqlQuery a
 distinctOn exprs act = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs }) >> act
 
+{-# DEPRECATED distinctOn "This function is deprecated, as it is only supported in Postgresql. Please use the variant in `Database.Esqueleto.PostgreSQL` instead." #-}
+
 -- | Erase an SqlExpression's type so that it's suitable to
 -- be used by 'distinctOn'.
 --
@@ -424,29 +427,6 @@ locking kind = putLocking $ LegacyLockingClause kind
 putLocking :: LockingClause -> SqlQuery ()
 putLocking clause = Q $ W.tell mempty { sdLockingClause = clause }
 
-{-#
-  DEPRECATED
-    sub_select
-    "sub_select \n \
-sub_select is an unsafe function to use. If used with a SqlQuery that \n \
-returns 0 results, then it may return NULL despite not mentioning Maybe \n \
-in the return type. If it returns more than 1 result, then it will throw a \n \
-SQL error.\n\n Instead, consider using one of the following alternatives: \n \
-- subSelect: attaches a LIMIT 1 and the Maybe return type, totally safe.  \n \
-- subSelectMaybe: Attaches a LIMIT 1, useful for a query that already \n \
-  has a Maybe in the return type. \n \
-- subSelectCount: Performs a count of the query - this is always safe. \n \
-- subSelectUnsafe: Performs no checks or guarantees. Safe to use with \n \
-  countRows and friends."
-  #-}
--- | Execute a subquery @SELECT@ in an SqlExpression.  Returns a
--- simple value so should be used only when the @SELECT@ query
--- is guaranteed to return just one row.
---
--- Deprecated in 3.2.0.
-sub_select :: PersistField a => SqlQuery (SqlExpr_ ctx (Value a)) -> SqlExpr (Value a)
-sub_select         = sub SELECT
-
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. The query passed to this
 -- function will only return a single result - it has a @LIMIT 1@ passed in to
 -- the query to make it safe, and the return type is 'Maybe' to indicate that
@@ -464,9 +444,9 @@ sub_select         = sub SELECT
 --
 -- @since 3.2.0
 subSelect
-  :: PersistField a
+  :: (PersistField a, NullableFieldProjection a a')
   => SqlQuery (SqlExpr_ ctx (Value a))
-  -> SqlExpr (Value (Maybe a))
+  -> SqlExpr (Value (Maybe a'))
 subSelect query = just (subSelectUnsafe (query <* limit 1))
 
 -- | Execute a subquery @SELECT@ in a 'SqlExpr'. This function is a shorthand
@@ -623,12 +603,28 @@ withNonNull field f = do
     where_ $ not_ $ isNothing field
     f $ veryUnsafeCoerceSqlExprValue field
 
+-- | Project an 'EntityField' of a nullable entity. The result type will be
+-- 'Nullable', meaning that nested 'Maybe' won't be produced here.
+--
+-- As of v3.6.0.0, this will attempt to combine nested 'Maybe'. If you want to
+-- keep nested 'Maybe', then see '??.'.
+(?.) :: (PersistEntity val , PersistField typ)
+    => SqlExpr (Maybe (Entity val))
+    -> EntityField val typ
+    -> SqlExpr (Value (Maybe (Nullable typ)))
+ent ?. field = veryUnsafeCoerceSqlExprValue (ent ??. field)
+
 -- | Project a field of an entity that may be null.
-(?.) :: ( PersistEntity val , PersistField typ)
-     => SqlExpr (Maybe (Entity val))
-     -> EntityField val typ
-     -> SqlExpr (Value (Maybe typ))
-ERaw m f ?. field = just (ERaw m f ^. field)
+--
+-- This variant will produce a nested 'Maybe' if you select a 'Maybe' column.
+-- If you want to collapse 'Maybe', see '?.'.
+--
+-- @since 3.6.0.0
+(??.) :: ( PersistEntity val , PersistField typ)
+    => SqlExpr (Maybe (Entity val))
+    -> EntityField val typ
+    -> SqlExpr (Value (Maybe typ))
+ERaw m f ??. field = just (ERaw m f ^. field)
 
 -- | Lift a constant value from Haskell-land to the query.
 val  :: forall typ ctx. PersistField typ => typ -> SqlExpr_ ctx (Value typ)
@@ -674,14 +670,28 @@ isNothing v =
 -- "Data.Maybe" 'Data.Maybe.isNothing'.
 --
 -- @since 3.5.10.0
-isNothing_ :: PersistField typ => SqlExpr (Value (Maybe typ)) -> SqlExpr (Value Bool)
+isNothing_ :: PersistField typ => SqlExpr_ ctx (Value (Maybe typ)) -> SqlExpr_ ctx (Value Bool)
 isNothing_ = isNothing
 
 -- | Analogous to 'Just', promotes a value of type @typ@ into
 -- one of type @Maybe typ@.  It should hold that @'val' . Just
 -- === just . 'val'@.
-just :: SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value (Maybe typ))
+--
+-- This function will try not to produce a nested 'Maybe'. This is in accord
+-- with how SQL represents @NULL@. That means that @'just' . 'just' = 'just'@.
+-- This behavior was changed in v3.6.0.0. If you want to produce nested 'Maybe',
+-- see 'just''.
+just
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value (Maybe typ'))
 just = veryUnsafeCoerceSqlExprValue
+
+-- | Like 'just', but this function does not try to collapse nested 'Maybe'.
+-- This may be useful if you have type inference problems with 'just'.
+--
+-- @since 3.6.0.0
+just' :: SqlExpr (Value typ) -> SqlExpr (Value (Maybe typ))
+just' = veryUnsafeCoerceSqlExprValue
 
 -- | @NULL@ value.
 nothing :: SqlExpr (Value (Maybe typ))
@@ -689,10 +699,31 @@ nothing = unsafeSqlValue "NULL"
 
 -- | Join nested 'Maybe's in a 'Value' into one. This is useful when
 -- calling aggregate functions on nullable fields.
-joinV :: SqlExpr_ ctx (Value (Maybe (Maybe typ))) -> SqlExpr_ ctx (Value (Maybe typ))
+--
+-- As of v3.6.0.0, this function will attempt to work on both @'SqlExpr'
+-- ('Value' ('Maybe' a))@ as well as @'SqlExpr' ('Value' ('Maybe' ('Maybe' a)))@
+-- inputs to make transitioning to 'NullableFieldProjection' easier. This may
+-- make type inference worse in some cases. If you want the monomorphic variant,
+-- see 'joinV''
+joinV
+    :: (NullableFieldProjection typ typ')
+    => SqlExpr_ ctx (Value (Maybe typ))
+    -> SqlExpr_ ctx (Value (Maybe typ'))
 joinV = veryUnsafeCoerceSqlExprValue
 
-countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx' (Value a)
+-- | Like 'joinV', but monomorphic: the input type only works on @'SqlExpr'
+-- ('Value' (Maybe (Maybe a)))@.
+--
+-- This function may be useful if you have type inference issues with 'joinV'.
+--
+-- @since 3.6.0.0
+joinV'
+    :: SqlExpr (Value (Maybe (Maybe typ)))
+    -> SqlExpr (Value (Maybe typ))
+joinV' = veryUnsafeCoerceSqlExprValue
+
+
+countHelper :: Num a => TLB.Builder -> TLB.Builder -> SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value a)
 countHelper open close v =
     case v of
         ERaw meta f ->
@@ -709,13 +740,13 @@ countRows :: Num a => SqlExpr_ ctx (Value a)
 countRows = unsafeSqlValue "COUNT(*)"
 
 -- | @COUNT@.
-count :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
+count :: Num a => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value a)
 count = countHelper ""           ""
 
 -- | @COUNT(DISTINCT x)@.
 --
 -- @since 2.4.1
-countDistinct :: Num a => SqlExpr (Value typ) -> SqlExpr_ ctx (Value a)
+countDistinct :: Num a => SqlExpr_ ctx (Value typ) -> SqlExpr_ ctx (Value a)
 countDistinct = countHelper "(DISTINCT " ")"
 
 not_ :: SqlExpr_ ctx (Value Bool) -> SqlExpr_ ctx (Value Bool)
@@ -899,12 +930,21 @@ floor_   = unsafeSqlFunction "FLOOR"
 
 sum_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
 sum_     = unsafeSqlFunction "SUM"
-min_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
-min_     = unsafeSqlFunction "MIN"
-max_     :: (PersistField a) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe a))
-max_     = unsafeSqlFunction "MAX"
-avg_     :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
-avg_     = unsafeSqlFunction "AVG"
+
+min_
+    :: (PersistField a)
+    => SqlExpr (Value a)
+    -> SqlExpr_ ctx (Value (Maybe (Nullable a)))
+min_ = unsafeSqlFunction "MIN"
+
+max_
+    :: (PersistField a)
+    => SqlExpr (Value a)
+    -> SqlExpr_ ctx (Value (Maybe (Nullable a)))
+max_ = unsafeSqlFunction "MAX"
+
+avg_ :: (PersistField a, PersistField b) => SqlExpr (Value a) -> SqlExpr_ ctx (Value (Maybe b))
+avg_ = unsafeSqlFunction "AVG"
 
 -- | Allow a number of one type to be used as one of another
 -- type via an implicit cast.  An explicit cast is not made,
@@ -939,8 +979,11 @@ castNumM = veryUnsafeCoerceSqlExprValue
 -- documentation.
 --
 -- @since 1.4.3
-coalesce :: PersistField a => [SqlExpr_ ctx (Value (Maybe a))] -> SqlExpr_ ctx (Value (Maybe a))
-coalesce = unsafeSqlFunctionParens "COALESCE"
+coalesce
+    :: (PersistField a, NullableFieldProjection a a')
+    => [SqlExpr_ ctx (Value (Maybe a))]
+    -> SqlExpr_ ctx (Value (Maybe a'))
+coalesce              = unsafeSqlFunctionParens "COALESCE"
 
 -- | Like @coalesce@, but takes a non-nullable SqlExpression
 -- placed at the end of the SqlExpression list, which guarantees
@@ -998,7 +1041,8 @@ like = unsafeSqlBinOp " LIKE "
 
 -- | @ILIKE@ operator (case-insensitive @LIKE@).
 --
--- Supported by PostgreSQL only.
+-- Supported by PostgreSQL only. Deprecated in version 3.6.0 in favor of the
+-- version available from "Database.Esqueleto.PostgreSQL".
 --
 -- @since 2.2.3
 ilike :: SqlString s
@@ -1006,6 +1050,8 @@ ilike :: SqlString s
       -> SqlExpr_ ctx (Value s)
       -> SqlExpr_ ctx (Value Bool)
 ilike = unsafeSqlBinOp " ILIKE "
+
+{-# DEPRECATED ilike "Since 3.6.0: `ilike` is only supported on Postgres. Please import it from 'Database.Esqueleto.PostgreSQL." #-}
 
 -- | The string @'%'@.  May be useful while using 'like' and
 -- concatenation ('concat_' or '++.', depending on your
@@ -1019,13 +1065,19 @@ ilike = unsafeSqlBinOp " ILIKE "
 (%) = unsafeSqlValue "'%'"
 
 -- | The @CONCAT@ function with a variable number of
--- parameters.  Supported by MySQL and PostgreSQL.
+-- parameters.  Supported by MySQL and PostgreSQL. SQLite supports this in
+-- versions after 3.44.0, and @persistent-sqlite@ supports this in versions
+-- @2.13.3.0@ and after.
 concat_ :: SqlString s => [SqlExpr_ ctx (Value s)] -> SqlExpr_ ctx (Value s)
 concat_ = unsafeSqlFunction "CONCAT"
 
 -- | The @||@ string concatenation operator (named after
 -- Haskell's '++' in order to avoid naming clash with '||.').
+--
 -- Supported by SQLite and PostgreSQL.
+--
+-- MySQL support requires setting the SQL mode to @PIPES_AS_CONCAT@ or @ANSI@
+-- - see <https://stackoverflow.com/a/24777235 this StackOverflow answer>.
 (++.) :: SqlString s
       => SqlExpr_ ctx (Value s)
       -> SqlExpr_ ctx (Value s)
@@ -1175,13 +1227,13 @@ field /=. expr = setAux field (\ent -> ent ^. field /. expr)
 --        'from' $ \\p -> do
 --        'where_' (p '^.' PersonName '==.' 'val' \"Mike\"))
 --      'then_'
---        ('sub_select' $
+--        ('subSelect' $
 --        'from' $ \\v -> do
 --        let sub =
 --                'from' $ \\c -> do
 --                'where_' (c '^.' PersonName '==.' 'val' \"Mike\")
 --                return (c '^.' PersonFavNum)
---        'where_' (v '^.' PersonFavNum >. 'sub_select' sub)
+--        'where_' ('just' (v '^.' PersonFavNum) >. 'subSelect' sub)
 --        return $ 'count' (v '^.' PersonName) +. 'val' (1 :: Int)) ]
 --    ('else_' $ 'val' (-1))
 -- @
@@ -1247,8 +1299,67 @@ case_ = unsafeSqlCase
 toBaseId :: ToBaseId ent => SqlExpr (Value (Key ent)) -> SqlExpr (Value (Key (BaseEnt ent)))
 toBaseId = veryUnsafeCoerceSqlExprValue
 
+-- | Like 'toBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+toBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key ent)))
+    -> SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+toBaseIdMaybe = veryUnsafeCoerceSqlExprValue
+
+-- | The inverse of 'toBaseId'. Note that this is somewhat less "safe" than
+-- 'toBaseId'. Calling 'toBaseId' will usually mean that a foreign key
+-- constraint is present that guarantees the presence of the base ID.
+-- 'fromBaseId' has no such guarantee. Consider the code example given in
+-- 'toBaseId':
+--
+-- @
+-- Bar
+--   barNum Int
+-- Foo
+--   bar BarId
+--   fooNum Int
+--   Primary bar
+-- @
+--
+-- @
+-- instance ToBaseId Foo where
+--   type BaseEnt Foo = Bar
+--   toBaseIdWitness barId = FooKey barId
+-- @
+--
+-- The type of 'toBaseId' for @Foo@ would be:
+--
+-- @
+-- toBaseId :: SqlExpr (Value FooId) -> SqlExpr (Value BarId)
+-- @
+--
+-- The foreign key constraint on @Foo@ means that every @FooId@ points to
+-- a @BarId@ in the database. However, 'fromBaseId' will not have this:
+--
+-- @
+-- fromBaseId :: SqlExpr (Value BarId) -> SqlExpr (Value FooId)
+-- @
+--
+-- @since 3.6.0.0
+fromBaseId
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Key (BaseEnt ent)))
+    -> SqlExpr (Value (Key ent))
+fromBaseId = veryUnsafeCoerceSqlExprValue
+
+-- |  As 'fromBaseId', but works on 'Maybe' keys.
+--
+-- @since 3.6.0.0
+fromBaseIdMaybe
+    :: (ToBaseId ent)
+    => SqlExpr (Value (Maybe (Key (BaseEnt ent))))
+    -> SqlExpr (Value (Maybe (Key ent)))
+fromBaseIdMaybe = veryUnsafeCoerceSqlExprValue
+
 -- Fixity declarations
-infixl 9 ^.
+infixl 9 ^., ?.
 infixl 7 *., /.
 infixl 6 +., -.
 infixr 5 ++.
@@ -1594,6 +1705,32 @@ data LockingKind
       -- ^ @LOCK IN SHARE MODE@ syntax.  Supported by MySQL.
       --
       -- @since 2.2.7
+
+{-# DEPRECATED ForUpdate, ForUpdateSkipLocked "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructors 'forUpdate' and 'forUpdateSkipLocked'." #-}
+{-# DEPRECATED ForShare "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructor 'forShare' exported from Database.Esqueleto.PostgreSQL." #-}
+{-# DEPRECATED LockInShareMode "The constructors for 'LockingKind' are deprecated in v3.6.0.0. Instead, please refer to the smart constructors 'lockInShareMode' exported from Database.Esqueleto.MySQL." #-}
+
+-- | @FOR UPDATE@ syntax.
+--
+-- Usage:
+--
+-- @
+--  'locking' 'forUpdate'
+-- @
+--
+-- @since 3.6.0.0
+forUpdate :: LockingKind
+forUpdate = ForUpdate
+
+-- | @FOR UPDATE SKIP LOCKED@ syntax.
+--
+-- @
+--  'locking' 'forUpdateSkipLocked'
+-- @
+--
+-- @since 3.6.0.0
+forUpdateSkipLocked :: LockingKind
+forUpdateSkipLocked = ForUpdateSkipLocked
 
 -- | Postgres specific locking, used only internally
 --
@@ -2390,6 +2527,49 @@ type SqlExpr a = SqlExpr_ ValueContext a
 -- | Helper type denoting a value that should only be treated as an aggregate
 type SqlAgg a = SqlExpr_ AggregateContext a
 
+-- | The type @'SqlExpr' a@ represents a SQL expression that evaluates to
+-- a value that can be parsed in Haskell to an @a@. There are often many
+-- underlying SQL values that can parse exactly. The function
+-- 'veryUnsafeCoerceSqlExpr' allows you to change this type.
+--
+-- There is no guarantee that the result works! To be safe, you want to provide
+-- a local helper function that calls this at a tested type.
+--
+-- As an example, you may know that two types share an identical SQL
+-- representation, and can be parsed exactly the same way. Perhaps you have
+-- a @data SomeEnum@ which you represent as a @TEXT@ in Postgres, and you
+-- want to treat it as a @TEXT@. You could define a top-level
+-- type-restricted alias to this which allows this to be done safely:
+--
+-- @
+--  enumToText :: SqlExpr (Value SomeEnum) -> SqlExpr (Value Text)
+--  enumToText = veryUnsafeCoerceSqlExpr
+-- @
+--
+-- Note that this is fragile: if you change the encoding of 'SomeEnum' to
+-- be anything other than 'Text', then your code will fail at runtime.
+--
+-- @since 3.6.0.0
+veryUnsafeCoerceSqlExpr :: forall a b ctx0 ctx1. SqlExpr_ ctx0 a -> SqlExpr_ ctx1 b
+veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
+
+-- | While 'veryUnsafeCoerceSqlExpr' allows you to coerce anything at all, this
+-- requires that the two types are 'Coercible' in Haskell. This is not truly
+-- safe: after all, the point of @newtype@ is to allow you to provide different
+-- instances of classes like 'PersistFieldSql' and 'SqlSelect'. Using this may
+-- break your code if you change the underlying SQL representation.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExpr :: (Coercible a b) => SqlExpr a -> SqlExpr b
+unsafeCoerceSqlExpr = veryUnsafeCoerceSqlExpr
+
+-- | Like 'unsafeCoerceSqlExpr' but for the common case where you are
+-- coercing a 'Value'.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExprValue :: (Coercible a b) => SqlExpr (Value a) -> SqlExpr (Value b)
+unsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
+
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
 -- Unfortunately, this is impossible. We cannot send *functions* to the
@@ -2505,11 +2685,43 @@ instance
 --
 -- @since 3.5.4.0
 instance
-    (PersistEntity rec, PersistField typ, SymbolToField sym rec typ)
+    (PersistEntity rec, PersistField typ, PersistField typ', SymbolToField sym rec typ
+    , NullableFieldProjection typ typ'
+    , HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
+    )
   =>
-    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ)))
+    HasField sym (SqlExpr (Maybe (Entity rec))) (SqlExpr (Value (Maybe typ')))
   where
-    getField expr = expr ?. symbolToField @sym
+    getField expr = veryUnsafeCoerceSqlExpr (expr ?. symbolToField @sym)
+
+-- | The 'NullableFieldProjection' type is used to determine whether
+-- a 'Maybe' should be stripped off or not. This is used in the 'HasField'
+-- for @'SqlExpr' ('Maybe' ('Entity' a))@ to allow you to only have
+-- a single level of 'Maybe'.
+--
+-- @
+-- MyTable
+--   column         Int Maybe
+--   someTableId    SomeTableId
+--
+--  select $ do
+--      (_ :& maybeMyTable) <-
+--          from $ table @SomeTable
+--              `leftJoin` table @MyTable
+--                  `on` do
+--                      \(someTable :& maybeMyTable) ->
+--                          just someTable.id ==. maybeMyTable.someTableId
+--        where_ $ maybeMyTable.column ==. just (val 10)
+--        pure maybeMyTable
+-- @
+--
+-- Without this class, projecting a field with type @'Maybe' typ@ would
+-- have resulted in a @'SqlExpr' ('Value' ('Maybe' ('Maybe' typ)))@.
+--
+-- @since 3.6.0.0
+class NullableFieldProjection typ typ'
+instance {-# incoherent #-} (typ ~ typ') => NullableFieldProjection (Maybe typ) typ'
+instance {-# overlappable #-} (typ ~ typ') => NullableFieldProjection typ typ'
 
 -- | Data type to support from hack
 data PreprocessedFrom a = PreprocessedFrom a FromClause
@@ -2860,18 +3072,19 @@ instance ( UnsafeSqlFunctionArgument a
 -- | (Internal) Coerce a value's type from 'SqlExpr (Value a)' to
 -- 'SqlExpr (Value b)'.  You should /not/ use this function
 -- unless you know what you're doing!
+--
+-- This is an alias for 'veryUnsafeCoerceSqlExpr' with the type fixed to
+-- 'Value'.
 veryUnsafeCoerceSqlExprValue :: forall a b ctx. SqlExpr_ ctx (Value a) -> SqlExpr_ ctx (Value b)
 veryUnsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
 
 -- | (Internal) Coerce a value's type from 'SqlExpr (ValueList
 -- a)' to 'SqlExpr (Value a)'.  Does not work with empty lists.
+--
+-- This is an alias for 'veryUnsafeCoerceSqlExpr', with the type fixed to
+-- 'ValueList' and 'Value'.
 veryUnsafeCoerceSqlExprValueList :: forall a ctx. SqlExpr_ ctx (ValueList a) -> SqlExpr_ ctx (Value a)
 veryUnsafeCoerceSqlExprValueList = veryUnsafeCoerceSqlExpr
-
--- | (Internal) Coerce a 'SqlExpr_' into any other kind of 'SqlExlr_'. You
--- should /not/ use this function unless you know what you're doing!
-veryUnsafeCoerceSqlExpr :: forall a b ctx ctx2. SqlExpr_ ctx a -> SqlExpr_ ctx2 b
-veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
 
 ----------------------------------------------------------------------
 
@@ -3546,6 +3759,7 @@ instance PersistEntity a => SqlSelectCols (SqlExpr_ ctx (Entity a)) where
           in (process, mempty)
 
     sqlSelectColCount = entityColumnCount . entityDef . getEntityVal
+
 instance PersistEntity a => SqlSelect (SqlExpr_ ctx (Entity a)) (Entity a) where
     sqlSelectProcessRow _ = parseEntityValues ed
       where
@@ -3560,6 +3774,7 @@ instance PersistEntity a => SqlSelectCols (SqlExpr_ ctx (Maybe (Entity a))) wher
       where
         fromEMaybe :: Proxy (SqlExpr_ ctx (Maybe e)) -> Proxy (SqlExpr_ ctx e)
         fromEMaybe = const Proxy
+
 -- | You may return a possibly-@NULL@ 'Entity' from a 'select' query.
 instance PersistEntity a => SqlSelect (SqlExpr_ ctx (Maybe (Entity a))) (Maybe (Entity a)) where
     sqlSelectProcessRow _ cols
@@ -4106,6 +4321,12 @@ instance ( SqlSelectCols a
 from14P :: Proxy (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> Proxy ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
 from14P = const Proxy
 
+from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
+
+to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
+
 instance ( SqlSelect a ra
          , SqlSelect b rb
          , SqlSelect c rc
@@ -4122,12 +4343,6 @@ instance ( SqlSelect a ra
          , SqlSelect n rn
          ) => SqlSelect (a, b, c, d, e, f, g, h, i, j, k, l, m, n) (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl, rm, rn) where
   sqlSelectProcessRow p = fmap to14 . sqlSelectProcessRow (from14P p)
-
-from14 :: (a,b,c,d,e,f,g,h,i,j,k,l,m,n) -> ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
-from14 (a,b,c,d,e,f,g,h,i,j,k,l,m,n) = ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n))
-
-to14 :: ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) -> (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
-to14 ((a,b),(c,d),(e,f),(g,h),(i,j),(k,l),(m,n)) = (a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 
 instance ( SqlSelectCols a
          , SqlSelectCols b
@@ -4451,3 +4666,7 @@ associateJoin = foldr f start
             (\(oneOld, manyOld) (_, manyNew) -> (oneOld, manyNew ++ manyOld ))
             (entityKey one)
             (entityVal one, [many])
+
+type family Nullable a where
+    Nullable (Maybe a) = a
+    Nullable a =  a

@@ -20,11 +20,9 @@
 {-# OPTIONS_GHC -ddump-splices #-}
 
 -- Tests for `Database.Esqueleto.Record`.
-module Common.Record (testDeriveEsqueletoRecord) where
+module Common.Record where
 
 import Common.Test.Import hiding (from, on)
-import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
-import Data.Bifunctor (first)
 import Data.List (sortOn)
 import Database.Esqueleto
 import Database.Esqueleto.Record
@@ -33,18 +31,6 @@ import Database.Esqueleto.Record
        , deriveEsqueletoRecord
        , deriveEsqueletoRecordWith
        )
-import Data.Maybe (catMaybes)
-import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Experimental
-import Database.Esqueleto.Internal.Internal (SqlSelect(..))
-import Database.Esqueleto.Record (
-  DeriveEsqueletoRecordSettings(..),
-  defaultDeriveEsqueletoRecordSettings,
-  deriveEsqueletoRecord,
-  deriveEsqueletoRecordWith,
-  takeColumns,
-  takeMaybeColumns,
- )
 import GHC.Records
 
 data MySimpleRecord = MySimpleRecord { mySimpleAge :: Maybe Int }
@@ -434,7 +420,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case ( _ :& Just ( MyRecord { myName = "Some Guy"
-                                        , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                        , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                         }
                               )) -> True
                  _ -> False)
@@ -455,7 +441,7 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case ( _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
-                                                                    , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                                                    , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
                  _ -> False)
@@ -468,13 +454,13 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                 `leftJoin` myNestedRecordQuery
                 `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" (getField @"myRecord" record) ?. #id)
                 `leftJoin` myNestedRecordQuery
-                `on` (do \(user :& record1 :& record2) -> getField @"myUser" (getField @"myRecord" record1) ?. #id !=. getField @"myUser" (getField @"myRecord" record2) ?. #id)
+                `on` (do \(_user :& record1 :& record2) -> getField @"myUser" (getField @"myRecord" record1) ?. #id !=. getField @"myUser" (getField @"myRecord" record2) ?. #id)
             )
         let sortedRecords = sortOn (\(Entity _ user :& _ :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case ( _ :& _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
-                                                                    , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                                                    , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
                  _ -> False)

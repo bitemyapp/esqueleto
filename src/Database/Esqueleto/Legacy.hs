@@ -54,8 +54,8 @@ module Database.Esqueleto.Legacy {-# WARNING "This module will be removed in the
     -- * @esqueleto@'s Language
     where_, on, groupBy, orderBy, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
-             , sub_select, (^.), (?.)
-             , val, isNothing, just, nothing, joinV, withNonNull
+             , (^.), (?.)
+             , val, isNothing, just, just', nothing, joinV, joinV', withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , between, (+.), (-.), (/.), (*.)
@@ -67,7 +67,7 @@ module Database.Esqueleto.Legacy {-# WARNING "This module will be removed in the
              , subList_select, valList, justList
              , in_, notIn, exists, notExists
              , set, (=.), (+=.), (-=.), (*=.), (/=.)
-             , case_, toBaseId
+             , case_, toBaseId, fromBaseId, fromBaseIdMaybe, toBaseIdMaybe
   , subSelect
   , subSelectMaybe
   , subSelectCount
@@ -84,6 +84,8 @@ module Database.Esqueleto.Legacy {-# WARNING "This module will be removed in the
   , OrderBy
   , DistinctOn
   , LockingKind(..)
+  , forUpdate
+  , forUpdateSkipLocked
   , LockableEntity(..)
   , SqlString
     -- ** Joins

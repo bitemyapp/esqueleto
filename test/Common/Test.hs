@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -64,6 +65,7 @@ module Common.Test
     , DateTruncTest(..)
     , DateTruncTestId
     , Key(..)
+    , assertJust
     ) where
 
 import Common.Test.Import hiding (from, on)
@@ -156,19 +158,8 @@ testSubSelect = do
                     pure (n ^. NumbersInt)
             setup
             res <- select $ pure $ subSelect query
-            eres <- try $ do
-                select $ pure $ sub_select query
             asserting $ do
                 res `shouldBe` [Value (Just 1)]
-                case eres of
-                    Left (SomeException _) ->
-                        -- We should receive an exception, but the different database
-                        -- libraries throw different exceptions. Hooray.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
         itDb "is safe for queries that may not return anything" $ do
             let query = do
@@ -180,21 +171,8 @@ testSubSelect = do
             res <- select $ pure $ subSelect query
             transactionUndo
 
-            eres <- try $ do
-                select $ pure $ sub_select query
-
             asserting $ do
                 res `shouldBe` [Value $ Just 1]
-                case eres of
-                    Left (_ :: PersistException) ->
-                        -- We expect to receive this exception. However, sqlite evidently has
-                        -- no problems with itDb, so we can't *require* that the exception is
-                        -- thrown. Sigh.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
     describe "subSelectList" $ do
         itDb "is safe on empty databases as well as good databases" $ do
@@ -369,7 +347,7 @@ testSelectFrom = do
             asserting $ ret `shouldBe` [ p1e ]
 
 
-        itDb "works for a self-join via sub_select" $ do
+        itDb "works for a self-join via subSelect" $ do
             p1k <- insert p1
             p2k <- insert p2
             _f1k <- insert (Follow p1k p2k)
@@ -380,7 +358,7 @@ testSelectFrom = do
                          followB <- from $ table @Follow
                          where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
                          return $ followB ^. FollowFollower
-                    where_ $ followA ^. FollowFollowed ==. sub_select subquery
+                    where_ $ just (followA ^. FollowFollowed) ==. subSelect subquery
                     return followA
             asserting $ length ret `shouldBe` 2
 
@@ -692,14 +670,6 @@ testSelectSubQuery = describe "select subquery" $ do
                 p <- from $ table @Person
                 return ( p ^. PersonName, p ^. PersonAge)
         ret <- select $ from q
-        asserting $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
-
-    itDb "works with SubQuery wrapper" $ do
-        _ <- insert' p1
-        let q = do
-                p <- from $ table @Person
-                return ( p ^. PersonName, p ^. PersonAge)
-        ret <- select $ from $ SubQuery q
         asserting $ ret `shouldBe` [ (Value $ personName p1, Value $ personAge p1) ]
 
     itDb "supports sub-selecting Maybe entities" $ do
@@ -1126,12 +1096,12 @@ testSelectOrderBy = describe "select/orderBy" $ do
                 return p
         asserting $ ret `shouldBe` [ p1e, p3e, p2e ]
 
-    itDb "works with a sub_select" $ do
+    itDb "works with a subSelect" $ do
         [p1k, p2k, p3k, p4k] <- mapM insert [p1, p2, p3, p4]
         [b1k, b2k, b3k, b4k] <- mapM (insert . BlogPost "") [p1k, p2k, p3k, p4k]
         ret <- select $ do
                b <- from $ table @BlogPost
-               orderBy [desc $ sub_select $ do
+               orderBy [desc $ subSelect $ do
                                p <- from $ table @Person
                                where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
                                return (p ^. PersonName)
@@ -1792,7 +1762,117 @@ testRenderSql = do
       expr <- ask >>= \c -> pure $ EI.renderExpr c (val (PersonKey 0) ==. val (PersonKey 1))
       asserting $ expr `shouldBe` "? = ?"
 
+testExperimentalFrom :: SpecDb
+testExperimentalFrom = do
+  describe "Experimental From" $ do
+    itDb "supports basic table queries" $ do
+        p1e <- insert' p1
+        _   <- insert' p2
+        p3e <- insert' p3
+        peopleWithAges <- select $ do
+          people <- from $ Table @Person
+          where_ $ not_ $ isNothing $ people ^. PersonAge
+          return people
+        asserting $ peopleWithAges `shouldMatchList` [p1e, p3e]
 
+    itDb "supports inner joins" $ do
+        l1e <- insert' l1
+        _   <- insert  l2
+        d1e <- insert' $ Deed "1" (entityKey l1e)
+        d2e <- insert' $ Deed "2" (entityKey l1e)
+        lordDeeds <- select $ do
+          (lords :& deeds) <-
+            from $ Table @Lord
+                    `innerJoin` Table @Deed
+              `on` (\(l :& d) -> l ^. LordId ==. d ^. DeedOwnerId)
+          pure (lords, deeds)
+        asserting $ lordDeeds `shouldMatchList` [ (l1e, d1e)
+                                             , (l1e, d2e)
+                                             ]
+
+    itDb "supports outer joins" $ do
+        l1e <- insert' l1
+        l2e <- insert' l2
+        d1e <- insert' $ Deed "1" (entityKey l1e)
+        d2e <- insert' $ Deed "2" (entityKey l1e)
+        lordDeeds <- select $ do
+          (lords :& deeds) <-
+            from $ Table @Lord
+                `leftJoin` Table @Deed
+                  `on` (\(l :& d) -> just (l ^. LordId) ==. d ?. DeedOwnerId)
+
+          pure (lords, deeds)
+        asserting $ lordDeeds `shouldMatchList` [ (l1e, Just d1e)
+                                             , (l1e, Just d2e)
+                                             , (l2e, Nothing)
+                                             ]
+    itDb "supports delete" $ do
+        insert_ l1
+        insert_ l2
+        insert_ l3
+        delete $ void $ from $ table @Lord
+        lords <- select $ from $ table @Lord
+        asserting $ lords `shouldMatchList` []
+
+    itDb "supports implicit cross joins" $ do
+        l1e <- insert' l1
+        l2e <- insert' l2
+        ret <- select $ do
+          lords1 <- from $ table @Lord
+          lords2 <- from $ table @Lord
+          pure (lords1, lords2)
+        ret2 <- select $ do
+          (lords1 :& lords2) <- from $ table @Lord `crossJoin` table @Lord
+          pure (lords1,lords2)
+        asserting $ ret `shouldMatchList` ret2
+        asserting $ ret `shouldMatchList` [ (l1e, l1e)
+                                       , (l1e, l2e)
+                                       , (l2e, l1e)
+                                       , (l2e, l2e)
+                                       ]
+
+    itDb "compiles" $ do
+        let q = do
+              (persons :& profiles :& posts) <-
+                from $  table @Person
+                         `innerJoin` Table @Profile
+                   `on` (\(people :& profiles) ->
+                                        people ^. PersonId ==. profiles ^. ProfilePerson)
+                     `leftJoin` Table @BlogPost
+                   `on` (\(people :& _ :& posts) ->
+                                        just (people ^. PersonId) ==. posts ?. BlogPostAuthorId)
+              pure (persons, posts, profiles)
+        asserting noExceptions
+
+    itDb "can call functions on aliased values" $ do
+        insert_ p1
+        insert_ p3
+        -- Pretend this isnt all posts
+        upperNames <- select $ do
+          author <- from $ from $ Table @Person
+          pure $ upper_ $ author ^. PersonName
+
+        asserting $ upperNames `shouldMatchList` [ Value "JOHN"
+                                              , Value "MIKE"
+                                              ]
+    itDb "allows re-using (:&) joined tables" $ do
+      let q = do
+              result@(persons :& profiles :& posts) <-
+                from $  Table @Person
+                         `InnerJoin` Table @Profile
+                   `on` (\(people :& profiles) ->
+                                        people ^. PersonId ==. profiles ^. ProfilePerson)
+                     `InnerJoin` Table @BlogPost
+                   `on` (\(people :& _ :& posts) ->
+                                        people ^. PersonId ==. posts ^. BlogPostAuthorId)
+              pure result
+      rows <- select $ do
+        (persons :& profiles :& posts) <- from $ q
+        pure (persons ^. PersonId, profiles ^. ProfileId, posts ^. BlogPostId)
+      let result = rows :: [(Value PersonId, Value ProfileId, Value BlogPostId)]
+      -- We don't care about the result of the query, only that it
+      -- rendered & executed.
+      asserting noExceptions
 
 listsEqualOn :: (HasCallStack, Show a1, Eq a1) => [a2] -> [a2] -> (a2 -> a1) -> Expectation
 listsEqualOn a b f = map f a `shouldBe` map f b
@@ -1940,6 +2020,34 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                                 just p.id ==. mbp.authorId
                 pure (p.id, mbp.title)
 
+    itDb "joins Maybe together" $ do
+        void $ select $ do
+            deed :& lord <-
+                from $
+                    table @Deed
+                    `leftJoin` table @Lord
+                        `on` do
+                            \(deed :& lord) ->
+                                lord.id ==. just deed.ownerId
+            where_ $ lord.dogs >=. just (val 10)
+            where_ $ joinV lord.dogs >=. just (just (val 10))
+            where_ $ lord.dogs >=. just (val (Just 10))
+
+    itDb "i didn't bork ?." $ do
+        weights <- select $ do
+            (pro :& per) <- from $
+                table @Profile
+                    `leftJoin` table @Person
+                        `on` do
+                            \(pro :& per) ->
+                                just (pro ^. #person) ==. per ?. #id
+                                &&. just pro.person ==. per ?. PersonId
+            pure $ per ?. #weight
+        asserting $ do
+            weights `shouldBe` ([] :: [Value (Maybe Int)])
+
+
+
 #else
     it "is only supported in GHC 9.2 or above" $ \_ -> do
         pending
@@ -1968,3 +2076,5 @@ testGetTable =
                 pure (person, blogPost, profile, reply)
             asserting noExceptions
 
+assertJust :: HasCallStack => Maybe a -> IO a
+assertJust = maybe (expectationFailure "Expected Just, got Nothing" >> error "asdf") pure

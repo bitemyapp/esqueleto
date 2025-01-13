@@ -23,7 +23,7 @@ module Database.Esqueleto.Record
 
 import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
 import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Experimental
+import Database.Esqueleto
        (Entity, PersistValue, SqlExpr, Value(..), (:&)(..))
 import Database.Esqueleto.Internal.Internal (SqlSelectCols(..), SqlSelect(..))
 import Database.Esqueleto.Experimental.ToAlias (ToAlias(..))
@@ -36,7 +36,6 @@ import Data.Text (Text)
 import Control.Monad (forM)
 import Data.Foldable (foldl')
 import GHC.Exts (IsString(fromString))
-import Debug.Trace
 import Data.Maybe (mapMaybe, fromMaybe, listToMaybe, isJust)
 
 -- | Takes the name of a Haskell record type and creates a variant of that
@@ -290,7 +289,6 @@ getRecordInfo settings name = do
     toSqlMaybeField (fieldName', ty) = do
       let modifier = mkName . sqlMaybeFieldModifier settings . nameBase
       sqlTy <- sqlMaybeFieldType ty
-
       pure (modifier fieldName', sqlTy)
 
 -- | Create a new name by prefixing @Sql@ to a given name.

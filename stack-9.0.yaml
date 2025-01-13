@@ -1,4 +1,4 @@
-resolver: lts-19.13
+resolver: lts-23.1
 
 packages:
   - '.'
@@ -8,7 +8,6 @@ allow-newer: true
 
 extra-deps:
 - lift-type-0.1.0.1
-- persistent-2.14.0.2
 
 nix:
   packages: [zlib, libmysqlclient, pcre, postgresql]
