@@ -2523,6 +2523,13 @@ veryUnsafeCoerceSqlExpr (ERaw m k) = ERaw m k
 unsafeCoerceSqlExpr :: (Coercible a b) => SqlExpr a -> SqlExpr b
 unsafeCoerceSqlExpr = veryUnsafeCoerceSqlExpr
 
+-- | Like 'unsafeCoerceSqlExpr' but for the common case where you are
+-- coercing a 'Value'.
+--
+-- @since 3.6.0.0
+unsafeCoerceSqlExprValue :: (Coercible a b) => SqlExpr (Value a) -> SqlExpr (Value b)
+unsafeCoerceSqlExprValue = veryUnsafeCoerceSqlExpr
+
 -- | Folks often want the ability to promote a Haskell function into the
 -- 'SqlExpr' expression language - and naturally reach for 'fmap'.
 -- Unfortunately, this is impossible. We cannot send *functions* to the
