@@ -19,4 +19,3 @@ spec = do
             sequential $ MySQL.spec
         describe "Postgresql" $ do
             sequential $ Postgres.spec
-

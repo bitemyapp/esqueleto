@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -32,7 +33,6 @@ module Common.Test
     ( tests
     , testLocking
     , testAscRandom
-    , testRandomMath
     , migrateAll
     , migrateUnique
     , cleanDB
@@ -65,6 +65,7 @@ module Common.Test
     , DateTruncTest(..)
     , DateTruncTestId
     , Key(..)
+    , assertJust
     ) where
 
 import Common.Test.Import hiding (from, on)
@@ -160,19 +161,8 @@ testSubSelect = do
                   pure (n ^. NumbersInt)
             setup
             res <- select $ pure $ subSelect query
-            eres <- try $ do
-                select $ pure $ sub_select query
             asserting $ do
                 res `shouldBe` [Value (Just 1)]
-                case eres of
-                    Left (SomeException _) ->
-                        -- We should receive an exception, but the different database
-                        -- libraries throw different exceptions. Hooray.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
         itDb "is safe for queries that may not return anything" $ do
             let query =
@@ -184,21 +174,8 @@ testSubSelect = do
             res <- select $ pure $ subSelect query
             transactionUndo
 
-            eres <- try $ do
-                select $ pure $ sub_select query
-
             asserting $ do
                 res `shouldBe` [Value $ Just 1]
-                case eres of
-                    Left (_ :: PersistException) ->
-                        -- We expect to receive this exception. However, sqlite evidently has
-                        -- no problems with itDb, so we can't *require* that the exception is
-                        -- thrown. Sigh.
-                        pure ()
-                    Right v ->
-                        -- This shouldn't happen, but in sqlite land, many things are
-                        -- possible.
-                        v `shouldBe` [Value 1]
 
     describe "subSelectList" $ do
         itDb "is safe on empty databases as well as good databases" $ do
@@ -405,7 +382,7 @@ testSelectFrom = do
                             , (p2e, p2e)
                             ]
 
-        itDb "works for a self-join via sub_select" $ do
+        itDb "works for a self-join via subSelect" $ do
             p1k <- insert p1
             p2k <- insert p2
             _f1k <- insert (Follow p1k p2k)
@@ -416,7 +393,7 @@ testSelectFrom = do
                          from $ \followB -> do
                          where_ $ followA ^. FollowFollower ==. followB ^. FollowFollowed
                          return $ followB ^. FollowFollower
-                   where_ $ followA ^. FollowFollowed ==. sub_select subquery
+                   where_ $ just (followA ^. FollowFollowed) ==. subSelect subquery
                    return followA
             asserting $ length ret `shouldBe` 2
 
@@ -744,7 +721,7 @@ testSelectSubQuery = describe "select subquery" $ do
         _ <- insert' p3
         let q = do
                 (name, age) <-
-                  Experimental.from $ SubQuery $ do
+                  Experimental.from $ do
                       p <- Experimental.from $ Table @Person
                       return ( p ^. PersonName, p ^. PersonAge)
                 orderBy [ asc age ]
@@ -765,7 +742,7 @@ testSelectSubQuery = describe "select subquery" $ do
                                                        lord ^. LordId ==. deed ^. DeedOwnerId)
                 return (lord ^. LordId, deed ^. DeedId)
             q' = do
-                 (lordId, deedId) <- Experimental.from $ SubQuery q
+                 (lordId, deedId) <- Experimental.from q
                  groupBy (lordId)
                  return (lordId, count deedId)
         (ret :: [(Value (Key Lord), Value Int)]) <- select q'
@@ -788,7 +765,7 @@ testSelectSubQuery = describe "select subquery" $ do
                 return (lord ^. LordId, count (deed ^. DeedId))
 
         (ret :: [(Value Int)]) <- select $ do
-                 (lordId, deedCount) <- Experimental.from $ SubQuery q
+                 (lordId, deedCount) <- Experimental.from q
                  where_ $ deedCount >. val (3 :: Int)
                  return (count lordId)
 
@@ -1135,12 +1112,12 @@ testSelectOrderBy = describe "select/orderBy" $ do
                return p
         asserting $ ret `shouldBe` [ p1e, p3e, p2e ]
 
-    itDb "works with a sub_select" $ do
+    itDb "works with a subSelect" $ do
         [p1k, p2k, p3k, p4k] <- mapM insert [p1, p2, p3, p4]
         [b1k, b2k, b3k, b4k] <- mapM (insert . BlogPost "") [p1k, p2k, p3k, p4k]
         ret <- select $
                from $ \b -> do
-               orderBy [desc $ sub_select $
+               orderBy [desc $ subSelect $
                                from $ \p -> do
                                where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
                                return (p ^. PersonName)
@@ -1244,8 +1221,8 @@ testCoasleceDefault = describe "coalesce/coalesceDefault" $ do
                  let sub =
                          from $ \p -> do
                          where_ (p ^. PersonId ==. b ^. BlogPostAuthorId)
-                         return $ p ^. PersonAge
-                 return $ coalesceDefault [sub_select sub] (val (42 :: Int))
+                         pure $ p ^. PersonAge
+                 return $ coalesceDefault [joinV $ subSelect sub] (val (42 :: Int))
         asserting $ ret `shouldBe` [ Value (36 :: Int)
                                 , Value 42
                                 , Value 17
@@ -1288,7 +1265,7 @@ testUpdate = describe "update" $ do
               where_ (b ^. BlogPostAuthorId ==. p ^. PersonId)
               return countRows
         ()  <- update $ \p -> do
-               set p [ PersonAge =. just (sub_select (blogPostsBy p)) ]
+               set p [ PersonAge =. subSelect (blogPostsBy p) ]
         ret <- select $
                from $ \p -> do
                orderBy [ asc (p ^. PersonName) ]
@@ -1557,31 +1534,6 @@ testInsertsBySelectReturnsCount = do
         asserting $ ret `shouldBe` [Value (3::Int)]
         asserting $ cnt `shouldBe` 3
 
-
-
-
-testRandomMath :: SpecDb
-testRandomMath = describe "random_ math" $
-    itDb "rand returns result in random order" $
-      do
-        replicateM_ 20 $ do
-          _ <- insert p1
-          _ <- insert p2
-          _ <- insert p3
-          _ <- insert p4
-          _ <- insert $ Person "Jane"  Nothing Nothing 0
-          _ <- insert $ Person "Mark"  Nothing Nothing 0
-          _ <- insert $ Person "Sarah" Nothing Nothing 0
-          insert $ Person "Paul"  Nothing Nothing 0
-        ret1 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-        ret2 <- fmap (map unValue) $ select $ from $ \p -> do
-                  orderBy [rand]
-                  return (p ^. PersonId)
-
-        asserting $ (ret1 == ret2) `shouldBe` False
-
 testMathFunctions :: SpecDb
 testMathFunctions = do
   describe "Math-related functions" $ do
@@ -1639,16 +1591,16 @@ testCase = do
                   (exists $ from $ \p -> do
                       where_ (p ^. PersonName ==. val "Mike"))
                 then_
-                  (sub_select $ from $ \v -> do
+                  (subSelect $ from $ \v -> do
                       let sub =
                               from $ \c -> do
                               where_ (c ^. PersonName ==. val "Mike")
                               return (c ^. PersonFavNum)
-                      where_ (v ^. PersonFavNum >. sub_select sub)
+                      where_ (just (v ^. PersonFavNum) >. subSelect sub)
                       return $ count (v ^. PersonName) +. val (1 :: Int)) ]
-              (else_ $ val (-1))
+              (else_ $ just $ val (-1))
 
-        asserting $ ret `shouldBe` [ Value (3) ]
+        asserting $ ret `shouldBe` [ Value (Just 3) ]
 
 testLocking :: SpecDb
 testLocking = do
@@ -2370,7 +2322,7 @@ testExperimentalFrom = do
         insert_ p3
         -- Pretend this isnt all posts
         upperNames <- select $ do
-          author <- Experimental.from $ SelectQuery $ Experimental.from $ Table @Person
+          author <- Experimental.from $ Experimental.from $ Table @Person
           pure $ upper_ $ author ^. PersonName
 
         asserting $ upperNames `shouldMatchList` [ Value "JOHN"
@@ -2536,7 +2488,7 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                 pure bp.title
     describe "with SqlExpr (Maybe (Entity rec))" $ do
         itDb "lets you project from a Maybe record" $ do
-            select $ do
+            void $ select $ do
                 p :& mbp <- Experimental.from $
                     table @Person
                     `leftJoin` table @BlogPost
@@ -2544,6 +2496,34 @@ testOverloadedRecordDot = describe "OverloadedRecordDot" $ do
                             \(p :& mbp) ->
                                 just p.id ==. mbp.authorId
                 pure (p.id, mbp.title)
+
+    itDb "joins Maybe together" $ do
+        void $ select $ do
+            deed :& lord <-
+                Experimental.from $
+                    table @Deed
+                    `leftJoin` table @Lord
+                        `Experimental.on` do
+                            \(deed :& lord) ->
+                                lord.id ==. just deed.ownerId
+            where_ $ lord.dogs >=. just (val 10)
+            where_ $ joinV lord.dogs >=. just (just (val 10))
+            where_ $ lord.dogs >=. just (val (Just 10))
+
+    itDb "i didn't bork ?." $ do
+        weights <- select $ do
+            (pro :& per) <- Experimental.from $
+                table @Profile
+                    `leftJoin` table @Person
+                        `Experimental.on` do
+                            \(pro :& per) ->
+                                just (pro ^. #person) ==. per ?. #id
+                                &&. just pro.person ==. per ?. PersonId
+            pure $ per ?. #weight
+        asserting $ do
+            weights `shouldBe` ([] :: [Value (Maybe Int)])
+
+
 
 #else
     it "is only supported in GHC 9.2 or above" $ \_ -> do
@@ -2573,3 +2553,5 @@ testGetTable =
                 pure (person, blogPost, profile, reply)
             asserting noExceptions
 
+assertJust :: HasCallStack => Maybe a -> IO a
+assertJust = maybe (expectationFailure "Expected Just, got Nothing" >> error "asdf") pure

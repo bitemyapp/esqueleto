@@ -98,10 +98,6 @@ table = From $ do
                )
 
 
-{-# DEPRECATED SubQuery "/Since: 3.4.0.0/ - It is no longer necessary to tag 'SqlQuery' values with @SubQuery@" #-}
-newtype SubQuery a = SubQuery a
-instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SubQuery (SqlQuery a)) a where
-    toFrom (SubQuery q) = selectQuery q
 instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a where
     toFrom = selectQuery
 
