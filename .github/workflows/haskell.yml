@@ -32,7 +32,7 @@ jobs:
           --health-retries=3
     strategy:
       matrix:
-        cabal: ["3.10.2.1"]
+        cabal: ["3.14"]
         ghc: 
           - "8.6"
           - "8.8"
@@ -43,7 +43,7 @@ jobs:
           - "9.6"
           - "9.8"
           - "9.10"
-            # - "9.12"
+          - "9.12"
     env:
       CONFIG: "--enable-tests --enable-benchmarks "
     steps:
