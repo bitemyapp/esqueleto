@@ -57,9 +57,45 @@ module Database.Esqueleto
       from
     , table
     , Table(..)
-    , SubQuery(..)
     , selectQuery
 
+    -- * @esqueleto@'s Language
+    , where_, on, groupBy, orderBy, asc, desc, limit, offset
+             , distinct, distinctOn, don, distinctOnOrderBy, having, locking
+             , (^.), (?.)
+             , val, isNothing, isNothing_, just, just', nothing, joinV, joinV', withNonNull
+             , countRows, count, countDistinct
+             , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
+             , between, (+.), (-.), (/.), (*.)
+             , round_, ceiling_, floor_
+             , min_, max_, sum_, avg_, castNum, castNumM
+             , coalesce, coalesceDefault
+             , lower_, upper_, trim_, ltrim_, rtrim_, length_, left_, right_
+             , like, ilike, (%), concat_, (++.), castString
+             , subList_select, valList, justList
+             , in_, notIn, exists, notExists
+             , set, (=.), (+=.), (-=.), (*=.), (/=.)
+             , case_, toBaseId, fromBaseId, toBaseIdMaybe, fromBaseIdMaybe
+  , subSelect
+  , subSelectMaybe
+  , subSelectCount
+  , subSelectForeign
+  , subSelectList
+  , subSelectUnsafe
+  , ToBaseId(..)
+  , when_
+  , then_
+  , else_
+  , from
+  , Value(..)
+  , ValueList(..)
+  , OrderBy
+  , DistinctOn
+  , LockingKind(..)
+  , forUpdate
+  , forUpdateSkipLocked
+  , LockableEntity(..)
+  , SqlString
     -- ** Joins
     , (:&)(..)
     , on
@@ -75,14 +111,9 @@ module Database.Esqueleto
       -- ** Set Operations
       -- $sql-set-operations
     , union_
-    , Union(..)
     , unionAll_
-    , UnionAll(..)
     , except_
-    , Except(..)
     , intersect_
-    , Intersect(..)
-    , pattern SelectQuery
 
       -- ** Common Table Expressions
     , with
@@ -92,16 +123,14 @@ module Database.Esqueleto
     , From(..)
     , ToMaybe(..)
     , ToAlias(..)
-    , ToAliasT
     , ToAliasReference(..)
-    , ToAliasReferenceT
     , ToSqlSetOperation(..)
 
     -- * The Normal Stuff
     , where_
     , groupBy
+    , groupBy_
     , orderBy
-    , rand
     , asc
     , desc
     , limit
@@ -114,12 +143,12 @@ module Database.Esqueleto
     , having
     , locking
 
-    , sub_select
     , (^.)
     , (?.)
 
     , val
     , isNothing
+    , isNothing_
     , just
     , nothing
     , joinV

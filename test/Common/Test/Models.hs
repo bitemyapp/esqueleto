@@ -182,6 +182,16 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistUpperCase|
     address String
     deriving Show
     deriving Eq
+
+  A
+      k Int
+      v Int
+      Primary k
+
+  B
+      k Int
+      v Int
+      Primary k
 |]
 
 -- Unique Test schema
@@ -197,4 +207,3 @@ share [mkPersist sqlSettings, mkMigrate "migrateUnique"] [persistUpperCase|
 instance ToBaseId ArticleMetadata where
     type BaseEnt ArticleMetadata = Article
     toBaseIdWitness articleId = ArticleMetadataKey articleId
-

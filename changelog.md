@@ -6,6 +6,135 @@
     - Change SqlExpr type to alias for new SqlExpr_ allowing for value "contexts". Currently used by window functions to avoid allowing double windowing. This change lays the groundwork for aggregate values as being contextually different from single values.
     - Add support for window functions in Postgres module
 
+3.6.0.0
+=======
+- @parsonsmatt
+    - [#422](https://github.com/bitemyapp/esqueleto/pull/422)
+        - The instance of `HasField` for `SqlExpr (Maybe (Entity a))` joins
+          `Maybe` values together. This means that if you `leftJoin` a table
+          with a `Maybe` column, the result will be a `SqlExpr (Value (Maybe
+          typ))`, instead of `SqlExpr (Value (Maybe (Maybe typ)))`.
+        - To make this a less breaking change, `joinV` has been given a similar
+          behavior. If the input type to `joinV` is `Maybe (Maybe typ)`, then
+          the result becomes `Maybe typ`. If the input type is `Maybe typ`, then
+          the output is also `Maybe typ`. The `joinV'` function is given as an
+          alternative with monomorphic behavior.
+        - The `just` function is also modified to avoid nesting `Maybe`.
+          Likewise, `just'` is provided to give monomorphic behavior.
+        - `subSelect`, `max_`, `min_`, and `coalesce` were all
+          given `Nullable` output types as well. This should help to reduce the
+          incidence of nested `Maybe`.
+        - The operator `??.` was introduced which can do nested `Maybe`. You may
+          want this if you have type inference issues with `?.` combining
+          `Maybe`.
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/420)
+        - Add a fixity declaration to `?.`
+    - [#412](https://github.com/bitemyapp/esqueleto/pull/412)
+        - The `random_` and `rand` functions (deprecated in 2.6.0) have been
+          removed. Please refer to the database specific ones (ie
+          `Database.Esqueleto.PostgreSQL` etc)
+        - The `sub_select` function (deprecated in 3.2.0) has been removed.
+          Please use the safer variants like `subSelect`, `subSelectMaybe`, etc.
+        - The `ToAliasT` and `ToAliasReferenceT` types has been removed after having been deprecated in 3.4.0.1.
+        - The `Union` type (deprecated in 3.4) was removed. Please use `union_`
+          instead.
+        - The `UnionAll` type (deprecated in 3.4) was removed. Please use
+          `unionAll_` instead.
+        - The `Except` type  (deprecated in 3.4) was removed. Please use
+          `except_` instead.
+        - The `Intersect` type  (deprecated in 3.4) was removed. Please use
+          `intersect_` instead.
+        - The `SubQuery` type (deprecated in 3.4) was removed. You do not need
+          to tag subqueries to use them in `from` clauses.
+        - The `SelectQuery` type (deprecated in 3.4) was removed. You do not
+          need to tag `SqlQuery` values with `SelectQuery`.
+    - [#287](https://github.com/bitemyapp/esqueleto/pull/278)
+        - Deprecate `distinctOn` and `distinctOnOrderBy`. Use the variants
+          defined in `PostgreSQL` module instead. The signature has changed, but
+          the refactor is straightforward:
+          ```
+              -- old:
+              p <- from $ table
+              distinctOn [don x] $ do
+                  pure p
+
+              -- new:
+              p <- from $ table
+              distinctOn [don x]
+              pure p
+          ```
+    - [#301](https://github.com/bitemyapp/esqueleto/pull/301)
+        - Postgresql `upsert` and `upsertBy` now require a `NonEmpty` list of
+          updates. If you want to provide an empty list of updates, you'll need
+          to use `upsertMaybe` and `upsertMaybeBe` instead. Postgres does not
+          return rows from the database if no updates are performed.
+    - [#413](https://github.com/bitemyapp/esqueleto/pull/413)
+        - The ability to `coerce` `SqlExpr` was removed. Instead, use
+          `veryUnsafeCoerceSqlExpr`. See the documentation on
+          `veryUnsafeCoerceSqlExpr` for safe use example.
+        - `unsafeCeorceSqlExpr` is provided as an option when the underlying
+          Haskell types are coercible. This is still unsafe, as different
+          `PersistFieldSql` instances may be at play.
+    - [#420](https://github.com/bitemyapp/esqueleto/pull/421)
+        - The `LockingKind` constructors are deprecated, and will be removed
+          from non-Internal modules in a future release. Smart constructors
+          replace them, and you may need to import them from a different
+          database-specific module.
+    - [#425](https://github.com/bitemyapp/esqueleto/pull/425)
+        - `fromBaseId` is introduced as the inverse of `toBaseId`.
+        - `toBaseIdMaybe` and `fromBaseIdMaybe` are introduced.
+
+3.5.14.0
+========
+- @parsonsmatt
+    - [#415](https://github.com/bitemyapp/esqueleto/pull/415)
+        - Export the `SqlSelect` type from `Database.Esqueleto.Experimental`
+    - [#414](https://github.com/bitemyapp/esqueleto/pull/414)
+        - Derive `Foldable` and `Traversable` for `Value`.
+    - [#416](https://github.com/bitemyapp/esqueleto/pull/416)
+        - Derive `Functor` and `Bifunctor` for `:&`
+- @matthewbauer
+    - [#341](https://github.com/bitemyapp/esqueleto/pull/341/)
+        - Add functions for `NULLS FIRST` and `NULLS LAST` in the Postgresql
+          module
+- @JoelMcCracken
+    - [#354](https://github.com/bitemyapp/esqueleto/pull/354), [#417](https://github.com/bitemyapp/esqueleto/pull/417)
+      - Add `withMaterialized`, `withNotMaterialized` to the PostgreSQL module
+
+3.5.13.2
+========
+- @blujupiter32
+    - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
+        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&. b`
+- @RikvanToor
+    - [#373](https://github.com/bitemyapp/esqueleto/pull/373), [#410](https://github.com/bitemyapp/esqueleto/pull/410)
+        - Fix name clashes when using CTEs multiple times
+- @TeofilC
+    - [#394](https://github.com/bitemyapp/esqueleto/pull/394)
+        - Use TH quotes to eliminate some CPP.
+- @parsonsmatt, @jappeace
+    - [#346](#https://github.com/bitemyapp/esqueleto/pull/346), [#411](https://github.com/bitemyapp/esqueleto/pull/411)
+        - Add docs for more SQL operators
+
+3.5.13.1
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+      - Fix a bug introduced in 3.5.12.0 where deriveEsqueletoRecord incorrectly errors
+
+3.5.13.0
+========
+- @ac251
+    - [#402](https://github.com/bitemyapp/esqueleto/pull/402)
+      - Add `forNoKeyUpdate` and `forKeyShare` locking kinds for postgres
+
+3.5.12.0
+========
+- @csamak
+    - [#405](https://github.com/bitemyapp/esqueleto/pull/405)
+        - `ToMaybe` instances are now derived for Maybe records.
+          See [Issue #401](https://github.com/bitemyapp/esqueleto/issues/401).
+
 3.5.11.2
 ========
 - @arguri

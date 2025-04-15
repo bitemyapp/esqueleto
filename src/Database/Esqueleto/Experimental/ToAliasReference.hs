@@ -10,9 +10,6 @@ module Database.Esqueleto.Experimental.ToAliasReference
 import Database.Esqueleto.Internal.Internal hiding (From, from, on)
 import Database.Esqueleto.Internal.PersistentImport
 
-{-# DEPRECATED ToAliasReferenceT "This type alias doesn't do anything. Please delete it. Will be removed in the next release." #-}
-type ToAliasReferenceT a = a
-
 -- more tedious tuple magic
 class ToAliasReference a a' | a -> a' where
     toAliasReference :: Ident -> a -> SqlQuery a'
@@ -32,12 +29,7 @@ instance ToAliasReference (SqlExpr_ ctx (Entity a)) (SqlExpr_ ValueContext (Enti
 
 instance ToAliasReference (SqlExpr_ ctx (Maybe (Entity a))) (SqlExpr_ ValueContext (Maybe (Entity a))) where
     toAliasReference aliasSource e =
-        let maybelizeExpr :: SqlExpr_ ctx (Maybe (Entity a)) -> SqlExpr_ ctx (Entity a)
-            maybelizeExpr = veryUnsafeCoerceSqlExpr
-            unmaybelizeExpr :: SqlExpr_ ctx (Entity a) -> SqlExpr_ ctx (Maybe (Entity a))
-            unmaybelizeExpr = veryUnsafeCoerceSqlExpr
-        in
-        unmaybelizeExpr <$> toAliasReference aliasSource (maybelizeExpr e)
+        veryUnsafeCoerceSqlExpr <$> toAliasReference aliasSource (veryUnsafeCoerceSqlExpr e :: SqlExpr (Entity a))
 
 
 instance (ToAliasReference a a', ToAliasReference b b') => ToAliasReference (a, b) (a', b') where

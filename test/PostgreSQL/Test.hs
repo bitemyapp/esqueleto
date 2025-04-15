@@ -12,7 +12,6 @@
 module PostgreSQL.Test where
 
 import Control.Arrow ((&&&))
-import Control.Concurrent (forkIO)
 import Control.Monad (void, when)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Logger (runNoLoggingT, runStderrLoggingT)
@@ -35,10 +34,11 @@ import qualified Data.Text.Encoding as TE
 import qualified Data.Text.Lazy as TL
 import qualified Data.Text.Lazy.Builder as TLB
 import Data.Time
+import Database.Esqueleto
 import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
-import Database.Esqueleto hiding (random_)
 import qualified Database.Esqueleto.Internal.Internal as ES
-import Database.Esqueleto.PostgreSQL (random_, (%.))
+import Database.Esqueleto.PostgreSQL
+       (random_, withMaterialized, withNotMaterialized, (%.))
 import qualified Database.Esqueleto.PostgreSQL as EP
 import Database.Esqueleto.PostgreSQL.JSON hiding ((-.), (?.), (||.))
 import qualified Database.Esqueleto.PostgreSQL.JSON as JSON
@@ -48,12 +48,42 @@ import Database.Persist.Postgresql (createPostgresqlPool, withPostgresqlConn)
 import Database.PostgreSQL.Simple (ExecStatus(..), SqlError(..))
 import System.Environment
 import Test.Hspec
-import Test.Hspec.Core.Spec (sequential)
 import Test.Hspec.QuickCheck
 
 import Common.Test
-import Common.Test.Import hiding (from, on)
+import Common.Test.Import hiding (from, on, ilike, distinctOn)
 import PostgreSQL.MigrateJSON
+
+spec :: Spec
+spec = beforeAll mkConnectionPool $ do
+    tests
+
+    describe "PostgreSQL specific tests" $ do
+        testAscRandom random_
+        testSelectDistinctOn
+        testPostgresModule
+        testPostgresqlOneAscOneDesc
+        testPostgresqlTwoAscFields
+        testPostgresqlSum
+        testPostgresqlRandom
+        testPostgresqlUpdate
+        testPostgresqlCoalesce
+        testPostgresqlTextFunctions
+        testInsertUniqueViolation
+        testUpsert
+        testInsertSelectWithConflict
+        testFilterWhere
+        testCommonTableExpressions
+        setDatabaseState insertJsonValues cleanJSON
+            $ describe "PostgreSQL JSON tests" $ do
+                testJSONInsertions
+                testJSONOperators
+        testLateralQuery
+        testValuesExpression
+        testSubselectAliasingBehavior
+        testPostgresqlLocking
+        testPostgresqlNullsOrdering
+
 
 returningType :: forall a m . m a -> m a
 returningType a = a
@@ -226,7 +256,7 @@ testSelectDistinctOn = do
       let query = do
             let orderVal = coalesce [nothing, just $ val (10 :: Int)]
             distinctOnOrderBy [ asc orderVal, desc orderVal ] $ pure orderVal
-      select query
+      _ <- select query
       asserting noExceptions
 
 
@@ -508,7 +538,7 @@ testPostgresModule = do
             -- https://github.com/bitemyapp/esqueleto/pull/180
             rawExecute "SET TIME ZONE 'UTC'" []
             ret <-
-                fmap (Map.fromList . coerce :: _ -> Map DateTruncTestId (UTCTime, UTCTime)) $
+                fmap (Map.fromList . coerce @_ @([(DateTruncTestId, (UTCTime, UTCTime))])) $
                 select $ do
                     dt <- from $ table @DateTruncTest
                     pure
@@ -1059,18 +1089,28 @@ testInsertUniqueViolation =
       sqlErrorHint = ""}
 
 testUpsert :: SpecDb
-testUpsert =
-  describe "Upsert test" $ do
+testUpsert = describe "Upsert test" $ do
     itDb "Upsert can insert like normal" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u1e `shouldBe` u1
+        u1e <- EP.upsert u1 (pure (OneUniqueName =. val "fifth"))
+        liftIO $ entityVal u1e `shouldBe` u1
     itDb "Upsert performs update on collision" $  do
-      u1e <- EP.upsert u1 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u1e `shouldBe` u1
-      u2e <- EP.upsert u2 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u2e `shouldBe` u2
-      u3e <- EP.upsert u3 [OneUniqueName =. val "fifth"]
-      liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
+        u1e <- EP.upsert u1 (pure (OneUniqueName =. val "fifth"))
+        liftIO $ entityVal u1e `shouldBe` u1
+        u2e <- EP.upsert u2 (pure (OneUniqueName =. val "fifth"))
+        liftIO $ entityVal u2e `shouldBe` u2
+        u3e <- EP.upsert u3 (pure (OneUniqueName =. val "fifth"))
+        liftIO $ entityVal u3e `shouldBe` u1{oneUniqueName="fifth"}
+    describe "With no updates" $ do
+        itDb "Works with no updates" $ do
+            _ <- EP.upsertMaybe u1 []
+            pure ()
+        itDb "Works with no updates, twice" $ do
+            mu1  <- EP.upsertMaybe u1 []
+            Entity _u1Key u1' <- liftIO $ assertJust mu1
+            mu2 <- EP.upsertMaybe u1 { oneUniqueName = "Something Else" } []
+            asserting $ do
+                mu2 `shouldBe` Nothing
+                u1 `shouldBe` u1'
 
 testInsertSelectWithConflict :: SpecDb
 testInsertSelectWithConflict =
@@ -1260,6 +1300,80 @@ testCommonTableExpressions = do
             pure res
         asserting $ vals `shouldBe` fmap Value [2..11]
 
+    describe "MATERIALIZED CTEs" $ do
+      describe "withNotMaterialized" $ do
+        itDb "successfully executes query" $ do
+          void $ select $ do
+            limitedLordsCte <-
+                withNotMaterialized $ do
+                    lords <- from $ table @Lord
+                    limit 10
+                    pure lords
+            lords <- from limitedLordsCte
+            orderBy [asc $ lords ^. LordId]
+            pure lords
+
+          asserting noExceptions
+
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withNotMaterialized $ do
+                          lords <- from $ table @Lord
+                          limit 10
+                          pure lords
+                  lords <- from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+
+      describe "withMaterialized" $ do
+        itDb "generates the expected SQL" $ do
+          (sql, _) <- showQuery ES.SELECT $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- from $ table @Lord
+                          limit 10
+                          pure lords
+                  lords <- from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+          asserting $ sql `shouldBe` T.unlines
+            [ "WITH \"cte\" AS MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\""
+            , " LIMIT 10"
+            , ")"
+            , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
+            , "FROM \"cte\""
+            , "ORDER BY \"cte\".\"v_county\" ASC"
+            ]
+          asserting noExceptions
+
+        itDb "successfully executes query" $ do
+            void $ select $ do
+                  limitedLordsCte <-
+                      withMaterialized $ do
+                          lords <- from $ table @Lord
+                          limit 10
+                          pure lords
+                  lords <- from limitedLordsCte
+                  orderBy [asc $ lords ^. LordId]
+                  pure lords
+
+            asserting noExceptions
+
 testPostgresqlLocking :: SpecDb
 testPostgresqlLocking = do
     describe "Monoid instance" $ do
@@ -1271,7 +1385,9 @@ testPostgresqlLocking = do
                     p <- from $ table @Person
                     EP.forUpdateOf p EP.skipLocked
                     EP.forUpdateOf p EP.skipLocked
+                    EP.forNoKeyUpdateOf p EP.skipLocked
                     EP.forShareOf p EP.skipLocked
+                    EP.forKeyShareOf p EP.skipLocked
             conn <- ask
             let res1 = toText conn multipleLockingQuery
                 resExpected =
@@ -1281,7 +1397,9 @@ testPostgresqlLocking = do
                     ,"FROM \"Person\""
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
+                    ,"FOR NO KEY UPDATE OF \"Person\" SKIP LOCKED"
                     ,"FOR SHARE OF \"Person\" SKIP LOCKED"
+                    ,"FOR KEY SHARE OF \"Person\" SKIP LOCKED"
                     ]
 
             asserting $ res1 `shouldBe` resExpected
@@ -1374,7 +1492,6 @@ testPostgresqlLocking = do
                                         EP.forUpdateOf p EP.skipLocked
                                         return p
 
-                                liftIO $ print nonLockedRowsSpecifiedTable
                                 pure $ length nonLockedRowsSpecifiedTable `shouldBe` 2
 
                     withAsync sideThread $ \sideThreadAsync -> do
@@ -1396,7 +1513,6 @@ testPostgresqlLocking = do
                                     EP.forUpdateOf p EP.skipLocked
                                     return p
 
-                            liftIO $ print nonLockedRowsAfterUpdate
                             asserting sideThreadAsserts
                             asserting $ length nonLockedRowsAfterUpdate `shouldBe` 3
 
@@ -1797,6 +1913,54 @@ testSubselectAliasingBehavior = do
                     pure (str, val @Int 1)
             asserting noExceptions
 
+testPostgresqlNullsOrdering :: SpecDb
+testPostgresqlNullsOrdering = do
+  describe "Postgresql NULLS orderings work" $ do
+      itDb "ASC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.ascNullsFirst (p ^. PersonAge), EP.ascNullsFirst (p ^. PersonFavNum)]
+                   pure p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p3e, p4e, p1e ]
+      itDb "ASC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.ascNullsLast (p ^. PersonAge), EP.ascNullsLast (p ^. PersonFavNum)]
+                   pure p
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p3e, p4e, p1e, p2e ]
+      itDb "DESC NULLS FIRST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $ do
+                   p <- from $ table @Person
+                   orderBy [EP.descNullsFirst (p ^. PersonAge), EP.descNullsFirst (p ^. PersonFavNum)]
+                   pure p
+        -- nulls come first
+        asserting $ ret `shouldBe` [ p2e, p1e, p4e, p3e ]
+      itDb "DESC NULLS LAST works" $ do
+        p1e <- insert' p1
+        p2e <- insert' p2 -- p2 has a null age
+        p3e <- insert' p3
+        p4e <- insert' p4
+        ret <- select $ do
+               p <- from $ table @Person
+               orderBy [EP.descNullsLast (p ^. PersonAge), EP.descNullsLast (p ^. PersonFavNum)]
+               return (p :: SqlExpr (Entity Person))
+        -- nulls come last
+        asserting $ ret `shouldBe` [ p1e, p4e, p3e, p2e ]
+
 type JSONValue = Maybe (JSONB A.Value)
 
 createSaneSQL :: (PersistField a, MonadIO m) => SqlExpr (Value a) -> T.Text -> [PersistValue] -> SqlPersistT m ()
@@ -1857,43 +2021,6 @@ selectJSON f = select $ do
     v <- from $ table @Json
     f $ just (v ^. JsonValue)
     return v
-
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
---------------- JSON --------------- JSON --------------- JSON ---------------
-
-
-
-spec :: Spec
-spec = beforeAll mkConnectionPool $ do
-    tests
-
-    describe "PostgreSQL specific tests" $ do
-        testAscRandom random_
-        testRandomMath
-        testSelectDistinctOn
-        testPostgresModule
-        testPostgresqlOneAscOneDesc
-        testPostgresqlTwoAscFields
-        testPostgresqlSum
-        testPostgresqlRandom
-        testPostgresqlUpdate
-        testPostgresqlCoalesce
-        testPostgresqlTextFunctions
-        testInsertUniqueViolation
-        testUpsert
-        testInsertSelectWithConflict
-        testFilterWhere
-        testCommonTableExpressions
-        setDatabaseState insertJsonValues cleanJSON
-            $ describe "PostgreSQL JSON tests" $ do
-                testJSONInsertions
-                testJSONOperators
-        testLateralQuery
-        testValuesExpression
-        testWindowFunctions
-        testSubselectAliasingBehavior
-        testPostgresqlLocking
 
 insertJsonValues :: SqlPersistT IO ()
 insertJsonValues = do

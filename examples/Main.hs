@@ -28,6 +28,7 @@ import Control.Monad.Reader (MonadReader(..), runReaderT)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Database.Esqueleto.Experimental
 import Database.Persist.Postgresql (ConnectionString, withPostgresqlConn)
+import qualified Database.Persist.Sql as Persistent
 import Database.Persist.TH
        ( mkMigrate
        , mkPersist
@@ -35,7 +36,6 @@ import Database.Persist.TH
        , share
        , sqlSettings
        )
-
 
 share [ mkPersist sqlSettings
       , mkMigrate "migrateAll"] [persistLowerCase|

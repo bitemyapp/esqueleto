@@ -10,3 +10,6 @@ extra-deps:
 - persistent-mysql-2.12.0.0
 - persistent-postgresql-2.12.0.0
 - persistent-sqlite-2.12.0.0
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

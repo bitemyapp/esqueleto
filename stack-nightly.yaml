@@ -12,3 +12,6 @@ extra-deps:
   - process-1.6.14.0
   - Cabal-3.6.3.0
   - unix-2.7.2.2
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

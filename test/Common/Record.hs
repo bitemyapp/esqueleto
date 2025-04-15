@@ -20,11 +20,9 @@
 {-# OPTIONS_GHC -ddump-splices #-}
 
 -- Tests for `Database.Esqueleto.Record`.
-module Common.Record (testDeriveEsqueletoRecord) where
+module Common.Record where
 
 import Common.Test.Import hiding (from, on)
-import Control.Monad.Trans.State.Strict (StateT(..), evalStateT)
-import Data.Bifunctor (first)
 import Data.List (sortOn)
 import Database.Esqueleto
 import Database.Esqueleto.Record
@@ -33,18 +31,6 @@ import Database.Esqueleto.Record
        , deriveEsqueletoRecord
        , deriveEsqueletoRecordWith
        )
-import Data.Maybe (catMaybes)
-import Data.Proxy (Proxy(..))
-import Database.Esqueleto.Experimental
-import Database.Esqueleto.Internal.Internal (SqlSelect(..))
-import Database.Esqueleto.Record (
-  DeriveEsqueletoRecordSettings(..),
-  defaultDeriveEsqueletoRecordSettings,
-  deriveEsqueletoRecord,
-  deriveEsqueletoRecordWith,
-  takeColumns,
-  takeMaybeColumns,
- )
 import GHC.Records
 
 data MySimpleRecord = MySimpleRecord { mySimpleAge :: Maybe Int }
@@ -80,10 +66,16 @@ myRecordQuery = do
 data MyNestedRecord = MyNestedRecord
   { myName :: Text
   , myRecord :: MyRecord
+  , myMaybeRecord :: Maybe MyRecord
   }
   deriving (Show, Eq)
 
+data MyNestedMaybeRecord = MyNestedMaybeRecord
+  {myNestedRecord :: Maybe MyRecord}
+  deriving (Show, Eq)
+
 $(deriveEsqueletoRecord ''MyNestedRecord)
+$(deriveEsqueletoRecord ''MyNestedMaybeRecord)
 
 myNestedRecordQuery :: SqlQuery SqlMyNestedRecord
 myNestedRecordQuery = do
@@ -100,6 +92,32 @@ myNestedRecordQuery = do
             { myName = castString $ user ^. #name
             , myAge = val $ Just 10
             , myUser = user
+            , myAddress = address
+            }
+      , myMaybeRecord =
+          SqlMaybeMyRecord
+            { myName = castString $ user ^. #name
+            , myAge = val $ Just 10
+            , myUser = toMaybe user
+            , myAddress = address
+            }
+      }
+
+myNestedMaybeRecordQuery :: SqlQuery SqlMyNestedMaybeRecord
+myNestedMaybeRecordQuery = do
+  user :& address <-
+    from $
+      table @User
+        `leftJoin` table @Address
+        `on` (do \(user :& address) -> user ^. #address ==. address ?. #id)
+  pure
+    SqlMyNestedMaybeRecord
+      {
+        myNestedRecord =
+          SqlMaybeMyRecord
+            { myName = castString $ user ^. #name
+            , myAge = val $ Just 10
+            , myUser = toMaybe user
             , myAddress = address
             }
       }
@@ -211,6 +229,107 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                    } -> addr1 == addr2 -- The keys should match.
                  _ -> False)
 
+    itDb "can select nested maybe records" $ do
+        setup
+        records <- select myNestedMaybeRecordQuery
+        let sortedRecords = sortOn (\MyNestedMaybeRecord {myNestedRecord} -> case myNestedRecord of
+                                       Just r -> getField @"myName" r
+                                       Nothing -> "No name"
+                                    ) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case MyNestedMaybeRecord
+                   {
+                    myNestedRecord = Just
+                       MyRecord { myName = "Rebecca"
+                                , myAge = Just 10
+                                , myUser = Entity _ User { userAddress  = Nothing
+                                                         , userName = "Rebecca"
+                                                         }
+                                , myAddress = Nothing
+                                }
+                   } -> True
+                 _ -> False)
+
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case MyNestedMaybeRecord
+                   {
+                    myNestedRecord = Just
+                       MyRecord { myName = "Some Guy"
+                                , myAge = Just 10
+                                , myUser = Entity _ User { userAddress  = Just addr1
+                                                         , userName = "Some Guy"
+                                                         }
+                                , myAddress = Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"})
+                                }
+                   } -> addr1 == addr2 -- The keys should match.
+                 _ -> False)
+
+    itDb "can select nested nothing records" $ do
+        setup
+        records <- select $ do
+          user :& address <-
+            from $ table @User `leftJoin` table @Address `on` (do \(_ :& _) -> val False)
+          pure
+            SqlMyNestedMaybeRecord
+            {
+              myNestedRecord =
+                SqlMaybeMyRecord
+                  { myName = val Nothing
+                  , myAge = val Nothing
+                  , myUser = toMaybe user
+                  , myAddress = address
+                  }
+            }
+        liftIO $ records `shouldBe`
+          [MyNestedMaybeRecord { myNestedRecord = Nothing }, MyNestedMaybeRecord { myNestedRecord = Nothing}]
+
+    itDb "can left join on nested maybed records" $ do
+        setup
+        records <- select $ do
+          from
+            ( table @User
+                `leftJoin` myNestedMaybeRecordQuery
+                `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" (getField @"myNestedRecord" record) ?. #id)
+            )
+        let sortedRecords = sortOn (\(Entity _ user :& _) -> getField @"userName" user) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case (_ :& Just (MyNestedMaybeRecord
+                              {
+                                myNestedRecord = Just
+                                  MyRecord { myName = "Rebecca",
+                                             myAddress = Nothing
+                                           }
+                              }
+                            )) -> True
+                 _ -> False)
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case ( _ :& Just (MyNestedMaybeRecord
+                               { myNestedRecord = Just
+                                   MyRecord { myName = "Some Guy"
+                                            , myAddress = (Just (Entity _ Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                            }
+                               }
+                             )) -> True
+                 _ -> False)
+
+    itDb "can left join on nothing nested records" $ do
+        setup
+        records <- select $ do
+          from (table @User `leftJoin` myNestedMaybeRecordQuery `on` (do \(_ :& _) -> val False))
+        let sortedRecords = sortOn (\(Entity _ user :& _) -> getField @"userName" user) records
+        liftIO $ sortedRecords !! 0
+          `shouldSatisfy`
+          (\case (_ :& Nothing) -> True
+                 _ -> False)
+        liftIO $ sortedRecords !! 1
+          `shouldSatisfy`
+          (\case (_ :& Nothing) -> True
+                 _ -> False)
+
     itDb "can be used in a CTE" $ do
         setup
         records <- select $ do
@@ -284,9 +403,9 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                                         , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                         }
                               )) -> True
-                 _ -> True)
+                 _ -> False)
 
-    itDb "can can handle joins on records with Nothing" $ do
+    itDb "can handle joins on records with Nothing" $ do
         setup
         records <- select $ do
           from
@@ -301,10 +420,10 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case ( _ :& Just ( MyRecord { myName = "Some Guy"
-                                        , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                        , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                         }
                               )) -> True
-                 _ -> True)
+                 _ -> False)
 
     itDb "can left join on nested records" $ do
         setup
@@ -322,10 +441,10 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case ( _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
-                                                                    , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                                                    , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
-                 _ -> True)
+                 _ -> False)
 
     itDb "can handle multiple left joins on the same record" $ do
         setup
@@ -335,16 +454,16 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                 `leftJoin` myNestedRecordQuery
                 `on` (do \(user :& record) -> just (user ^. #id) ==. getField @"myUser" (getField @"myRecord" record) ?. #id)
                 `leftJoin` myNestedRecordQuery
-                `on` (do \(user :& record1 :& record2) -> getField @"myUser" (getField @"myRecord" record1) ?. #id !=. getField @"myUser" (getField @"myRecord" record2) ?. #id)
+                `on` (do \(_user :& record1 :& record2) -> getField @"myUser" (getField @"myRecord" record1) ?. #id !=. getField @"myUser" (getField @"myRecord" record2) ?. #id)
             )
         let sortedRecords = sortOn (\(Entity _ user :& _ :& _) -> getField @"userName" user) records
         liftIO $ sortedRecords !! 0
           `shouldSatisfy`
           (\case ( _ :& _ :& Just ( MyNestedRecord { myRecord = MyRecord { myName = "Some Guy"
-                                                                    , myAddress = (Just (Entity addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
+                                                                    , myAddress = (Just (Entity _addr2 Address {addressAddress = "30-50 Feral Hogs Rd"}))
                                                                     }
                                               })) -> True
-                 _ -> True)
+                 _ -> False)
         liftIO $ sortedRecords !! 1
           `shouldSatisfy`
           (\case (_ :& _ :& Just (MyNestedRecord {myRecord = MyRecord {myName = "Rebecca", myAddress = Nothing}})) -> True

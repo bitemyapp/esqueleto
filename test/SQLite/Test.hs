@@ -135,7 +135,6 @@ spec = beforeAll mkConnectionPool $ do
 
     describe "SQLite specific tests" $ do
       testAscRandom random_
-      testRandomMath
       testSqliteRandom
       testSqliteSum
       testSqliteTwoAscFields

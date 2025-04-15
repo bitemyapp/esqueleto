@@ -1,0 +1,28 @@
+# docker-compose file for running postgres and mysql DBMS
+
+# If using this to run the tests,
+# while these containers are running (i.e. after something like)
+#     (cd test; docker-compose up -d)
+# the tests must be told to use the hostname via MYSQL_HOST environment variable
+# e.g. something like:
+#     MYSQL_HOST=127.0.0.1 stack test
+
+version: '3'
+services:
+  postgres:
+    image: 'postgres:15.2-alpine'
+    environment:
+      POSTGRES_USER: esqutest
+      POSTGRES_PASSWORD: esqutest
+      POSTGRES_DB: esqutest
+    ports:
+    - 5432:5432
+  mysql:
+    image: 'mysql:8.0.32'
+    environment:
+      MYSQL_USER: travis
+      MYSQL_PASSWORD: esqutest
+      MYSQL_ROOT_PASSWORD: esqutest
+      MYSQL_DATABASE: esqutest
+    ports:
+    - 3306:3306

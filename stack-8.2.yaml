@@ -23,3 +23,6 @@ extra-deps:
   - scientific-0.3.6.2
   - text-1.2.3.0
   - unliftio-0.2.0.0
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

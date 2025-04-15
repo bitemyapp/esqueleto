@@ -66,6 +66,7 @@ instance ValidOnClause (a -> SqlQuery b)
 instance (SqlSelectCols a, SqlSelectCols b) => SqlSelectCols (a :& b) where
     sqlSelectCols esc (a :& b) = sqlSelectCols esc (a, b)
     sqlSelectColCount = sqlSelectColCount . toTupleP
+
 instance (SqlSelect a ra, SqlSelect b rb) => SqlSelect (a :& b) (ra :& rb) where
     sqlSelectProcessRow p = fmap (uncurry (:&)) . sqlSelectProcessRow (toTupleP p)
 

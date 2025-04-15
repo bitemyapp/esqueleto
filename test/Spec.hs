@@ -28,4 +28,3 @@ spec = do
             sequential $ LegacyPostgres.spec
         describe "Postgresql" $ do
             sequential $ Postgres.spec
-

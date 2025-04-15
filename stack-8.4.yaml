@@ -13,3 +13,6 @@ extra-deps:
   - postgresql-libpq-0.9.4.2
   - postgresql-simple-0.6.1
   - transformers-0.5.5.2
+
+nix:
+  packages: [zlib, libmysqlclient, pcre, postgresql]

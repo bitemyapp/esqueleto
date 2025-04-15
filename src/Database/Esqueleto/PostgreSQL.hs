@@ -9,7 +9,7 @@
 
 -- | This module contain PostgreSQL-specific functions.
 --
--- @since: 2.2.8
+-- @since 2.2.8
 module Database.Esqueleto.PostgreSQL
     ( AggMode(..)
     , arrayAggDistinct
@@ -24,41 +24,64 @@ module Database.Esqueleto.PostgreSQL
     , now_
     , random_
     , upsert
+    , upsertMaybe
     , upsertBy
+    , upsertMaybeBy
     , insertSelectWithConflict
     , insertSelectWithConflictCount
     , noWait
     , wait
     , skipLocked
     , forUpdateOf
+    , forNoKeyUpdateOf
+    , forShare
     , forShareOf
+    , forKeyShareOf
     , filterWhere
     , values
     , (%.)
+    , ilike
+    , distinctOn
+    , distinctOnOrderBy
+    , withMaterialized
+    , withNotMaterialized
+    , ascNullsFirst
+    , ascNullsLast
+    , descNullsFirst
+    , descNullsLast
     -- * Internal
     , unsafeSqlExprAggregateFunction
     ) where
 
-#if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
-#endif
 import Control.Arrow (first)
 import Control.Exception (throw)
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO(..))
 import qualified Control.Monad.Trans.Reader as R
+import qualified Control.Monad.Trans.Writer as W
 import Data.Int (Int64)
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe
 import Data.Proxy (Proxy(..))
+import qualified Data.Text as Text
 import qualified Data.Text.Internal.Builder as TLB
 import qualified Data.Text.Lazy as TL
+import qualified Data.Text.Lazy.Builder as TLB
 import Data.Time.Clock (UTCTime)
 import qualified Database.Esqueleto.Experimental as Ex
-import Database.Esqueleto.Internal.Internal hiding (random_)
+import qualified Database.Esqueleto.Experimental.From as Ex
+import Database.Esqueleto.Experimental.From.CommonTableExpression
+import Database.Esqueleto.Experimental.From.SqlSetOperation
+import Database.Esqueleto.Experimental.ToAlias
+import Database.Esqueleto.Experimental.ToAliasReference
+import Database.Esqueleto.Internal.Internal hiding
+       (From(..), ilike, distinctOn, distinctOnOrderBy, from, on, random_)
 import Database.Esqueleto.Internal.PersistentImport hiding
        (uniqueFields, upsert, upsertBy)
+import Database.Persist (ConstraintNameDB(..), EntityNameDB(..))
+import Database.Persist.Class (OnlyOneUniqueKey)
 import Database.Persist.SqlBackend
+import GHC.Stack
 
 -- | (@random()@) Split out into database specific modules
 -- because MySQL uses `rand()`.
@@ -66,6 +89,69 @@ import Database.Persist.SqlBackend
 -- @since 2.6.0
 random_ :: (PersistField a, Num a) => SqlExpr (Value a)
 random_ = unsafeSqlValue "RANDOM()"
+
+-- | @DISTINCT ON@.  Change the current @SELECT@ into
+-- @SELECT DISTINCT ON (SqlExpressions)@.  For example:
+--
+-- @
+-- select $ do
+--   foo <- 'from' $ table \@Foo
+--   'distinctOn' ['don' (foo ^. FooName), 'don' (foo ^. FooState)]
+--   pure foo
+-- @
+--
+-- You can also chain different calls to 'distinctOn'.  The
+-- above is equivalent to:
+--
+-- @
+-- select $ do
+--   foo <- 'from' $ table \@Foo
+--   'distinctOn' ['don' (foo ^. FooName)]
+--   'distinctOn' ['don' (foo ^. FooState)]
+--   pure foo
+-- @
+--
+-- Each call to 'distinctOn' adds more SqlExpressions.  Calls to
+-- 'distinctOn' override any calls to 'distinct'.
+--
+-- Note that PostgreSQL requires the SqlExpressions on @DISTINCT
+-- ON@ to be the first ones to appear on a @ORDER BY@.  This is
+-- not managed automatically by esqueleto, keeping its spirit
+-- of trying to be close to raw SQL.
+--
+-- @since 3.6.0
+distinctOn :: [SqlExpr DistinctOn] -> SqlQuery ()
+distinctOn exprs = Q (W.tell mempty { sdDistinctClause = DistinctOn exprs })
+
+-- | A convenience function that calls both 'distinctOn' and
+-- 'orderBy'.  In other words,
+--
+-- @
+-- 'distinctOnOrderBy' [asc foo, desc bar, desc quux]
+-- @
+--
+-- is the same as:
+--
+-- @
+-- 'distinctOn' [don foo, don  bar, don  quux]
+-- 'orderBy'  [asc foo, desc bar, desc quux]
+--   ...
+-- @
+--
+-- @since 3.6.0.0
+distinctOnOrderBy :: [SqlExpr OrderBy] -> SqlQuery ()
+distinctOnOrderBy exprs = do
+    distinctOn (toDistinctOn <$> exprs)
+    orderBy exprs
+  where
+    toDistinctOn :: SqlExpr OrderBy -> SqlExpr DistinctOn
+    toDistinctOn (ERaw m f) = ERaw m $ \p info ->
+        let (b, vals) = f p info
+        in  ( TLB.fromLazyText
+              $ TL.replace " DESC" ""
+              $ TL.replace " ASC" ""
+              $ TLB.toLazyText b
+            , vals )
 
 -- | Empty array literal. (@val []@) does unfortunately not work
 emptyArray :: SqlExpr (Value [a])
@@ -184,7 +270,49 @@ chr = unsafeSqlFunction "chr"
 now_ :: SqlExpr_ ctx (Value UTCTime)
 now_ = unsafeSqlFunction "NOW" ()
 
+-- | Perform an @upsert@ operation on the given record.
+--
+-- If the record exists in the database already, then the updates will be
+-- performed on that record. If the record does not exist, then the
+-- provided record will be inserted.
+--
+-- If you wish to provide an empty list of updates (ie "if the record
+-- exists, do nothing"), then you will need to call 'upsertMaybe'. Postgres
+-- will not return anything if there are no modifications or inserts made.
 upsert
+    ::
+    ( MonadIO m
+    , PersistEntity record
+    , OnlyOneUniqueKey record
+    , PersistRecordBackend record SqlBackend
+    , IsPersistBackend (PersistEntityBackend record)
+    )
+    => record
+    -- ^ new record to insert
+    -> NE.NonEmpty (SqlExpr_ ValueContext (Entity record) -> SqlExpr_ ValueContext Update)
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT SqlBackend m (Entity record)
+    -- ^ the record in the database after the operation
+upsert record =
+    upsertBy (onlyUniqueP record) record
+
+-- | Like 'upsert', but permits an empty list of updates to be performed.
+--
+-- If no updates are provided and the record already was present in the
+-- database, then this will return 'Nothing'. If you want to fetch the
+-- record out of the database, you can write:
+--
+-- @
+--  mresult <- upsertMaybe record []
+--  case mresult of
+--      Nothing ->
+--          'getBy' ('onlyUniqueP' record)
+--      Just res ->
+--          pure (Just res)
+-- @
+--
+-- @since 3.6.0.0
+upsertMaybe
     ::
     ( MonadIO m
     , PersistEntity record
@@ -196,15 +324,22 @@ upsert
     -- ^ new record to insert
     -> [SqlExpr_ ValueContext (Entity record) -> SqlExpr_ ValueContext Update]
     -- ^ updates to perform if the record already exists
-    -> R.ReaderT SqlBackend m (Entity record)
+    -> R.ReaderT SqlBackend m (Maybe (Entity record))
     -- ^ the record in the database after the operation
-upsert record updates = do
-    uniqueKey <- onlyUnique record
-    upsertBy uniqueKey record updates
+upsertMaybe rec upds = do
+    upsertMaybeBy (onlyUniqueP rec) rec upds
 
-upsertBy
+-- | Attempt to insert a @record@ into the database. If the @record@
+-- already exists for the given @'Unique' record@, then a list of updates
+-- will be performed.
+--
+-- If you provide an empty list of updates, then this function will return
+-- 'Nothing' if the record already exists in the database.
+--
+-- @since 3.6.0.0
+upsertMaybeBy
     ::
-    (MonadIO m
+    ( MonadIO m
     , PersistEntity record
     , IsPersistBackend (PersistEntityBackend record)
     )
@@ -214,9 +349,9 @@ upsertBy
     -- ^ new record to insert
     -> [SqlExpr_ ValueContext (Entity record) -> SqlExpr_ ValueContext Update]
     -- ^ updates to perform if the record already exists
-    -> R.ReaderT SqlBackend m (Entity record)
+    -> R.ReaderT SqlBackend m (Maybe (Entity record))
     -- ^ the record in the database after the operation
-upsertBy uniqueKey record updates = do
+upsertMaybeBy uniqueKey record updates = do
     sqlB <- R.ask
     case getConnUpsertSql sqlB of
         Nothing ->
@@ -226,25 +361,62 @@ upsertBy uniqueKey record updates = do
         Just upsertSql ->
             handler sqlB upsertSql
   where
-    addVals l = map toPersistValue (toPersistFields record) ++ l ++ persistUniqueToValues uniqueKey
-    entDef = entityDef (Just record)
-    updatesText conn = first builderToText $ renderUpdates conn updates
-#if MIN_VERSION_persistent(2,11,0)
+    addVals l =
+        map toPersistValue (toPersistFields record) ++ l ++ case updates of
+            [] ->
+                []
+            _ ->
+                persistUniqueToValues uniqueKey
+    entDef =
+        entityDef (Just record)
+    updatesText conn =
+        first builderToText $ renderUpdates conn updates
     uniqueFields = persistUniqueToFieldNames uniqueKey
     handler sqlB upsertSql = do
         let (updateText, updateVals) =
                 updatesText sqlB
-            queryText =
+            queryTextUnmodified =
                 upsertSql entDef uniqueFields updateText
+            queryText =
+                case updates of
+                    [] ->
+                        let
+                            (okay, _bad) =
+                                Text.breakOn "DO UPDATE" queryTextUnmodified
+                            good =
+                                okay <> "DO NOTHING RETURNING ??"
+                        in
+                            good
+                    _ ->
+                        queryTextUnmodified
+
             queryVals =
                 addVals updateVals
         xs <- rawSql queryText queryVals
-        pure (head xs)
-#else
-    uDef = toUniqueDef uniqueKey
-    handler conn f = fmap head $ uncurry rawSql $
-        (***) (f entDef (uDef :| [])) addVals $ updatesText conn
-#endif
+        pure (listToMaybe xs)
+
+upsertBy
+    ::
+    ( MonadIO m
+    , PersistEntity record
+    , IsPersistBackend (PersistEntityBackend record)
+    , HasCallStack
+    )
+    => Unique record
+    -- ^ uniqueness constraint to find by
+    -> record
+    -- ^ new record to insert
+    -> NE.NonEmpty (SqlExpr (Entity record) -> SqlExpr Update)
+    -- ^ updates to perform if the record already exists
+    -> R.ReaderT SqlBackend m (Entity record)
+    -- ^ the record in the database after the operation
+upsertBy uniqueKey record updates = do
+    mrec <- upsertMaybeBy uniqueKey record (NE.toList updates)
+    case mrec of
+        Nothing ->
+            error "non-empty list of updates should have resulted in a row being returned"
+        Just rec ->
+            pure rec
 
 -- | Inserts into a table the results of a query similar to 'insertSelect' but allows
 -- to update values that violate a constraint during insertions.
@@ -252,10 +424,7 @@ upsertBy uniqueKey record updates = do
 -- Example of usage:
 --
 -- @
--- share [ mkPersist sqlSettings
---       , mkDeleteCascade sqlSettings
---       , mkMigrate "migrate"
---       ] [persistLowerCase|
+-- 'mkPersist' 'sqlSettings' ['persistLowerCase'|
 --   Bar
 --     num Int
 --     deriving Eq Show
@@ -265,17 +434,19 @@ upsertBy uniqueKey record updates = do
 --     deriving Eq Show
 -- |]
 --
--- insertSelectWithConflict
---   UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
---   (from $ \b ->
---     return $ Foo <# (b ^. BarNum)
---   )
---   (\current excluded ->
---     [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
---   )
+-- action = do
+--     'insertSelectWithConflict'
+--         UniqueFoo -- (UniqueFoo undefined) or (UniqueFoo anyNumber) would also work
+--         (do
+--             b <- from $ table \@Bar
+--             return $ Foo <# (b ^. BarNum)
+--         )
+--         (\\current excluded ->
+--             [FooNum =. (current ^. FooNum) +. (excluded ^. FooNum)]
+--         )
 -- @
 --
--- Inserts to table Foo all Bar.num values and in case of conflict SomeFooUnique,
+-- Inserts to table @Foo@ all @Bar.num@ values and in case of conflict @SomeFooUnique@,
 -- the conflicting value is updated to the current plus the excluded.
 --
 -- @since 3.1.3
@@ -484,11 +655,147 @@ forUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forUpdateOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
 
+-- | `FOR NO KEY UPDATE OF` syntax for postgres locking
+-- allows locking of specific tables with a no key update lock in a view or join
+--
+-- @since 3.5.13.0
+forNoKeyUpdateOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forNoKeyUpdateOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForNoKeyUpdate (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
 -- | `FOR SHARE OF` syntax for postgres locking
 -- allows locking of specific tables with a share lock in a view or join
 --
 -- @since 3.5.9.0
-
 forShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
 forShareOf lockableEntities onLockedBehavior =
   putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @FOR SHARE@ syntax for Postgres locking.
+--
+-- Example use:
+--
+-- @
+--  'locking' 'forShare'
+-- @
+--
+-- @since 3.6.0.0
+forShare :: LockingKind
+forShare = ForShare
+
+-- | `FOR KEY SHARE OF` syntax for postgres locking
+-- allows locking of specific tables with a key share lock in a view or join
+--
+-- @since 3.5.13.0
+forKeyShareOf :: LockableEntity a => a -> OnLockedBehavior -> SqlQuery ()
+forKeyShareOf lockableEntities onLockedBehavior =
+  putLocking $ PostgresLockingClauses [PostgresLockingKind PostgresForKeyShare (Just $ LockingOfClause lockableEntities) onLockedBehavior]
+
+-- | @ILIKE@ operator (case-insensitive @LIKE@).
+--
+-- @since 2.2.3
+ilike :: SqlString s => SqlExpr (Value s) -> SqlExpr (Value s) -> SqlExpr (Value Bool)
+ilike   = unsafeSqlBinOp    " ILIKE "
+infixr 2 `ilike`
+
+-- | @WITH@ @MATERIALIZED@ clause is used to introduce a
+-- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)
+-- with the MATERIALIZED keyword. The MATERIALIZED keyword is only supported in PostgreSQL >= version 12.
+-- In Esqueleto, CTEs should be used as a subquery memoization tactic. PostgreSQL treats a materialized CTE as an optimization fence.
+-- A materialized CTE is always fully calculated, and is not "inlined" with other table joins.
+-- Without the MATERIALIZED keyword, PostgreSQL >= 12 may "inline" the CTE as though it was any other join.
+-- You should always verify that using a materialized CTE will in fact improve your performance
+-- over a regular subquery.
+--
+-- @
+-- select $ do
+-- cte <- withMaterialized subQuery
+-- cteResult <- from cte
+-- where_ $ cteResult ...
+-- pure cteResult
+-- @
+--
+--
+-- For more information on materialized CTEs, see the PostgreSQL manual documentation on
+-- [Common Table Expression Materialization](https://www.postgresql.org/docs/14/queries-with.html#id-1.5.6.12.7).
+--
+-- @since 3.5.14.0
+withMaterialized :: ( ToAlias a
+                    , ToAliasReference a a'
+                    , SqlSelect a r
+                    ) => SqlQuery a -> SqlQuery (Ex.From a')
+withMaterialized query = do
+    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+    aliasedValue <- toAlias ret
+    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+    ident <- newIdentFor (DBName "cte")
+    let clause = CommonTableExpressionClause NormalCommonTableExpression (\_ _ -> "MATERIALIZED ") ident (\info -> toRawSql SELECT info aliasedQuery)
+    Q $ W.tell mempty{sdCteClause = [clause]}
+    ref <- toAliasReference ident aliasedValue
+    pure $ Ex.From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+
+-- | @WITH@ @NOT@ @MATERIALIZED@ clause is used to introduce a
+-- [Common Table Expression (CTE)](https://en.wikipedia.org/wiki/Hierarchical_and_recursive_queries_in_SQL#Common_table_expression)
+-- with the NOT MATERIALIZED keywords. These are only supported in PostgreSQL >=
+-- version 12. In Esqueleto, CTEs should be used as a subquery memoization
+-- tactic. PostgreSQL treats a materialized CTE as an optimization fence. A
+-- MATERIALIZED CTE is always fully calculated, and is not "inlined" with other
+-- table joins. Sometimes, this is undesirable, so postgres provides the NOT
+-- MATERIALIZED modifier to prevent this behavior, thus enabling it to possibly
+-- decide to treat the CTE as any other join.
+--
+-- Given the above, it is unlikely that this function will be useful, as a
+-- normal join should be used instead, but is provided for completeness.
+--
+-- @
+-- select $ do
+-- cte <- withNotMaterialized subQuery
+-- cteResult <- from cte
+-- where_ $ cteResult ...
+-- pure cteResult
+-- @
+--
+--
+-- For more information on materialized CTEs, see the PostgreSQL manual documentation on
+-- [Common Table Expression Materialization](https://www.postgresql.org/docs/14/queries-with.html#id-1.5.6.12.7).
+--
+-- @since 3.5.14.0
+withNotMaterialized :: ( ToAlias a
+                    , ToAliasReference a a'
+                    , SqlSelect a r
+                    ) => SqlQuery a -> SqlQuery (Ex.From a')
+withNotMaterialized query = do
+    (ret, sideData) <- Q $ W.censor (\_ -> mempty) $ W.listen $ unQ query
+    aliasedValue <- toAlias ret
+    let aliasedQuery = Q $ W.WriterT $ pure (aliasedValue, sideData)
+    ident <- newIdentFor (DBName "cte")
+    let clause = CommonTableExpressionClause NormalCommonTableExpression (\_ _ -> "NOT MATERIALIZED ") ident (\info -> toRawSql SELECT info aliasedQuery)
+    Q $ W.tell mempty{sdCteClause = [clause]}
+    ref <- toAliasReference ident aliasedValue
+    pure $ Ex.From $ pure (ref, (\_ info -> (useIdent info ident, mempty)))
+
+-- | Ascending order of this field or SqlExpression with nulls coming first.
+--
+-- @since 3.5.14.0
+ascNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsFirst = orderByExpr " ASC NULLS FIRST"
+
+-- | Ascending order of this field or SqlExpression with nulls coming last.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+ascNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+ascNullsLast = orderByExpr " ASC NULLS LAST"
+
+-- | Descending order of this field or SqlExpression with nulls coming first.
+-- Note that this is the same as normal ascending ordering in Postgres, but it has been included for completeness.
+--
+-- @since 3.5.14.0
+descNullsFirst :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsFirst = orderByExpr " DESC NULLS FIRST"
+
+-- | Descending order of this field or SqlExpression with nulls coming last.
+--
+-- @since 3.5.14.0
+descNullsLast :: PersistField a => SqlExpr (Value a) -> SqlExpr OrderBy
+descNullsLast = orderByExpr " DESC NULLS LAST"
