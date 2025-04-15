@@ -63,7 +63,7 @@ module Database.Esqueleto
     , where_, on, groupBy, orderBy, asc, desc, limit, offset
              , distinct, distinctOn, don, distinctOnOrderBy, having, locking
              , (^.), (?.)
-             , val, isNothing, just, just', nothing, joinV, joinV', withNonNull
+             , val, isNothing, isNothing_, just, just', nothing, joinV, joinV', withNonNull
              , countRows, count, countDistinct
              , not_, (==.), (>=.), (>.), (<=.), (<.), (!=.), (&&.), (||.)
              , between, (+.), (-.), (/.), (*.)
