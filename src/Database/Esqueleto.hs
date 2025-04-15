@@ -129,6 +129,7 @@ module Database.Esqueleto
     -- * The Normal Stuff
     , where_
     , groupBy
+    , groupBy_
     , orderBy
     , asc
     , desc
@@ -147,6 +148,7 @@ module Database.Esqueleto
 
     , val
     , isNothing
+    , isNothing_
     , just
     , nothing
     , joinV
