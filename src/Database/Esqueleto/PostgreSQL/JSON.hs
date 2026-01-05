@@ -394,7 +394,7 @@ infixl 6 ||., -., --., #-.
 -- will be inserted into the array; either on the left or right, depending
 -- on the position relative to the operator.
 --
--- When concatening an object with a scalar value, an exception is thrown.
+-- When concatenating an object with a scalar value, an exception is thrown.
 --
 -- @
 -- {"a": 3.14}                    || {"b": true}         == {"a": 3.14, "b": true}
@@ -497,7 +497,7 @@ infixl 6 ||., -., --., #-.
 --
 -- This is the same operator internally as `-.`, but the option to use a @text
 -- array@, instead of @text@ or @integer@ was only added in version 10.
--- That's why this function is seperate from `-.`
+-- That's why this function is separate from `-.`
 --
 -- NOTE: The following is equivalent:
 --

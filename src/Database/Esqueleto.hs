@@ -388,7 +388,7 @@ import Database.Esqueleto.Internal.PersistentImport
 
 -- $reexports
 --
--- We re-export many symbols from @persistent@ for convenince:
+-- We re-export many symbols from @persistent@ for convenience:
 --
 --  * \"Store functions\" from "Database.Persist".
 --

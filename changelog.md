@@ -97,7 +97,7 @@
 ========
 - @blujupiter32
     - [#379](https://github.com/bitemyapp/esqueleto/pull/379)
-        - Fix a bug where `not_ (a &&. b)` would be interpeted as `(not_ a) &&. b`
+        - Fix a bug where `not_ (a &&. b)` would be interpreted as `(not_ a) &&. b`
 - @RikvanToor
     - [#373](https://github.com/bitemyapp/esqueleto/pull/373), [#410](https://github.com/bitemyapp/esqueleto/pull/410)
         - Fix name clashes when using CTEs multiple times
@@ -288,7 +288,7 @@
 =======
 - @m4dc4p
   - [#291](https://github.com/bitemyapp/esqueleto/pull/291)
-         - Added `ToAlias` and `ToAliasReference` instaces to the `:&` type, mirroring
+         - Added `ToAlias` and `ToAliasReference` instances to the `:&` type, mirroring
          the tuple instances for the same classes. See [Issue #290](https://github.com/bitemyapp/esqueleto/issues/290)
          for discussion.
 - @NikitaRazmakhnin
@@ -300,7 +300,7 @@
 =======
 - @NikitaRazmakhnin
   - [#278](https://github.com/bitemyapp/esqueleto/pull/278)
-        - Fix generating of bad sql using nexted expressions with `distinctOnOrderBy`.
+        - Fix generating of bad sql using nested expressions with `distinctOnOrderBy`.
 
 3.5.2.1
 =======
@@ -398,7 +398,7 @@
   - [#215](https://github.com/bitemyapp/esqueleto/pull/215)
     - Added support for common table expressions (`with`, `withRecursive`)
     - Added support for lateral JOINs with updated example (Example #6)
-    - Deprecated `SelectQuery`, removing the neccessity to tag `SqlQuery` values
+    - Deprecated `SelectQuery`, removing the necessity to tag `SqlQuery` values
     - Deprecated use of data constructors for SQL set operations (replaced with functions)
     - Refactored module structure to fix haddock build (fixes build from `3.3.4.0`)
 

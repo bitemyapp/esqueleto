@@ -1551,7 +1551,7 @@ testPostgresqlLocking = do
 
             asserting noExceptions
 
--- Since lateral queries arent supported in Sqlite or older versions of mysql
+-- Since lateral queries aren't supported in Sqlite or older versions of mysql
 -- the test is in the Postgres module
 testLateralQuery :: SpecDb
 testLateralQuery = do
@@ -1645,12 +1645,12 @@ testValuesExpression = do
 testSubselectAliasingBehavior :: SpecDb
 testSubselectAliasingBehavior = do
     describe "Aliasing behavior" $ do
-        itDb "correctly realiases entities accross multiple subselects" $ do
+        itDb "correctly realiases entities across multiple subselects" $ do
             _ <- select $ do
                     Experimental.from $ Experimental.from $ Experimental.from $ table @Lord
             asserting noExceptions
 
-        itDb "doesnt erroneously repeat variable names when using subselect + union" $ do
+        itDb "doesn't erroneously repeat variable names when using subselect + union" $ do
             let lordQuery = do
                     l <- Experimental.from $ table @Lord
                     pure (l ^. LordCounty, l ^. LordDogs)

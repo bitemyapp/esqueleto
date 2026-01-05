@@ -866,7 +866,7 @@ testSelectWhere = describe "select where_" $ do
                 where_ ((p ^. PersonAge) `between` (just $ val 20, just $ val 40))
                 return p
             asserting $ ret `shouldBe` [ p1e ]
-        itDb "works for a proyected fields value" $ do
+        itDb "works for a protected fields value" $ do
             _ <- insert' p1 >> insert' p2 >> insert' p3
             ret <-
               select $
@@ -1150,7 +1150,7 @@ testAscRandom rand' = describe "random_" $
           return (p ^. PersonId :: SqlExpr (Value PersonId))
         -- There are 2^4 = 16 possible orderings.  The chance
         -- of 11 random samplings returning the same ordering
-        -- is 1/2^40, so this test should pass almost everytime.
+        -- is 1/2^40, so this test should pass almost every time.
         asserting $ S.size rets `shouldSatisfy` (>2)
 
 testSelectDistinct :: SpecDb
@@ -2320,7 +2320,7 @@ testExperimentalFrom = do
     itDb "can call functions on aliased values" $ do
         insert_ p1
         insert_ p3
-        -- Pretend this isnt all posts
+        -- Pretend this isn't all posts
         upperNames <- select $ do
           author <- Experimental.from $ Experimental.from $ Table @Person
           pure $ upper_ $ author ^. PersonName
@@ -2328,7 +2328,7 @@ testExperimentalFrom = do
         asserting $ upperNames `shouldMatchList` [ Value "JOHN"
                                               , Value "MIKE"
                                               ]
-    itDb "allows re-using (:&) joined tables" $ do
+    itDb "allows reusing (:&) joined tables" $ do
       let q = do
               result@(persons :& profiles :& posts) <-
                 Experimental.from $  Table @Person

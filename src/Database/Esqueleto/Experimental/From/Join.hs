@@ -29,7 +29,7 @@ module Database.Esqueleto.Experimental.From.Join
     , GetFirstTable(..)
     , getTable
     , getTableMaybe
-    -- Compatability for old syntax
+    -- Compatibility for old syntax
     , Lateral
     , NotLateral
     , IsLateral

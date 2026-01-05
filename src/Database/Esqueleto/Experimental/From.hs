@@ -101,7 +101,7 @@ table = From $ do
 instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToFrom (SqlQuery a) a where
     toFrom = selectQuery
 
--- | Select from a subquery, often used in conjuction with joins but can be
+-- | Select from a subquery, often used in conjunction with joins but can be
 -- used without any joins. Because @SqlQuery@ has a @ToFrom@ instance you probably
 -- dont need to use this function directly.
 --
