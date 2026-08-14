@@ -352,6 +352,35 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                           } -> addr1 == addr2 -- The keys should match.
                  _ -> False)
 
+    itDb "can union a record query with a CTE reference and alias new columns" $ do
+        -- The record's ToAlias instance allocates one ident per field; the
+        -- CTE-reference branch allocates none. The enclosing query must not
+        -- reuse the record's aliases (a variant of issue #299).
+        setup
+        records <- select $ do
+            recordCTE <- with myRecordQuery
+            result <- from $ do
+                record <- from $ myRecordQuery `union_` from recordCTE
+                pure (record, val (1 :: Int))
+            pure result
+        let sortedRecords = sortOn (\(MyRecord {myName}, _) -> myName) records
+        liftIO $ map (\(MyRecord {myName}, extra) -> (myName, extra)) sortedRecords
+          `shouldBe` [("Rebecca", Value 1), ("Some Guy", Value 1)]
+
+    itDb "can select a record alongside one of its own fields in a subquery" $ do
+        -- Field access on a record from an inner scope returns the stored
+        -- reference, so the select list contains the same reference twice;
+        -- each occurrence must get its own output alias.
+        setup
+        records <- select $ do
+            result <- from $ do
+                record <- from myRecordQuery
+                pure (record, getField @"myName" record)
+            pure result
+        let sortedRecords = sortOn (\(MyRecord {myName}, _) -> myName) records
+        liftIO $ map (\(MyRecord {myName}, dup) -> (myName, dup)) sortedRecords
+          `shouldBe` [("Rebecca", Value "Rebecca"), ("Some Guy", Value "Some Guy")]
+
     itDb "can select user-modified records" $ do
         setup
         records <- select myModifiedRecordQuery

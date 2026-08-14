@@ -1,3 +1,20 @@
+3.6.0.1
+=======
+- @parsonsmatt
+    - [#435](https://github.com/bitemyapp/esqueleto/pull/435)
+        - Fix two sources of duplicate column aliases, which made outer
+          references to the affected columns fail on PostgreSQL with
+          `42702 column reference is ambiguous` and silently select the wrong
+          column on SQLite: set operations whose branches allocate different
+          numbers of aliases (a variant of
+          [#299](https://github.com/bitemyapp/esqueleto/issues/299)), and
+          selecting the same inner-scope reference more than once in a single
+          select list.
+        - Support declaring a CTE (`with`) inside a set operation branch by
+          parenthesizing the branch; previously this rendered invalid SQL.
+          SQLite does not support parenthesized set operation operands, so
+          this remains PostgreSQL/MySQL-only.
+
 3.6.0.0
 =======
 - @parsonsmatt

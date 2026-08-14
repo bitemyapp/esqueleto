@@ -1663,6 +1663,30 @@ testSubselectAliasingBehavior = do
                     pure (str, val @Int 1)
             asserting noExceptions
 
+        itDb "keeps a CTE declared inside a set operation branch scoped to it" $ do
+            -- The branch declaring the CTE must render parenthesized (a bare
+            -- WITH after UNION is invalid SQL), and the CTE's idents must not
+            -- leak into the enclosing query.
+            let lordQuery = do
+                    l <- Experimental.from $ table @Lord
+                    pure (l ^. LordCounty)
+                lordCteQuery = do
+                    lordCte <- with lordQuery
+                    l <- Experimental.from lordCte
+                    pure l
+            _ <- select $
+                Experimental.from $ do
+                    (county, _) <- Experimental.from $ do
+                        c <- Experimental.from $ lordQuery `union_` lordCteQuery
+                        pure (c, val @Int 1)
+                    pure (county, val @Int 2)
+            -- The declaring branch may also be the first operand.
+            _ <- select $
+                Experimental.from $ do
+                    c <- Experimental.from $ lordCteQuery `union_` lordQuery
+                    pure (c, val @Int 1)
+            asserting noExceptions
+
 testPostgresqlNullsOrdering :: SpecDb
 testPostgresqlNullsOrdering = do
   describe "Postgresql NULLS orderings work" $ do
@@ -1812,12 +1836,12 @@ mkConnectionPool = do
         then
             runStderrLoggingT $
                 createPostgresqlPool
-                "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+                "host=127.0.0.1 port=5432 user=esqutest password=esqutest dbname=esqutest"
                 4
         else
             runNoLoggingT $
                 createPostgresqlPool
-                "host=localhost port=5432 user=esqutest password=esqutest dbname=esqutest"
+                "host=127.0.0.1 port=5432 user=esqutest password=esqutest dbname=esqutest"
                 4
     flip runSqlPool pool $ do
         migrateIt

@@ -56,8 +56,11 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
                   case p of
                     Parens -> Parens
                     Never ->
+                      -- A WITH clause inside a branch is only valid SQL
+                      -- when the branch is parenthesized.
                       if (sdLimitClause sideData) /= mempty
-                          || length (sdOrderByClause sideData) > 0 then
+                          || length (sdOrderByClause sideData) > 0
+                          || not (null (sdCteClause sideData)) then
                         Parens
                       else
                         Never
@@ -68,10 +71,18 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
 mkSetOperation :: (ToSqlSetOperation a a', ToSqlSetOperation b a')
                => TLB.Builder -> a -> b -> SqlSetOperation a'
 mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
-    state <- Q $ lift S.get
+    stateBefore <- Q $ lift S.get
     (leftValue, leftClause) <- unSqlSetOperation (toSqlSetOperation lhs) p
-    Q $ lift $ S.put state
+    stateAfterLeft <- Q $ lift S.get
+    -- Rewind so both branches allocate the same idents; they render as
+    -- sibling SELECTs, so identical idents cannot collide.
+    Q $ lift $ S.put stateBefore
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
+    -- Only 'leftValue' escapes, so resume from the left branch's state.
+    -- Resuming from the right branch's state would reuse idents appearing
+    -- in 'leftValue' whenever the right branch allocated fewer idents
+    -- (a variant of issue #299).
+    Q $ lift $ S.put stateAfterLeft
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
 -- | Overloaded @union_@ function to support use in both 'SqlSetOperation'

@@ -14,7 +14,12 @@ class ToAlias a where
 
 instance ToAlias (SqlExpr (Value a)) where
     toAlias e@(ERaw m f)
-      | Just _ <- sqlExprMetaAlias m = pure e
+      -- Idempotent for values aliased in the current scope, but a reference
+      -- into an inner scope needs a fresh alias: the same reference can
+      -- appear several times in one select list, and re-exporting the inner
+      -- column name each time would produce duplicate column names.
+      | Just _ <- sqlExprMetaAlias m
+      , not (sqlExprMetaIsReference m) = pure e
       | otherwise = do
             ident <- newIdentFor (DBName "v")
             pure $ ERaw noMeta{sqlExprMetaAlias = Just ident} f
