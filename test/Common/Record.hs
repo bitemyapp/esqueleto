@@ -352,6 +352,24 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                           } -> addr1 == addr2 -- The keys should match.
                  _ -> False)
 
+    itDb "can union a record query with a CTE reference and alias new columns" $ do
+        -- The record's ToAlias instance allocates one ident per field, while
+        -- selecting the record back out of a CTE allocates none (the fields
+        -- are already aliased). A set operation between the two shapes must
+        -- leave the ident state at the end of its left branch, or the
+        -- enclosing select list reuses the record's aliases for new columns
+        -- and references to them become ambiguous (a variant of issue #299).
+        setup
+        records <- select $ do
+            recordCTE <- with myRecordQuery
+            result <- from $ do
+                record <- from $ myRecordQuery `union_` from recordCTE
+                pure (record, val (1 :: Int))
+            pure result
+        let sortedRecords = sortOn (\(MyRecord {myName}, _) -> myName) records
+        liftIO $ map (\(MyRecord {myName}, extra) -> (myName, extra)) sortedRecords
+          `shouldBe` [("Rebecca", Value 1), ("Some Guy", Value 1)]
+
     itDb "can select user-modified records" $ do
         setup
         records <- select myModifiedRecordQuery

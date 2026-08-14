@@ -68,10 +68,21 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
 mkSetOperation :: (ToSqlSetOperation a a', ToSqlSetOperation b a')
                => TLB.Builder -> a -> b -> SqlSetOperation a'
 mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
-    state <- Q $ lift S.get
+    stateBefore <- Q $ lift S.get
     (leftValue, leftClause) <- unSqlSetOperation (toSqlSetOperation lhs) p
-    Q $ lift $ S.put state
+    stateAfterLeft <- Q $ lift S.get
+    -- Rewind the ident state so both branches allocate the same idents.
+    -- The branches render as sibling SELECTs, so identical idents in them
+    -- cannot collide with each other.
+    Q $ lift $ S.put stateBefore
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
+    -- Only 'leftValue' escapes this function, so the enclosing query must
+    -- continue from the left branch's ident state. Continuing from the right
+    -- branch's state instead would reuse idents that appear in 'leftValue'
+    -- whenever the right branch allocates fewer idents than the left one
+    -- (e.g. it selects only already-aliased references to a CTE), producing
+    -- ambiguous column references (a variant of issue #299).
+    Q $ lift $ S.put stateAfterLeft
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
 -- | Overloaded @union_@ function to support use in both 'SqlSetOperation'
