@@ -2,18 +2,18 @@
 =======
 - @parsonsmatt
     - [#435](https://github.com/bitemyapp/esqueleto/pull/435)
-        - Fix a bug where a set operation (`union_`, `unionAll_`, `except_`,
-          `intersect_`) whose right-hand branch allocates fewer column aliases
-          than its left-hand branch (for example, a branch that only selects
-          already-aliased references to a CTE) left the identifier supply
-          behind the aliases already used by the left-hand branch. Columns
-          aliased later in the enclosing query could then reuse those aliases,
-          producing duplicate column names in a select list. Queries
-          referencing such a column failed on PostgreSQL with
-          `42702 column reference is ambiguous`, and silently selected the
-          wrong column on SQLite. Records from `deriveEsqueletoRecord` were
-          especially prone to this, since they allocate one alias per field.
-          A variant of [#299](https://github.com/bitemyapp/esqueleto/issues/299).
+        - Fix two sources of duplicate column aliases, which made outer
+          references to the affected columns fail on PostgreSQL with
+          `42702 column reference is ambiguous` and silently select the wrong
+          column on SQLite: set operations whose branches allocate different
+          numbers of aliases (a variant of
+          [#299](https://github.com/bitemyapp/esqueleto/issues/299)), and
+          selecting the same inner-scope reference more than once in a single
+          select list.
+        - Support declaring a CTE (`with`) inside a set operation branch by
+          parenthesizing the branch; previously this rendered invalid SQL.
+          SQLite does not support parenthesized set operation operands, so
+          this remains PostgreSQL/MySQL-only.
 
 3.6.0.0
 =======

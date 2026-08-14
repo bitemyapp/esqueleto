@@ -56,8 +56,12 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
                   case p of
                     Parens -> Parens
                     Never ->
+                      -- A CTE declared inside a branch renders as a WITH
+                      -- clause at the start of that branch, which is only
+                      -- valid SQL when the branch is parenthesized.
                       if (sdLimitClause sideData) /= mempty
-                          || length (sdOrderByClause sideData) > 0 then
+                          || length (sdOrderByClause sideData) > 0
+                          || not (null (sdCteClause sideData)) then
                         Parens
                       else
                         Never
