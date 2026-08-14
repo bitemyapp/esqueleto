@@ -1680,6 +1680,11 @@ testSubselectAliasingBehavior = do
                         c <- Experimental.from $ lordQuery `union_` lordCteQuery
                         pure (c, val @Int 1)
                     pure (county, val @Int 2)
+            -- The declaring branch may also be the first operand.
+            _ <- select $
+                Experimental.from $ do
+                    c <- Experimental.from $ lordCteQuery `union_` lordQuery
+                    pure (c, val @Int 1)
             asserting noExceptions
 
 testPostgresqlNullsOrdering :: SpecDb

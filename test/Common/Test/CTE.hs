@@ -8,6 +8,32 @@ import Database.Persist.TH
 
 testCTE :: SpecDb
 testCTE = describe "CTE" $ do
+    itDb "aliases new columns after a union whose left branch is a CTE reference" $ do
+        -- The mirror image of the test above: here the left branch allocates
+        -- fewer idents than the right one. The right branch's idents are
+        -- scoped to its own SELECT, so the enclosing query may reuse them
+        -- for later aliases without ambiguity.
+        let q :: SqlQuery (SqlExpr (Value Int), SqlExpr (Value Int), SqlExpr (Value Int))
+            q = do
+                bCte <- with $ do
+                    b <- from $ table @B
+                    pure (b ^. BK, b ^. BV)
+                (k, v, extra) <- from $ do
+                    (k, v) <- from $
+                        from bCte
+                        `union_`
+                        (do
+                            b <- from $ table @B
+                            pure (b ^. BK, b ^. BV))
+                    pure (k, v, val (42 :: Int))
+                pure (k, v, extra)
+        insert_ $ B { bK = 1, bV = 3 }
+        ret <- select q
+        asserting $ do
+            ret `shouldMatchList`
+                [ (Value 1, Value 3, Value 42)
+                ]
+
     itDb "aliases a repeated reference in a subquery select list" $ do
         -- A reference into an inner scope can appear twice in one select
         -- list; each occurrence must get its own output alias or outer

@@ -370,6 +370,21 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
         liftIO $ map (\(MyRecord {myName}, extra) -> (myName, extra)) sortedRecords
           `shouldBe` [("Rebecca", Value 1), ("Some Guy", Value 1)]
 
+    itDb "can select a record alongside one of its own fields in a subquery" $ do
+        -- Field access on a record from an inner scope returns the stored
+        -- reference, so the select list contains the same reference twice
+        -- (once inside the record, once standalone). Each occurrence must get
+        -- its own output alias or outer references are ambiguous.
+        setup
+        records <- select $ do
+            result <- from $ do
+                record <- from myRecordQuery
+                pure (record, getField @"myName" record)
+            pure result
+        let sortedRecords = sortOn (\(MyRecord {myName}, _) -> myName) records
+        liftIO $ map (\(MyRecord {myName}, dup) -> (myName, dup)) sortedRecords
+          `shouldBe` [("Rebecca", Value "Rebecca"), ("Some Guy", Value "Some Guy")]
+
     itDb "can select user-modified records" $ do
         setup
         records <- select myModifiedRecordQuery
