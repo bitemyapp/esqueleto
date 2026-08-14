@@ -1687,6 +1687,48 @@ testSubselectAliasingBehavior = do
                     pure (c, val @Int 1)
             asserting noExceptions
 
+        itDb "allocates fresh idents for a lateral join after a right-heavy union" $ do
+            -- The left branch selects only references to a CTE, so the right
+            -- branch consumes more idents than the left one. Idents allocated
+            -- after the union (here, inside a correlated lateral subquery)
+            -- must not collide with either branch's.
+            lid <- insert l1
+            let lordQuery = do
+                    l <- Experimental.from $ table @Lord
+                    pure (l ^. LordId, l ^. LordDogs)
+            result <- select $ do
+                lordCte <- with lordQuery
+                (lordId, dogs) :& dogs2 <-
+                    Experimental.from $
+                        (Experimental.from lordCte `union_` lordQuery)
+                        `CrossJoin` \(k, _) -> do
+                            l2 <- Experimental.from $ table @Lord
+                            where_ $ l2 ^. LordId ==. k
+                            pure (l2 ^. LordDogs)
+                pure (lordId, dogs, dogs2)
+            asserting $ result `shouldMatchList`
+                [ (Value lid, Value (Just 36), Value (Just 36)) ]
+
+        itDb "separates a branch CTE from CTEs declared after the union" $ do
+            -- The right branch declares its own CTE; a CTE introduced in the
+            -- enclosing query afterwards must get a distinct ident and
+            -- resolve independently of the branch-scoped one.
+            lid <- insert l1
+            let lordQuery = do
+                    l <- Experimental.from $ table @Lord
+                    pure (l ^. LordId, l ^. LordDogs)
+                branchCteQuery = do
+                    c <- with lordQuery
+                    Experimental.from c
+            result <- select $ do
+                (k, d) <- Experimental.from $ lordQuery `union_` branchCteQuery
+                outerCte <- with lordQuery
+                (k2, d2) <- Experimental.from outerCte
+                where_ $ k2 ==. k
+                pure (k, d, d2)
+            asserting $ result `shouldMatchList`
+                [ (Value lid, Value (Just 36), Value (Just 36)) ]
+
 testPostgresqlNullsOrdering :: SpecDb
 testPostgresqlNullsOrdering = do
   describe "Postgresql NULLS orderings work" $ do
