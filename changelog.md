@@ -1,3 +1,12 @@
+3.6.0.2
+=======
+- @parsonsmatt
+    - [#436](https://github.com/bitemyapp/esqueleto/pull/436)
+        - After a set operation, resume ident allocation from the union of
+          both branches' ident states (previously the left branch's state
+          only), so the enclosing query can never reuse an ident either
+          branch consumed.
+
 3.6.0.1
 =======
 - @parsonsmatt

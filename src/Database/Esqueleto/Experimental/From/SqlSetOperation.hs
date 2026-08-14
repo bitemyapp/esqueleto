@@ -78,11 +78,13 @@ mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
     -- sibling SELECTs, so identical idents cannot collide.
     Q $ lift $ S.put stateBefore
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
-    -- Only 'leftValue' escapes, so resume from the left branch's state.
-    -- Resuming from the right branch's state would reuse idents appearing
-    -- in 'leftValue' whenever the right branch allocated fewer idents
-    -- (a variant of issue #299).
-    Q $ lift $ S.put stateAfterLeft
+    stateAfterRight <- Q $ lift S.get
+    -- Resume from the union of both branches' states, so the enclosing
+    -- query can never reuse an ident either branch consumed: the left
+    -- branch's idents escape in 'leftValue' (a variant of issue #299),
+    -- and the right branch's, while branch-internal, shouldn't be
+    -- handed out again either.
+    Q $ lift $ S.put (IdentState (inUse stateAfterLeft <> inUse stateAfterRight))
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
 -- | Overloaded @union_@ function to support use in both 'SqlSetOperation'
