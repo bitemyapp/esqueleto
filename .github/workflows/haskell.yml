@@ -31,10 +31,13 @@ jobs:
           --health-timeout=5s
           --health-retries=3
     strategy:
+      # Report every leg: one incompatible GHC shouldn't hide the others.
+      fail-fast: false
       matrix:
         cabal: ["3.10.2.1"]
-        ghc: 
-          - "8.6"
+        ghc:
+          # 8.6 dropped: current persistent-era build plans no longer compile
+          # on it (e.g. replace-megaparsec needs a newer megaparsec).
           - "8.8"
           - "8.10"
           - "9.0"
