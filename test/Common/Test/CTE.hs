@@ -9,10 +9,8 @@ import Database.Persist.TH
 testCTE :: SpecDb
 testCTE = describe "CTE" $ do
     itDb "aliases new columns after a union whose left branch is a CTE reference" $ do
-        -- The mirror image of the test above: here the left branch allocates
-        -- fewer idents than the right one. The right branch's idents are
-        -- scoped to its own SELECT, so the enclosing query may reuse them
-        -- for later aliases without ambiguity.
+        -- Mirror image of the test below: the left branch allocates fewer
+        -- idents than the right one.
         let q :: SqlQuery (SqlExpr (Value Int), SqlExpr (Value Int), SqlExpr (Value Int))
             q = do
                 bCte <- with $ do
@@ -35,9 +33,8 @@ testCTE = describe "CTE" $ do
                 ]
 
     itDb "aliases a repeated reference in a subquery select list" $ do
-        -- A reference into an inner scope can appear twice in one select
-        -- list; each occurrence must get its own output alias or outer
-        -- references to the duplicated column name are ambiguous.
+        -- Each occurrence needs its own output alias, or outer references
+        -- to the duplicated column name are ambiguous.
         let q :: SqlQuery (SqlExpr (Value Int), SqlExpr (Value Int))
             q = do
                 (a, b) <- from $ do
@@ -131,11 +128,9 @@ testCTE = describe "CTE" $ do
                 ]
 
     itDb "aliases new columns after a union with a CTE reference" $ do
-        -- A union whose right branch selects already-aliased CTE references
-        -- allocates fewer idents than its left branch. The enclosing query
-        -- must not reuse the left branch's idents for later aliases, or the
-        -- select list ends up with duplicate column names and references to
-        -- them are ambiguous (a variant of issue #299).
+        -- The right branch allocates fewer idents than the left one; the
+        -- enclosing query must not reuse the left branch's idents for later
+        -- aliases (a variant of issue #299).
         let q :: SqlQuery (SqlExpr (Value Int), SqlExpr (Value Int), SqlExpr (Value Int))
             q = do
                 bCte <- with $ do

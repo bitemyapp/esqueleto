@@ -353,12 +353,9 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
                  _ -> False)
 
     itDb "can union a record query with a CTE reference and alias new columns" $ do
-        -- The record's ToAlias instance allocates one ident per field, while
-        -- selecting the record back out of a CTE allocates none (the fields
-        -- are already aliased). A set operation between the two shapes must
-        -- leave the ident state at the end of its left branch, or the
-        -- enclosing select list reuses the record's aliases for new columns
-        -- and references to them become ambiguous (a variant of issue #299).
+        -- The record's ToAlias instance allocates one ident per field; the
+        -- CTE-reference branch allocates none. The enclosing query must not
+        -- reuse the record's aliases (a variant of issue #299).
         setup
         records <- select $ do
             recordCTE <- with myRecordQuery
@@ -372,9 +369,8 @@ testDeriveEsqueletoRecord = describe "deriveEsqueletoRecord" $ do
 
     itDb "can select a record alongside one of its own fields in a subquery" $ do
         -- Field access on a record from an inner scope returns the stored
-        -- reference, so the select list contains the same reference twice
-        -- (once inside the record, once standalone). Each occurrence must get
-        -- its own output alias or outer references are ambiguous.
+        -- reference, so the select list contains the same reference twice;
+        -- each occurrence must get its own output alias.
         setup
         records <- select $ do
             result <- from $ do

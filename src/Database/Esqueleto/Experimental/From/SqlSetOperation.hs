@@ -56,9 +56,8 @@ instance (SqlSelect a r, ToAlias a, ToAliasReference a) => ToSqlSetOperation (Sq
                   case p of
                     Parens -> Parens
                     Never ->
-                      -- A CTE declared inside a branch renders as a WITH
-                      -- clause at the start of that branch, which is only
-                      -- valid SQL when the branch is parenthesized.
+                      -- A WITH clause inside a branch is only valid SQL
+                      -- when the branch is parenthesized.
                       if (sdLimitClause sideData) /= mempty
                           || length (sdOrderByClause sideData) > 0
                           || not (null (sdCteClause sideData)) then
@@ -75,17 +74,14 @@ mkSetOperation operation lhs rhs = SqlSetOperation $ \p -> do
     stateBefore <- Q $ lift S.get
     (leftValue, leftClause) <- unSqlSetOperation (toSqlSetOperation lhs) p
     stateAfterLeft <- Q $ lift S.get
-    -- Rewind the ident state so both branches allocate the same idents.
-    -- The branches render as sibling SELECTs, so identical idents in them
-    -- cannot collide with each other.
+    -- Rewind so both branches allocate the same idents; they render as
+    -- sibling SELECTs, so identical idents cannot collide.
     Q $ lift $ S.put stateBefore
     (_, rightClause) <- unSqlSetOperation (toSqlSetOperation rhs) p
-    -- Only 'leftValue' escapes this function, so the enclosing query must
-    -- continue from the left branch's ident state. Continuing from the right
-    -- branch's state instead would reuse idents that appear in 'leftValue'
-    -- whenever the right branch allocates fewer idents than the left one
-    -- (e.g. it selects only already-aliased references to a CTE), producing
-    -- ambiguous column references (a variant of issue #299).
+    -- Only 'leftValue' escapes, so resume from the left branch's state.
+    -- Resuming from the right branch's state would reuse idents appearing
+    -- in 'leftValue' whenever the right branch allocated fewer idents
+    -- (a variant of issue #299).
     Q $ lift $ S.put stateAfterLeft
     pure (leftValue, \info -> leftClause info <> (operation, mempty) <> rightClause info)
 
