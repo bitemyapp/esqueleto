@@ -1,3 +1,10 @@
+3.6.0.3
+=======
+- @parsonsmatt
+    - [#438](https://github.com/bitemyapp/esqueleto/pull/438)
+        - Relax the upper bound on `time` to `< 1.17`, allowing
+          `time-1.14`, `time-1.15`, and `time-1.16`.
+
 3.6.0.2
 =======
 - @parsonsmatt
