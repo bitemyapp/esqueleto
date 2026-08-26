@@ -1,3 +1,12 @@
+3.6.1.0
+=======
+- @natec425
+    - [#439](https://github.com/bitemyapp/esqueleto/pull/439)
+        - Shorten generated SQL by deriving table aliases from the initials
+          of each underscore-separated word in the table name (e.g.
+          `blog_post` becomes `bp`), instead of repeating the full table
+          name.
+
 3.6.0.3
 =======
 - @parsonsmatt

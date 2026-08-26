@@ -84,7 +84,7 @@ instance PersistEntity ent => ToFrom (Table ent) (SqlExpr (Entity ent)) where
 table :: forall ent. PersistEntity ent => From (SqlExpr (Entity ent))
 table = From $ do
     let ed = entityDef (Proxy @ent)
-    ident <- newIdentFor (coerce $ getEntityDBName ed)
+    ident <- newIdentFor (shortTableAlias (coerce $ getEntityDBName ed))
     let entity = unsafeSqlEntity ident
     pure $ ( entity, const $ base ident ed )
       where

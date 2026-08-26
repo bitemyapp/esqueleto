@@ -1725,9 +1725,9 @@ testRenderSql = do
           Text.filter (\c -> c `notElem` ['`', '"']) queryText
             `shouldBe`
               Text.unlines
-                [ "SELECT Person.name, Person.age"
-                , "FROM Person"
-                , "WHERE Person.name = ?"
+                [ "SELECT P.name, P.age"
+                , "FROM Person AS P"
+                , "WHERE P.name = ?"
                 ]
           queryVals
             `shouldBe`

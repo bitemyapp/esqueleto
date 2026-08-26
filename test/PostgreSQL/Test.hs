@@ -275,8 +275,8 @@ testArrayAggWith = do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeAll (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
-        "SELECT array_agg(\"Person\".\"age\")\n\
-        \FROM \"Person\"\n"
+        "SELECT array_agg(\"P\".\"age\")\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` []
 
     itDb "works on an example" $  do
@@ -292,8 +292,8 @@ testArrayAggWith = do
       (query, args) <- showQuery ES.SELECT $ from $ \p ->
             return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge) [])
       liftIO $ query `shouldBe`
-        "SELECT array_agg(DISTINCT \"Person\".\"age\")\n\
-        \FROM \"Person\"\n"
+        "SELECT array_agg(DISTINCT \"P\".\"age\")\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` []
 
     itDb "works on an example" $  do
@@ -312,9 +312,9 @@ testArrayAggWith = do
                     , desc $ p ^. PersonFavNum
                     ])
       liftIO $ query `shouldBe`
-        "SELECT array_agg(\"Person\".\"age\" \
-          \ORDER BY \"Person\".\"name\" ASC, \"Person\".\"favNum\" DESC)\n\
-        \FROM \"Person\"\n"
+        "SELECT array_agg(\"P\".\"age\" \
+          \ORDER BY \"P\".\"name\" ASC, \"P\".\"favNum\" DESC)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` []
 
     itDb "works on an example" $  do
@@ -331,9 +331,9 @@ testArrayAggWith = do
           return (EP.arrayAggWith EP.AggModeDistinct (p ^. PersonAge)
                    [asc $ p ^. PersonAge])
       liftIO $ query `shouldBe`
-        "SELECT array_agg(DISTINCT \"Person\".\"age\" \
-          \ORDER BY \"Person\".\"age\" ASC)\n\
-        \FROM \"Person\"\n"
+        "SELECT array_agg(DISTINCT \"P\".\"age\" \
+          \ORDER BY \"P\".\"age\" ASC)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` []
 
     itDb "works on an example" $  do
@@ -357,8 +357,8 @@ testStringAggWith = do
             return (EP.stringAggWith EP.AggModeAll (p ^. PersonName)
                      (val " ") [])
       liftIO $ query `shouldBe`
-        "SELECT string_agg(\"Person\".\"name\", ?)\n\
-        \FROM \"Person\"\n"
+        "SELECT string_agg(\"P\".\"name\", ?)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
     itDb "works on an example" $  do
@@ -381,8 +381,8 @@ testStringAggWith = do
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") []
       liftIO $ query `shouldBe`
-        "SELECT string_agg(DISTINCT \"Person\".\"name\", ?)\n\
-        \FROM \"Person\"\n"
+        "SELECT string_agg(DISTINCT \"P\".\"name\", ?)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
     itDb "works on an example" $  do
@@ -403,9 +403,9 @@ testStringAggWith = do
                     , desc $ p ^. PersonFavNum
                     ])
       liftIO $ query `shouldBe`
-        "SELECT string_agg(\"Person\".\"name\", ? \
-          \ORDER BY \"Person\".\"name\" ASC, \"Person\".\"favNum\" DESC)\n\
-        \FROM \"Person\"\n"
+        "SELECT string_agg(\"P\".\"name\", ? \
+          \ORDER BY \"P\".\"name\" ASC, \"P\".\"favNum\" DESC)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
     itDb "works on an example" $  do
@@ -424,9 +424,9 @@ testStringAggWith = do
             return $ EP.stringAggWith EP.AggModeDistinct (p ^. PersonName)
                      (val " ") [desc $ p ^. PersonName]
       liftIO $ query `shouldBe`
-        "SELECT string_agg(DISTINCT \"Person\".\"name\", ? \
-        \ORDER BY \"Person\".\"name\" DESC)\n\
-        \FROM \"Person\"\n"
+        "SELECT string_agg(DISTINCT \"P\".\"name\", ? \
+        \ORDER BY \"P\".\"name\" DESC)\n\
+        \FROM \"Person\" AS \"P\"\n"
       liftIO $ args `shouldBe` [PersistText " "]
 
     itDb "works on an example" $  do
@@ -615,7 +615,7 @@ testArrowJSONB =
         itDb "creates sane SQL" $
             createSaneSQL @JSONValue
                 (jsonbVal (object ["a" .= True]) ->. "a")
-                "SELECT (? -> ?)\nFROM \"Json\"\n"
+                "SELECT (? -> ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped "{\"a\":true}"
                 , PersistText "a"
                 ]
@@ -623,7 +623,7 @@ testArrowJSONB =
             let obj = object ["a" .= [1 :: Int,2,3]]
             createSaneSQL @JSONValue
               (jsonbVal obj ->. "a" ->. 1)
-              "SELECT ((? -> ?) -> ?)\nFROM \"Json\"\n"
+              "SELECT ((? -> ?) -> ?)\nFROM \"Json\" AS \"J\"\n"
               [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
               , PersistText "a"
               , PersistInt64 1 ]
@@ -642,14 +642,14 @@ testArrowText =
         itDb "creates sane SQL" $
           createSaneSQL
             (jsonbVal (object ["a" .= True]) ->>. "a")
-            "SELECT (? ->> ?)\nFROM \"Json\"\n"
+            "SELECT (? ->> ?)\nFROM \"Json\" AS \"J\"\n"
             [ PersistLiteralEscaped "{\"a\":true}"
             , PersistText "a" ]
         itDb "creates sane SQL (chained)" $ do
           let obj = object ["a" .= [1 :: Int,2,3]]
           createSaneSQL
             (jsonbVal obj ->. "a" ->>. 1)
-            "SELECT ((? -> ?) ->> ?)\nFROM \"Json\"\n"
+            "SELECT ((? -> ?) ->> ?)\nFROM \"Json\" AS \"J\"\n"
             [ PersistLiteralEscaped "{\"a\":[1,2,3]}"
             , PersistText "a"
             , PersistInt64 1 ]
@@ -668,14 +668,14 @@ testHashArrowJSONB =
       let list = ["a","b","c"]
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= True]) #>. list)
-        "SELECT (? #> ?)\nFROM \"Json\"\n"
+        "SELECT (? #> ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
     itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj #>. ["a","1"] #>. ["b"])
-        "SELECT ((? #> ?) #> ?)\nFROM \"Json\"\n"
+        "SELECT ((? #> ?) #> ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
@@ -694,14 +694,14 @@ testHashArrowText =
       let list = ["a","b","c"]
       createSaneSQL
         (jsonbVal (object ["a" .= True]) #>>. list)
-        "SELECT (? #>> ?)\nFROM \"Json\"\n"
+        "SELECT (? #>> ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped "{\"a\":true}"
         , persistTextArray list ]
     itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL
         (jsonbVal obj #>. ["a","1"] #>>. ["b"])
-        "SELECT ((? #> ?) #>> ?)\nFROM \"Json\"\n"
+        "SELECT ((? #> ?) #>> ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
         , persistTextArray ["a","1"]
         , persistTextArray ["b"] ]
@@ -730,7 +730,7 @@ testInclusion = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj  @>. jsonbVal (object ["a" .= False]))
-                "SELECT (? @> ?)\nFROM \"Json\"\n"
+                "SELECT (? @> ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , PersistLiteralEscaped "{\"a\":false}"
                 ]
@@ -739,7 +739,7 @@ testInclusion = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj ->. "a" @>. jsonbVal (object ["b" .= True]))
-                "SELECT ((? -> ?) @> ?)\nFROM \"Json\"\n"
+                "SELECT ((? -> ?) @> ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , PersistText "a"
                 , PersistLiteralEscaped "{\"b\":true}"
@@ -757,7 +757,7 @@ testInclusion = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal (object ["a" .= False]) <@. jsonbVal obj )
-                "SELECT (? <@ ?)\nFROM \"Json\"\n"
+                "SELECT (? <@ ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped "{\"a\":false}"
                 , PersistLiteralEscaped encoded
                 ]
@@ -767,7 +767,7 @@ testInclusion = do
                 encoded = BSL.toStrict $ encode obj'
             createSaneSQL
                 (jsonbVal obj ->. "a" <@. jsonbVal obj')
-                "SELECT ((? -> ?) <@ ?)\nFROM \"Json\"\n"
+                "SELECT ((? -> ?) <@ ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped "{\"a\":[{\"b\":true}]}"
                 , PersistText "a"
                 , PersistLiteralEscaped encoded
@@ -788,7 +788,7 @@ testQMark = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
               (jsonbVal obj JSON.?. "a")
-              "SELECT (? ?? ?)\nFROM \"Json\"\n"
+              "SELECT (? ?? ?)\nFROM \"Json\" AS \"J\"\n"
               [ PersistLiteralEscaped encoded
               , PersistText "a"
               ]
@@ -797,7 +797,7 @@ testQMark = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj #>. ["a","0"] JSON.?. "b")
-                "SELECT ((? #> ?) ?? ?)\nFROM \"Json\"\n"
+                "SELECT ((? #> ?) ?? ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","0"]
                 , PersistText "b"
@@ -818,7 +818,7 @@ testQMarkAny = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj  ?|. ["a","c"])
-                "SELECT (? ??| ?)\nFROM \"Json\"\n"
+                "SELECT (? ??| ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","c"]
                 ]
@@ -827,7 +827,7 @@ testQMarkAny = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj #>. ["a","0"] ?|. ["b","c"])
-                "SELECT ((? #> ?) ??| ?)\nFROM \"Json\"\n"
+                "SELECT ((? #> ?) ??| ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","0"]
                 , persistTextArray ["b","c"]
@@ -850,7 +850,7 @@ testQMarkAll = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj  ?&. ["a","c"])
-                "SELECT (? ??& ?)\nFROM \"Json\"\n"
+                "SELECT (? ??& ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","c"]
                 ]
@@ -859,7 +859,7 @@ testQMarkAll = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL
                 (jsonbVal obj #>. ["a","0"] ?&. ["b","c"])
-                "SELECT ((? #> ?) ??& ?)\nFROM \"Json\"\n"
+                "SELECT ((? #> ?) ??& ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","0"]
                 , persistTextArray ["b","c"]
@@ -891,7 +891,7 @@ testConcatenationOperator = do
             createSaneSQL @JSONValue
                 (jsonbVal objAB
                     JSON.||. jsonbVal objC)
-                "SELECT (? || ?)\nFROM \"Json\"\n"
+                "SELECT (? || ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped $ BSL.toStrict $ encode objAB
                 , PersistLiteralEscaped $ BSL.toStrict $ encode objC
                 ]
@@ -900,7 +900,7 @@ testConcatenationOperator = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj ->. "a" JSON.||. jsonbVal (toJSON [Null]))
-                "SELECT ((? -> ?) || ?)\nFROM \"Json\"\n"
+                "SELECT ((? -> ?) || ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , PersistText "a"
                 , PersistLiteralEscaped "[null]"
@@ -932,7 +932,7 @@ testMinusOperator =
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj JSON.-. "a")
-                "SELECT (? - ?)\nFROM \"Json\"\n"
+                "SELECT (? - ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , PersistText "a"
                 ]
@@ -941,7 +941,7 @@ testMinusOperator =
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj ->. "a" JSON.-. 0)
-                "SELECT ((? -> ?) - ?)\nFROM \"Json\"\n"
+                "SELECT ((? -> ?) - ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , PersistText "a"
                 , PersistInt64 0
@@ -977,7 +977,7 @@ testMinusOperatorV10 = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
                 (jsonbVal obj  --. ["a","b"])
-                "SELECT (? - ?)\nFROM \"Json\"\n"
+                "SELECT (? - ?)\nFROM \"Json\" AS \"J\"\n"
                 [ PersistLiteralEscaped encoded
                 , persistTextArray ["a","b"]
                 ]
@@ -986,7 +986,7 @@ testMinusOperatorV10 = do
                 encoded = BSL.toStrict $ encode obj
             createSaneSQL @JSONValue
               (jsonbVal obj #>. ["a","0"] --. ["b"])
-              "SELECT ((? #> ?) - ?)\nFROM \"Json\"\n"
+              "SELECT ((? #> ?) - ?)\nFROM \"Json\" AS \"J\"\n"
               [ PersistLiteralEscaped encoded
               , persistTextArray ["a","0"]
               , persistTextArray ["b"]
@@ -1019,14 +1019,14 @@ testHashMinusOperator =
     itDb "creates sane SQL" $
       createSaneSQL @JSONValue
         (jsonbVal (object ["a" .= False, "b" .= True]) #-. ["a"])
-        "SELECT (? #- ?)\nFROM \"Json\"\n"
+        "SELECT (? #- ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped (BSL.toStrict $ encode $ object ["a" .= False, "b" .= True])
         , persistTextArray ["a"] ]
     itDb "creates sane SQL (chained)" $ do
       let obj = object ["a" .= [object ["b" .= True]]]
       createSaneSQL @JSONValue
         (jsonbVal obj ->. "a" #-. ["0","b"])
-        "SELECT ((? -> ?) #- ?)\nFROM \"Json\"\n"
+        "SELECT ((? -> ?) #- ?)\nFROM \"Json\" AS \"J\"\n"
         [ PersistLiteralEscaped (BSL.toStrict $ encode obj)
         , PersistText "a"
         , persistTextArray ["0","b"] ]
@@ -1302,8 +1302,8 @@ testCommonTableExpressions = do
                   pure lords
 
           asserting $ sql `shouldBe` T.unlines
-            [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
-            , "FROM \"Lord\""
+            [ "WITH \"cte\" AS NOT MATERIALIZED (SELECT \"L\".\"county\" AS \"v_county\", \"L\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\" AS \"L\""
             , " LIMIT 10"
             , ")"
             , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
@@ -1326,8 +1326,8 @@ testCommonTableExpressions = do
                   pure lords
 
           asserting $ sql `shouldBe` T.unlines
-            [ "WITH \"cte\" AS MATERIALIZED (SELECT \"Lord\".\"county\" AS \"v_county\", \"Lord\".\"dogs\" AS \"v_dogs\""
-            , "FROM \"Lord\""
+            [ "WITH \"cte\" AS MATERIALIZED (SELECT \"L\".\"county\" AS \"v_county\", \"L\".\"dogs\" AS \"v_dogs\""
+            , "FROM \"Lord\" AS \"L\""
             , " LIMIT 10"
             , ")"
             , "SELECT \"cte\".\"v_county\", \"cte\".\"v_dogs\""
@@ -1369,12 +1369,12 @@ testPostgresqlLocking = do
                     TL.unlines
                     [
                       "SELECT 1"
-                    ,"FROM \"Person\""
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR NO KEY UPDATE OF \"Person\" SKIP LOCKED"
-                    ,"FOR SHARE OF \"Person\" SKIP LOCKED"
-                    ,"FOR KEY SHARE OF \"Person\" SKIP LOCKED"
+                    ,"FROM \"Person\" AS \"P\""
+                    ,"FOR UPDATE OF \"P\" SKIP LOCKED"
+                    ,"FOR UPDATE OF \"P\" SKIP LOCKED"
+                    ,"FOR NO KEY UPDATE OF \"P\" SKIP LOCKED"
+                    ,"FOR SHARE OF \"P\" SKIP LOCKED"
+                    ,"FOR KEY SHARE OF \"P\" SKIP LOCKED"
                     ]
 
             asserting $ res1 `shouldBe` resExpected
