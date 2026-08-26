@@ -1744,7 +1744,7 @@ data LockingOfClause where
 data OnLockedBehavior =
     NoWait
     -- ^ @NOWAIT@ syntax locking behaviour.
-    --  query excutes immediately failing on locked rows
+    --  query executes immediately failing on locked rows
     --
     -- @since 3.5.9.0
       | SkipLocked
@@ -2478,7 +2478,7 @@ entityAsValueMaybe = veryUnsafeCoerceSqlExpr
 -- | An expression on the SQL backend.
 --
 -- Raw expression: Contains a 'SqlExprMeta' and a function for
--- building the expr. It recieves a parameter telling it whether
+-- building the expr. It receives a parameter telling it whether
 -- it is in a parenthesized context, and takes information about the SQL
 -- connection (mainly for escaping names) and returns both an
 -- string ('TLB.Builder') and a list of values to be
@@ -4372,7 +4372,7 @@ deleteKey = Database.Persist.delete
 --
 -- We can write @'fmap' 'associateJoin'@ and it will translate it into a 'Map'
 -- that is keyed on the 'Key' of the left 'Entity', and the value is a tuple of
--- the entity's value as well as the list of each coresponding entity.
+-- the entity's value as well as the list of each corresponding entity.
 --
 -- @
 -- getFoosAndNestedBarsFromParentHaskellese

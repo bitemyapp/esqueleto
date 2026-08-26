@@ -32,7 +32,7 @@ instance ToAlias (SqlExpr (Entity a)) where
            pure $ ERaw m{sqlExprMetaIsReference = False, sqlExprMetaAlias = Just ident} f
 
 instance ToAlias (SqlExpr (Maybe (Entity a))) where
-    -- FIXME: Code duplication because the compiler doesnt like half final encoding
+    -- FIXME: Code duplication because the compiler doesn't like half final encoding
     toAlias e@(ERaw m f)
       | Just _ <- sqlExprMetaAlias m = pure e
       | otherwise = do
