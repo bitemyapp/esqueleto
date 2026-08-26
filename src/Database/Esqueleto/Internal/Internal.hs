@@ -111,7 +111,7 @@ fromStart
     => SqlQuery (PreprocessedFrom (SqlExpr (Entity a)))
 fromStart = do
     let ed = entityDef (Proxy :: Proxy a)
-    ident <- newIdentFor (coerce $ getEntityDBName ed)
+    ident <- newIdentFor (shortTableAlias (coerce $ getEntityDBName ed))
     let ret = unsafeSqlEntity ident
         f' = FromStart ident ed
     return (PreprocessedFrom ret f')
@@ -2381,6 +2381,19 @@ newtype IdentState = IdentState { inUse :: HS.HashSet T.Text }
 
 initialIdentState :: IdentState
 initialIdentState = IdentState mempty
+
+-- | Derive a short mnemonic table alias from the initial of each
+-- underscore-separated word, falling back to @t@ when the name yields no
+-- initials; collisions are resolved by 'newIdentFor'.
+-- E.g. @blog_post@ becomes @bp@ (then @bp2@, @bp3@, ...).
+--
+-- @since 3.6.1.0
+shortTableAlias :: DBName -> DBName
+shortTableAlias (DBName tableName) =
+    DBName (if T.null initials then "t" else initials)
+  where
+    initials =
+        T.pack . Maybe.mapMaybe (fmap fst . T.uncons) $ T.splitOn "_" tableName
 
 -- | Create a fresh 'Ident'.  If possible, use the given
 -- 'DBName'.
