@@ -844,7 +844,7 @@ not_ v = ERaw noMeta (const $ first ("NOT " <>) . x)
 (&&.) :: SqlExpr (Value Bool) -> SqlExpr (Value Bool) -> SqlExpr (Value Bool)
 (&&.) = unsafeSqlBinOp " AND "
 
--- | This operator translates to the SQL operator @AND@.
+-- | This operator translates to the SQL operator @OR@.
 --
 -- Example:
 --
